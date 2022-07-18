@@ -1,1 +1,7 @@
-# delta-sharing-r
+# R Delta Sharing Connector
+
+```r
+# todo:
+# add motivating examples!
+```
+
