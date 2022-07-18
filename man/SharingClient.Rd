@@ -7,7 +7,7 @@
 Sharing Client Description: TODO
 }
 \details{
-Sharing Client Details: TODO
+TODO
 }
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}

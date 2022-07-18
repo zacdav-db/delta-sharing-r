@@ -3,8 +3,8 @@
 #' @description
 #' Sharing Client Description: TODO
 #'
-#' @details
-#' Sharing Client Details: TODO
+#' @details TODO
+#' @export
 SharingClient <- R6::R6Class(
   classname = "SharingClient",
   public = list(
@@ -18,6 +18,15 @@ SharingClient <- R6::R6Class(
     initialize = function(credentials) {
       creds <- jsonlite::read_json(credentials)
       class(creds) <- "DeltaShareCredentials"
+      # convert expiration time and check validity
+      creds$expirationTime <- strptime(
+        x = creds$expirationTime,
+        format = "%Y-%m-%dT%H:%M:%S",
+        tz = "UTC"
+      )
+      if (Sys.time() > creds$expirationTime) {
+        stop("Credentials are expired as of ", creds$expirationTime)
+      }
       self$creds <- creds
     },
 

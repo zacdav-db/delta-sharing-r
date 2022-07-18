@@ -3,8 +3,8 @@
 #' @description
 #' Sharing Table Reader Description: TODO
 #'
-#' @details
-#' Sharing Table Reader Details: TODO
+#' @details TODO
+#' @export
 SharingTableReader <- R6::R6Class(
   classname = "SharingTableReader",
   public = list(

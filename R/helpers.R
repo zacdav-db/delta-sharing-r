@@ -51,9 +51,18 @@ delta_to_arrow_schema <- function(schema) {
     purrr::map(~{
       switch(
         .x$type,
-        "string" = arrow::string(),
-        "integer" = arrow::int64(),
-        "double" = arrow::decimal(10, 1)
+        "string"    = arrow::string(),
+        "integer"   = arrow::int32(),
+        "bigint"    = arrow::int8(),
+        "double"    = arrow::float32(),
+        "float"     = arrow::float32(),
+        "boolean"   = arrow::boolean(),
+        "date"      = arrow::date64(),
+        "timestamp" = arrow::timestamp(),
+        "interval"  = arrow::duration(),
+        "binary"    = arrow::binary(),
+        "array"     = arrow::list_of(),
+        # "struct"    = arrow::struct() # TODO: really need to check this
       )
     })
 

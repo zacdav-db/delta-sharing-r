@@ -2,6 +2,8 @@
 
 S3method(print,DeltaShareCredentials)
 S3method(print,DeltaShareTableVersion)
+export(SharingClient)
+export(SharingTableReader)
 import(arrow)
 import(dplyr)
 import(httr2)

@@ -7,7 +7,7 @@
 Sharing Table Reader Description: TODO
 }
 \details{
-Sharing Table Reader Details: TODO
+TODO
 }
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}
