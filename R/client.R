@@ -73,7 +73,7 @@ SharingClient <- R6::R6Class(
     #' @description List tables within schema
     #' @param schema Name of the scehma to list tables within
     #' @return tibble of the available tables within given schema
-    list_tables = function(schema) {
+    list_tables = function(share, schema) {
 
       endpoint <- paste("shares", share, "schemas", schema, "tables", sep = "/")
 
@@ -101,15 +101,6 @@ SharingClient <- R6::R6Class(
 
       dplyr::bind_rows(tables$items) %>%
         dplyr::select(share, schema, name)
-
-    },
-
-    #' @description List of tables associated with delta sharing credentials
-    #' @return tibble of all available tables for all shares and schemas
-    list_all_tables = function() {
-
-      share_names <- unique(self$list_shares()$name)
-      purrr::map_dfr(share_names, self$list_tables)
 
     },
 

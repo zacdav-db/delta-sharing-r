@@ -105,6 +105,8 @@ SharingTableReader <- R6::R6Class(
     #' @param infer_schema Boolean (default: `FALSE`). If `FALSE` will use the
     #' schema defined in the tables metadata on the sharing server.
     #' When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
+    #' inferring the schema can be very useful for complex types, however it
+    #' will assume the local timezone for relevant columns, be cautious.
     #' @return A [arrow::Dataset] R6 object.
     load_as_arrow = function(infer_schema = FALSE) {
 
@@ -115,8 +117,11 @@ SharingTableReader <- R6::R6Class(
       # schema is fetched from self$metadata
       # inferring schema will use {arrow} and the parquet files as-is
       if (!infer_schema) {
-        schema <- jsonlite::fromJSON(self$metadata$metaData$schemaString)
-        schema <- delta_to_arrow_schema(schema$fields)
+        schema <- jsonlite::fromJSON(
+          txt = self$metadata$metaData$schemaString,
+          simplifyDataFrame = FALSE
+        )
+        schema <- convert_to_arrow_schema(schema)
       } else {
         schema <- NULL
       }
@@ -206,11 +211,20 @@ SharingTableReader <- R6::R6Class(
       # }
 
       # download and name by unique ID
-      if (nrow(self$last_query$files) > 1) {
+      if (nrow(self$last_query$files) > 0) {
+        # create progress bar
+        pb <- progress::progress_bar$new(
+          format = "  downloading (:elapsedfull) [:bar] :current/:total (:percent) [:eta]",
+          total = nrow(self$last_query$files),
+          clear = FALSE,
+          width = 100
+        )
+        pb$tick(0)
         self$last_query$files %>%
           dplyr::select(url, id) %>%
           purrr::pwalk(function(url, id, partitionValues) {
             download.file(url, destfile = file.path(self$path, id), quiet = TRUE)
+            pb$tick()
           })
       } else {
         stop("There are no files associated to this table")
