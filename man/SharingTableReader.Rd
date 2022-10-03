@@ -193,7 +193,9 @@ Load as Arrow
 \describe{
 \item{\code{infer_schema}}{Boolean (default: `FALSE`). If `FALSE` will use the
 schema defined in the tables metadata on the sharing server.
-When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.}
+When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
+inferring the schema can be very useful for complex types, however it
+will assume the local timezone for relevant columns, be cautious.}
 }
 \if{html}{\out{</div>}}
 }

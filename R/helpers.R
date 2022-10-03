@@ -36,7 +36,15 @@ clean_file_metadata <- function(x) {
 }
 
 
-# TODO: Document + example
+#' Map to Arrow Types
+#'
+#' @details TODO
+#'
+#' @param type Character, name of type to convert to Arrow.
+#' @param settings Named list, additional metadata relevant to mapping.
+#'
+#' @return ArrowObject
+#' @importFrom stats setNames
 to_arrow_types <- function(type, settings = list()) {
 
   # if type was already an arrow object, spit it back out
@@ -150,12 +158,24 @@ create_arrow_type_list <- function(fields) {
 #' Will require parsing `schemaString`.
 #'
 #' e.g.
-#' `jsonlite::fromJSON(self$metadata$metaData$schemaString)`
+#' `jsonlite::fromJSON(self$metadata$metaData$schemaString, simplifyDataFrame = FALSE)`
+#'
+#' Partition columns are overrode to be `arrow::string()`.
+#'
 #' @param schema `schemaString` fields object (parsed from JSON to list).
+#' @param partitions character vector of partition names
 #' @return A [arrow:schema()] object
-convert_to_arrow_schema <- function(schema) {
+convert_to_arrow_schema <- function(schema, partitions = list()) {
   parsed_schema <- create_arrow_type_list(schema$fields)
   names(parsed_schema) <- purrr::map_chr(schema$fields, "name")
+  # columns will need to be re-organised (partitions to the right)
+  # for now they are always treated as string type
+  if (length(partitions) > 1) {
+    pcheck <- names(parsed_schema) %in% partitions
+    pcols <- purrr::map(seq_along(partitions), ~arrow::string())
+    names(pcols) <- partitions
+    parsed_schema <- c(parsed_schema[!pcheck], pcols)
+  }
   do.call(arrow::schema, parsed_schema)
 }
 
@@ -169,4 +189,10 @@ clean_xndjson <- function(x) {
     strsplit("\n") %>%
     purrr::pluck(1) %>%
     purrr::map(~{jsonlite::fromJSON(.x)})
+}
+
+#TODO Docs
+list_to_hive_partition <- function(x) {
+  string <- purrr::imap_chr(x, ~paste(.y, .x, sep = "="))
+  paste(string, collapse = "/")
 }

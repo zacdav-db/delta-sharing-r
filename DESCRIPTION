@@ -1,7 +1,7 @@
 Package: delta.sharing
 Type: Package
 Title: R Delta Sharing Connector
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: 
   c(
     person(given = "Zac",
@@ -14,7 +14,7 @@ Authors@R:
            email = "div.saini@databricks.com"),
     person("Databricks", role = c("cph", "fnd"))
   )
-Description: TODO
+Description: Connector for Delta Sharing in R.
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true

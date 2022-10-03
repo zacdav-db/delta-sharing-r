@@ -25,7 +25,6 @@ TODO
 \item \href{#method-SharingClient-list_all_schemas}{\code{SharingClient$list_all_schemas()}}
 \item \href{#method-SharingClient-list_tables}{\code{SharingClient$list_tables()}}
 \item \href{#method-SharingClient-list_tables_in_share}{\code{SharingClient$list_tables_in_share()}}
-\item \href{#method-SharingClient-list_all_tables}{\code{SharingClient$list_all_tables()}}
 \item \href{#method-SharingClient-table}{\code{SharingClient$table()}}
 \item \href{#method-SharingClient-clone}{\code{SharingClient$clone()}}
 }
@@ -104,7 +103,7 @@ sharing credentials
 \subsection{Method \code{list_tables()}}{
 List tables within schema
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_tables(schema)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_tables(share, schema)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -136,19 +135,6 @@ List tables within share
 }
 \subsection{Returns}{
 tibble of the available tables within given share
-}
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SharingClient-list_all_tables"></a>}}
-\if{latex}{\out{\hypertarget{method-SharingClient-list_all_tables}{}}}
-\subsection{Method \code{list_all_tables()}}{
-List of tables associated with delta sharing credentials
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_all_tables()}\if{html}{\out{</div>}}
-}
-
-\subsection{Returns}{
-tibble of all available tables for all shares and schemas
 }
 }
 \if{html}{\out{<hr>}}

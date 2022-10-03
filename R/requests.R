@@ -59,7 +59,7 @@ make_req <- function(req, ...) {
   repeat({
 
     resp <- req %>%
-      httr2::req_retry(max_tries = 2) %>%
+      httr2::req_retry(max_tries = 3) %>%
       httr2::req_error(body = req_error_body) %>%
       httr2::req_perform()
 

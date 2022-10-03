@@ -112,23 +112,26 @@ SharingTableReader <- R6::R6Class(
 
       # download table
       # TODO: check if current version is okay and downloads are required
-      private$download()
+      dataset_meta <- private$download()
 
       # schema is fetched from self$metadata
       # inferring schema will use {arrow} and the parquet files as-is
       if (!infer_schema) {
+        metadata <- self$metadata$metaData
         schema <- jsonlite::fromJSON(
-          txt = self$metadata$metaData$schemaString,
+          txt = metadata$schemaString,
           simplifyDataFrame = FALSE
         )
-        schema <- convert_to_arrow_schema(schema)
+        schema <- convert_to_arrow_schema(schema, metadata$partitionColumns)
       } else {
         schema <- NULL
       }
 
       dataset <- arrow::open_dataset(
-        sources = file.path(self$path, self$last_query$files$id),
+        sources = dataset_meta$path,
         schema = schema,
+        hive_style = TRUE,
+        partitioning = dataset_meta$partitions,
         format = "parquet"
       )
     },
@@ -196,39 +199,86 @@ SharingTableReader <- R6::R6Class(
     #' on disk.
     download = function() {
 
+      # download directory
       if (is.null(self$path)) {
         self$path <- tempdir()
       } else {
         if (!dir.exists(self$path)) dir.create(self$path)
       }
 
-      # query table
+      # query files that belong to table
       self$get_files()
 
-      # TODO: if there are any partitions create required directories
-      # if (length(table$last_query$metaData$partitionColumns) > 0) {
-      #
-      # }
+      # create a folder for the table, just in-case a directory is shared
+      # between other tables / data
+      table_folder <- file.path(self$path, self$last_query$metaData$id)
+      if (!dir.exists(table_folder)) {
+        dir.create(table_folder)
+      }
 
-      # download and name by unique ID
-      if (nrow(self$last_query$files) > 0) {
+      # determine what files already may be downloaded
+      # id is unique - used to avoid re-downloads
+      query_files <- self$last_query$files %>%
+        dplyr::rowwise() %>%
+        dplyr::mutate(
+          hivePartitions = list_to_hive_partition(partitionValues),
+          destPath = file.path(!!table_folder, hivePartitions),
+          file = paste0(id, ".parquet"),
+          relativePath = sub("^\\/", "", file.path(hivePartitions, file)),
+          filePath = file.path(destPath, file),
+          alreadyExists = file.exists(filePath)
+        )
+
+      new_query_files <- dplyr::filter(query_files, !alreadyExists)
+
+      # delete files not part of current table state
+      # this is required so that arrow plays well with partitioning
+      # no effective way to manage state since everything is parquet
+      all_existing_files <- list.files(table_folder, recursive = TRUE)
+      to_delete <- all_existing_files[!all_existing_files %in% query_files$relativePath]
+      if (length(to_delete) > 0) {
+        message("deleting ", length(to_delete), " files that are no longer referenced")
+        file.remove(file.path(table_folder, to_delete))
+      }
+
+      # if there are files to download
+      if (nrow(new_query_files) > 0) {
+
+        # create all partition directories required
+        dest_paths <- unique(new_query_files$destPath)
+        purrr::walk(dest_paths[!dir.exists(dest_paths)], function(path) {
+          dir.create(path, recursive = TRUE)
+        })
+
         # create progress bar
         pb <- progress::progress_bar$new(
-          format = "  downloading (:elapsedfull) [:bar] :current/:total (:percent) [:eta]",
-          total = nrow(self$last_query$files),
+          format = "  downloading files (:elapsedfull) [:bar] :current/:total (:percent) [:eta]",
+          total = nrow(new_query_files),
           clear = FALSE,
           width = 100
         )
         pb$tick(0)
-        self$last_query$files %>%
-          dplyr::select(url, id) %>%
-          purrr::pwalk(function(url, id, partitionValues) {
-            download.file(url, destfile = file.path(self$path, id), quiet = TRUE)
+
+        # download just what is required
+        new_query_files %>%
+          dplyr::select(url, filePath) %>%
+          purrr::pwalk(function(url, filePath) {
+            download.file(url, destfile = filePath, quiet = TRUE)
             pb$tick()
           })
-      } else {
-        stop("There are no files associated to this table")
       }
+
+      if (length(self$last_query$metaData$partitionColumns) == 0) {
+        partitions <- NULL
+      } else {
+        partitions <- self$last_query$metaData$partitionColumns
+      }
+
+      dataset_meta <- list(
+        path = table_folder,
+        partitions = partitions
+      )
+      return(dataset_meta)
 
     }
 
