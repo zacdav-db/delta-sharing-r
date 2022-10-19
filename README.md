@@ -16,11 +16,11 @@ client$list_tables_in_share(share = "deltasharingr")
 ds_tbl <- client$table(share = "deltasharingr", schema = "simple", table = "all_types")
 
 # (optional) specify a limit (best effort to enforce)
-schema_tbl$set_limit(limit = 1000)
-schema_tbl$limit
+ds_tbl$set_limit(limit = 1000)
+ds_tbl$limit
 
 # (optional) where to download files (before arrow kicks in)
-schema_tbl$set_download_path("~/Desktop/share-download/")
+ds_tbl$set_download_path("~/Desktop/share-download/")
 
 # load data in as arrow::Dataset 
 ds_tbl_arrow <- ds_tbl$load_as_arrow()
