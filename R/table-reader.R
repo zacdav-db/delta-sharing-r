@@ -168,6 +168,7 @@ SharingTableReader <- R6::R6Class(
       )
 
       res <- req %>%
+        httr2::req_retry(max_tries = 3) %>%
         httr2::req_error(body = req_error_body) %>%
         httr2::req_perform() %>%
         clean_xndjson()
@@ -315,7 +316,6 @@ SharingTableReader <- R6::R6Class(
         clean_xndjson()
 
       purrr::flatten(res)
-
 
     }
 
