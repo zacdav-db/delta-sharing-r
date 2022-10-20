@@ -1,11 +1,30 @@
 Package: delta.sharing
 Type: Package
-Title: What the Package Does (Title Case)
-Version: 0.1.0
-Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
+Title: R Delta Sharing Connector
+Version: 0.1.1
+Authors@R: 
+  c(
+    person(given = "Zac",
+           family = "Davies",
+           role = c("aut", "cre"),
+           email = "zac@databricks.com"),
+    person(given = "Div",
+           family = "Saini",
+           role = c("aut"),
+           email = "div.saini@databricks.com"),
+    person("Databricks", role = c("cph", "fnd"))
+  )
+Description: Connector for Delta Sharing in R.
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true
+Imports:
+  arrow,
+  dplyr,
+  jsonlite,
+  httr2,
+  magrittr,
+  progress,
+  purrr,
+  tibble
+RoxygenNote: 7.2.0
