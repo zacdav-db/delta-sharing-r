@@ -163,13 +163,13 @@ enabled.
 \subsection{Method \code{load_as_tibble()}}{
 Load as Tibble
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$load_as_tibble(infer_schema = FALSE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$load_as_tibble(infer_schema = TRUE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{infer_schema}}{Boolean (default: `FALSE`). If `FALSE` will use the
+\item{\code{infer_schema}}{Boolean (default: `TRUE`). If `FALSE` will use the
 schema defined in the tables metadata on the sharing server.
 When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.}
 }
@@ -185,13 +185,13 @@ tibble of delta sharing table data
 \subsection{Method \code{load_as_arrow()}}{
 Load as Arrow
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$load_as_arrow(infer_schema = FALSE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$load_as_arrow(infer_schema = TRUE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{infer_schema}}{Boolean (default: `FALSE`). If `FALSE` will use the
+\item{\code{infer_schema}}{Boolean (default: `TRUE`). If `FALSE` will use the
 schema defined in the tables metadata on the sharing server.
 When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
 inferring the schema can be very useful for complex types, however it

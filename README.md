@@ -3,7 +3,7 @@
 ``` r
 # connect to client
 library(delta.sharing)
-client <- delta.sharing::SharingClient$new("~/Desktop/config.share")
+client <- sharing_client("~/Desktop/config.share")
 
 # see what data is accessible
 client$list_shares()

@@ -92,23 +92,23 @@ SharingTableReader <- R6::R6Class(
     },
 
     #' @description Load as Tibble
-    #' @param infer_schema Boolean (default: `FALSE`). If `FALSE` will use the
+    #' @param infer_schema Boolean (default: `TRUE`). If `FALSE` will use the
     #' schema defined in the tables metadata on the sharing server.
     #' When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
     #' @return tibble of delta sharing table data
-    load_as_tibble = function(infer_schema = FALSE) {
+    load_as_tibble = function(infer_schema = TRUE) {
       dataset <- self$load_as_arrow(infer_schema = infer_schema)
       dplyr::collect(dataset)
     },
 
     #' @description Load as Arrow
-    #' @param infer_schema Boolean (default: `FALSE`). If `FALSE` will use the
+    #' @param infer_schema Boolean (default: `TRUE`). If `FALSE` will use the
     #' schema defined in the tables metadata on the sharing server.
     #' When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
     #' inferring the schema can be very useful for complex types, however it
     #' will assume the local timezone for relevant columns, be cautious.
     #' @return A [arrow::Dataset] R6 object.
-    load_as_arrow = function(infer_schema = FALSE) {
+    load_as_arrow = function(infer_schema = TRUE) {
 
       # download table
       # TODO: check if current version is okay and downloads are required
