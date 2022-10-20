@@ -1,3 +1,16 @@
+#' Create Delta Sharing Client
+#'
+#' @param credentials Path to delta share credentials
+#'
+#' @return SharingClient
+#' @export
+#'
+#' @examples
+#' sharing_client("config.share")
+sharing_client <- function(credentials) {
+  delta.sharing::SharingClient$new(credentials)
+}
+
 #' Sharing Client
 #'
 #' @description
