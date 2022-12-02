@@ -40,6 +40,18 @@ SharingTableReader <- R6::R6Class(
     #' @field last_query Most recent metadata fetched regarding table.
     last_query = NULL,
 
+    #' @field starting_version The starting version of table changes.
+    starting_version = NULL,
+
+    #' @field ending_version The ending version of table changes.
+    ending_version = NULL,
+
+    #' @field starting_timestamp The starting timestamp of table changes.
+    starting_timestamp = NULL,
+
+    #' @field ending_timestamp The ending timestamp of table changes.
+    ending_timestamp = NULL,
+
     #' @description Create a new `SharingTableReader` object
     #' @details This object should be instantiated via `SharingClient$table(...)`
     #' and not directly.
@@ -89,6 +101,25 @@ SharingTableReader <- R6::R6Class(
     #' files as of the specified version of the table.
     set_version = function(version) {
       self$version <- version
+    },
+
+    #' @description Set CDF Options
+    #' @details This is only supported on tables with change data feed (cdf)
+    #' enabled.
+    #' @param starting_version The starting version of table changes.
+    #' @param ending_version The ending version of table changes.
+    #' @param starting_timestamp The starting timestamp of table changes.
+    #' @param ending_timestamp The ending timestamp of table changes.
+    set_cdf_options = function(
+      starting_version = NULL,
+      ending_version = NULL,
+      starting_timestamp = NULL,
+      ending_timestamp = NULL
+    ) {
+      self$starting_version <- starting_version
+      self$ending_version <- ending_version
+      self$starting_timestamp <- starting_timestamp
+      self$ending_timestamp <- ending_timestamp
     },
 
     #' @description Load as Tibble
@@ -144,6 +175,60 @@ SharingTableReader <- R6::R6Class(
     #   NULL
     # },
 
+    #' @description Load Table Changes as Tibble
+    #' @param infer_schema Boolean (default: `TRUE`). If `FALSE` will use the
+    #' schema defined in the tables metadata on the sharing server.
+    #' When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
+    #' @return tibble of delta sharing table change data feed
+    load_table_changes_as_tibble = function(infer_schema = TRUE) {
+      dataset <- self$load_table_changes_as_arrow(infer_schema = infer_schema)
+      dplyr::collect(dataset)
+    },
+
+    #' @description Load Table Changes as Arrow
+    #' @param infer_schema Boolean (default: `TRUE`). If `FALSE` will use the
+    #' schema defined in the tables metadata on the sharing server.
+    #' When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
+    #' inferring the schema can be very useful for complex types, however it
+    #' will assume the local timezone for relevant columns, be cautious.
+    #' @return A [arrow::Dataset] R6 object.
+    load_table_changes_as_arrow = function(infer_schema = TRUE) {
+
+      # download table
+      # TODO: check if current version is okay and downloads are required
+      dataset_meta <- private$download(changes = TRUE)
+
+      # schema is fetched from self$metadata
+      # inferring schema will use {arrow} and the parquet files as-is
+      if (!infer_schema) {
+        metadata <- self$metadata$metaData
+        schema <- jsonlite::fromJSON(
+          txt = metadata$schemaString,
+          simplifyDataFrame = FALSE
+        )
+        schema <- convert_to_arrow_schema(schema, metadata$partitionColumns)
+      } else {
+        schema <- NULL
+      }
+
+      dataset <- arrow::open_dataset(
+        sources = dataset_meta$path,
+        schema = schema,
+        hive_style = TRUE,
+        partitioning = dataset_meta$partitions,
+        format = "parquet"
+      )
+
+    },
+
+    # load_table_changes_as_spark = function() {
+    #   NULL
+    # },
+
+    # load_table_changes_as_sparklyr = function() {
+    #   NULL
+    # },
+
     #' @description Set Download Path
     #' @param path Location to save table files to
     set_download_path = function(path) {
@@ -151,21 +236,42 @@ SharingTableReader <- R6::R6Class(
     },
 
     #' @description Get Table Files
-    get_files = function() {
+    get_files = function(changes = FALSE) {
 
-      endpoint <- paste0(self$endpoint_base, "/query")
-      body <- list(
-        predicateHints = self$predicates,
-        limitHint = self$limit,
-        version = self$version
-      )
+      if (changes) {
 
-      req <- req_share(
-        creds = self$creds,
-        method = "POST",
-        endpoint = endpoint,
-        body = body
-      )
+        endpoint <- paste0(self$endpoint_base, "/changes")
+        params <- list(
+          startingVersion = self$starting_version,
+          endingVersion = self$ending_version,
+          startingTimestamp = self$starting_timestamp,
+          endingTimestamp = self$ending_timestamp
+        )
+
+        req <- req_share(
+          creds = self$creds,
+          method = "GET",
+          endpoint = endpoint,
+          params = params
+        )
+
+      } else {
+
+        endpoint <- paste0(self$endpoint_base, "/query")
+        body <- list(
+          predicateHints = self$predicates,
+          limitHint = self$limit,
+          version = self$version
+        )
+
+        req <- req_share(
+          creds = self$creds,
+          method = "POST",
+          endpoint = endpoint,
+          body = body
+        )
+
+      }
 
       res <- req %>%
         httr2::req_retry(max_tries = 3) %>%
@@ -177,13 +283,17 @@ SharingTableReader <- R6::R6Class(
         protocol = res[[1]][[1]],
         metaData = res[[2]][[1]],
         files = purrr::map_dfr(res[-c(1, 2)], ~{
-          .x <- .x$file
+          file_type <- names(.x)[1]
+          .x <- .x[[file_type]]
           list(
             url = .x$url,
             id = .x$id,
             partitionValues = list(.x$partitionValues),
             size = .x$size,
-            stats = list(jsonlite::fromJSON(.x$stats))
+            stats = if (!is.null(.x$stats)) list(jsonlite::fromJSON(.x$stats)) else .x$stats,
+            change_type = if (file_type != "file") file_type else NA,
+            commit_timestamp = .x$timestamp,
+            commit_version = .x$version
           )
         })
       )
@@ -198,7 +308,7 @@ SharingTableReader <- R6::R6Class(
     #' Download Associated Files
     #' Internal function that downloads table files and stores them
     #' on disk.
-    download = function() {
+    download = function(changes = FALSE) {
 
       # download directory
       if (is.null(self$path)) {
@@ -208,7 +318,7 @@ SharingTableReader <- R6::R6Class(
       }
 
       # query files that belong to table
-      self$get_files()
+      self$get_files(changes)
 
       # create a folder for the table, just in-case a directory is shared
       # between other tables / data
@@ -262,9 +372,32 @@ SharingTableReader <- R6::R6Class(
 
         # download just what is required
         new_query_files %>%
-          dplyr::select(url, filePath) %>%
-          purrr::pwalk(function(url, filePath) {
+          dplyr::select(url, filePath, change_type, commit_timestamp, commit_version) %>%
+          purrr::pwalk(function(url, filePath, change_type, commit_timestamp, commit_version) {
             download.file(url, destfile = filePath, quiet = TRUE)
+
+            if (changes) {
+              tmp_df <- arrow::open_dataset(filePath, schema = NULL)
+
+              if (!"_change_type" %in% names(tmp_df)) {
+                tmp_df <- tmp_df %>%
+                  dplyr::mutate(
+                    `_change_type` = dplyr::case_when(
+                      !!change_type == "add"    ~ "insert",
+                      !!change_type == "remove" ~ "delete",
+                      TRUE ~ NA_character_
+                    )
+                  )
+              }
+
+              tmp_df %>%
+                dplyr::mutate(
+                  `_commit_timestamp` = commit_timestamp,
+                  `_commit_version` = commit_version
+                ) %>%
+                arrow::write_parquet(filePath)
+            }
+
             pb$tick()
           })
       }

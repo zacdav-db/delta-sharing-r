@@ -131,20 +131,5 @@ SharingClient <- R6::R6Class(
       )
     }
 
-    #TODO: update docs
-    ##' @description Create reference to delta sharing table changes
-    ##' @param share Share the schema/table resides within
-    ##' @param schema Schema the table resides within
-    ##' @param table Table to query changes of
-    ##' @return R6 class of `SharingTableReader` for specified table
-    # table_changes = function(share, schema, table) {
-    #   SharingTableChangesReader$new(
-    #     share = share,
-    #     schema = schema,
-    #     table = table,
-    #     creds = self$creds
-    #   )
-    # }
-
   )
 )
