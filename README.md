@@ -36,4 +36,11 @@ ds_tbl_arrow %>%
 # just want a tibble? (alias for collect on arrow)
 ds_tbl_tibble <- ds_tbl$load_as_tibble()
 # ds_tbl_tibble <- ds_tbl$load_as_tibble(infer_schema = TRUE)
+
+# For CDF, specify a starting version (or timestamp) before loading
+ds_tbl$set_cdf_options(starting_version = 3)
+ds_tbl$starting_version
+
+ds_tbl_cdf_arrow <- ds_tbl$load_table_changes_as_arrow()
+ds_tbl_cdf_tibble <- ds_tbl$load_table_changes_as_tibble()
 ```

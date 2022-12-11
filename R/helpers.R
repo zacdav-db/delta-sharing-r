@@ -196,3 +196,183 @@ list_to_hive_partition <- function(x) {
   string <- purrr::imap_chr(x, ~paste(.y, .x, sep = "="))
   paste(string, collapse = "/")
 }
+
+# TODO: Documentation
+extract_file_metadata <- function(x, changes) {
+  file_type <- if (changes) names(x)[1] else "file"
+  x <- x[[file_type]]
+
+  file_metadata <- list(
+    url = x$url,
+    id = x$id,
+    partitionValues = list(x$partitionValues),
+    size = x$size,
+    stats = if (!is.null(x$stats)) list(jsonlite::fromJSON(x$stats)) else x$stats
+  )
+
+  if (changes) {
+    file_metadata[["change_type"]] <- file_type
+    file_metadata[["commit_timestamp"]] <- x$timestamp
+    file_metadata[["commit_version"]] <- x$version
+  }
+
+  return(file_metadata)
+}
+
+# TODO: Documentation
+download_new_files <- function(new_query_files, changes) {
+
+  # create progress bar
+  pb <- progress::progress_bar$new(
+    format = "  downloading files (:elapsedfull) [:bar] :current/:total (:percent) [:eta]",
+    total = nrow(new_query_files),
+    clear = FALSE,
+    width = 100
+  )
+  pb$tick(0)
+
+  # download new files
+  new_query_files %>%
+    purrr::pwalk(function(url, filePath, ...) {
+      download.file(url, destfile = filePath, quiet = TRUE)
+      pb$tick()
+    })
+
+  # if table changes, read into memory, append missing columns, rewrite to disk
+  if (changes) {
+    new_query_files %>%
+      purrr::pwalk(function(filePath, change_type, commit_timestamp, commit_version, ...) {
+
+        # load file into memory
+        tmp_df <- arrow::open_dataset(filePath, schema = NULL)
+
+        # if _change_type column missing, add it
+        if (!"_change_type" %in% names(tmp_df)) {
+          tmp_df <- tmp_df %>%
+            dplyr::mutate(
+              `_change_type` = dplyr::case_when(
+                !!change_type == "add"    ~ "insert",
+                !!change_type == "remove" ~ "delete",
+                TRUE ~ NA_character_
+              )
+            )
+        }
+
+        # add commit timestamp and commit version columns, write back to disk
+        tmp_df %>%
+          dplyr::mutate(
+            `_commit_timestamp` = commit_timestamp,
+            `_commit_version` = commit_version
+          ) %>%
+          arrow::write_parquet(filePath)
+      })
+  }
+}
+
+# TODO: Documentation
+validate_starting_param <- function(starting_version, starting_timestamp) {
+  if (is.null(starting_version) & is.null(starting_timestamp)) {
+    rlang::abort(
+      paste(
+        "INVALID_PARAMETER_VALUE: Must pass either starting_version or",
+        "starting_timestamp using set_cdf_options() before performing CDF read."
+      )
+    )
+  }
+}
+
+# TODO: Documentation
+version_is_valid <- function(x) {
+  if (is.numeric(x)) {
+    return(x %% 1 == 0)
+  } else if (is.character(x)) {
+    return(as.numeric(x) %% 1 == 0)
+  } else if (is.null(x)) {
+    return(TRUE)
+  } else {
+    return(FALSE)
+  }
+}
+
+# TODO: Documentation
+timestamp_is_valid <- function(x) {
+  if (is.null(x)) {
+    return(TRUE)
+  } else if (is.character(x)) {
+    tryCatch(
+      !is.na(as.POSIXct(x, format = "%Y-%m-%d %H:%M:%OS")),
+      error = function(err) FALSE
+    )
+  } else {
+    return(FALSE)
+  }
+}
+
+# TODO: Documentation
+validate_cdf_options <- function(
+    starting_version,
+    ending_version,
+    starting_timestamp,
+    ending_timestamp
+) {
+
+  # assert starting param provided
+  validate_starting_param(starting_version, starting_timestamp)
+  uses_version <- !is.null(starting_version)
+  uses_timestamp <- !is.null(starting_timestamp)
+
+  # assert versions and timestamps not mixed
+  if (
+    (uses_version & !is.null(ending_timestamp)) |
+    (uses_timestamp & !is.null(ending_version))
+  ) {
+    rlang::abort(
+      paste(
+        "INVALID_PARAMETER_VALUE: Must pass only one of version or timestamp,",
+        "not a combination of the two."
+      )
+    )
+  }
+
+  # assert valid versions/timestamps
+  if (!version_is_valid(starting_version) | !version_is_valid(ending_version)) {
+    rlang::abort(
+      paste(
+        "INVALID_PARAMETER_VALUE: Versions must be represented as integer values."
+      )
+    )
+  }
+
+  if (!timestamp_is_valid(starting_timestamp) | !timestamp_is_valid(ending_timestamp)) {
+    rlang::abort(
+      paste(
+        "INVALID_PARAMETER_VALUE: Timestamps must be in a valid",
+        "yyyy-mm-dd hh:mm:ss[.fffffffff] string format."
+      )
+    )
+  }
+
+  # TODO: assert valid version, given table metadata and when CDF was enabled
+  # TODO: assert valid timestamp, given table metadata and when CDF was enabled
+
+  # assert ending > starting
+  if (uses_version) {
+    if (!is.null(ending_version) && ending_version < starting_version) {
+      rlang::abort(
+        paste(
+          "INVALID_PARAMETER_VALUE: Ending version must be greater than or",
+          "equal to starting version."
+        )
+      )
+    }
+  } else if (uses_timestamp) {
+    if (!is.null(ending_timestamp) && ending_timestamp < starting_timestamp) {
+      rlang::abort(
+        paste(
+          "INVALID_PARAMETER_VALUE: Ending timestamp must be greater than or",
+          "equal to starting timestamp"
+        )
+      )
+    }
+  }
+}
