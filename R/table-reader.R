@@ -126,6 +126,9 @@ SharingTableReader <- R6::R6Class(
       )
 
       # TODO: automatically cast anything resembling a valid timestamp to a
+      # ZD Note: I'd rather not do this the more I think about it.
+      # Extra effort to maintain, and if a package used to do it changes then it
+      # breaks things.
       # correctly formatted string
 
       # set attributes
@@ -141,11 +144,12 @@ SharingTableReader <- R6::R6Class(
     #' schema defined in the tables metadata on the sharing server.
     #' When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
     #' @return tibble of delta sharing table data
-    load_as_tibble = function(infer_schema = TRUE) {
-      private$load_dataset_as_tibble(
-        infer_schema = infer_schema,
-        changes = FALSE
+    load_as_tibble = function(changes = FALSE, infer_schema = TRUE) {
+      dataset <- private$load_dataset(
+        changes = changes,
+        infer_schema = infer_schema
       )
+      dplyr::collect(dataset)
     },
 
     #' @description Load as Arrow
@@ -155,10 +159,10 @@ SharingTableReader <- R6::R6Class(
     #' inferring the schema can be very useful for complex types, however it
     #' will assume the local timezone for relevant columns, be cautious.
     #' @return A [arrow::Dataset] R6 object.
-    load_as_arrow = function(infer_schema = TRUE) {
-      private$load_dataset_as_arrow(
-        infer_schema = infer_schema,
-        changes = FALSE
+    load_as_arrow = function(changes = FALSE, infer_schema = TRUE) {
+      private$load_dataset(
+        changes = changes,
+        infer_schema = infer_schema
       )
     },
 
@@ -167,40 +171,6 @@ SharingTableReader <- R6::R6Class(
     # },
 
     # load_as_sparklyr = function() {
-    #   NULL
-    # },
-
-    #' @description Load Table Changes as Tibble
-    #' @param infer_schema Boolean (default: `TRUE`). If `FALSE` will use the
-    #' schema defined in the tables metadata on the sharing server.
-    #' When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
-    #' @return tibble of delta sharing table change data feed
-    load_table_changes_as_tibble = function(infer_schema = TRUE) {
-      private$load_dataset_as_tibble(
-        infer_schema = infer_schema,
-        changes = TRUE
-      )
-    },
-
-    #' @description Load Table Changes as Arrow
-    #' @param infer_schema Boolean (default: `TRUE`). If `FALSE` will use the
-    #' schema defined in the tables metadata on the sharing server.
-    #' When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
-    #' inferring the schema can be very useful for complex types, however it
-    #' will assume the local timezone for relevant columns, be cautious.
-    #' @return A [arrow::Dataset] R6 object.
-    load_table_changes_as_arrow = function(infer_schema = TRUE) {
-      private$load_dataset_as_arrow(
-        infer_schema = infer_schema,
-        changes = TRUE
-      )
-    },
-
-    # load_table_changes_as_spark = function() {
-    #   NULL
-    # },
-
-    # load_table_changes_as_sparklyr = function() {
     #   NULL
     # },
 
@@ -297,7 +267,7 @@ SharingTableReader <- R6::R6Class(
       # between other tables / data
       # if table changes, add another subdirectory for those files
       table_folder <- file.path(self$path, self$last_query$metaData$id)
-      if (changes) table_folder <- file.path(table_folder, "table_changes")
+      if (changes) table_folder <- file.path(table_folder, "_table_changes")
       if (!dir.exists(table_folder)) {
         dir.create(table_folder)
       }
@@ -343,6 +313,7 @@ SharingTableReader <- R6::R6Class(
         )
       }
 
+      # detect partitioning
       if (length(self$last_query$metaData$partitionColumns) == 0) {
         partitions <- NULL
       } else {
@@ -358,16 +329,7 @@ SharingTableReader <- R6::R6Class(
     },
 
     # TODO: Documentation
-    load_dataset_as_tibble = function(infer_schema, changes) {
-      dataset <- private$load_dataset_as_arrow(
-        infer_schema = infer_schema,
-        changes = changes
-      )
-      dplyr::collect(dataset)
-    },
-
-    # TODO: Documentation
-    load_dataset_as_arrow = function(infer_schema, changes) {
+    load_dataset = function(changes, infer_schema) {
 
       # download table
       # TODO: check if current version is okay and downloads are required
@@ -407,6 +369,11 @@ SharingTableReader <- R6::R6Class(
         endpoint = self$endpoint_base
       )
       version <- make_req(req)
+      version <- list(
+        version = as.integer(version$`delta-table-version`),
+        date = version$date,
+        server = version$server
+      )
       class(version) <- "DeltaShareTableVersion"
       version
 
@@ -424,6 +391,8 @@ SharingTableReader <- R6::R6Class(
       )
 
       res <- req %>%
+        httr2::req_retry(max_tries = 3) %>%
+        httr2::req_error(body = req_error_body) %>%
         httr2::req_perform() %>%
         clean_xndjson()
 

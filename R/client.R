@@ -117,6 +117,15 @@ SharingClient <- R6::R6Class(
 
     },
 
+    #' @description List all tables for all schemas in available shares
+    #' @return tibble of the available tables accessible with credentials
+    list_all_tables = function() {
+
+      shares <- self$list_shares()
+      purrr::map_dfr(shares$name, ~self$list_tables_in_share(share = .x))
+
+    },
+
     #' @description Create reference to delta sharing table
     #' @param share Share the schema/table resides within
     #' @param schema Schema the table resides within
