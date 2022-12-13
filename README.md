@@ -11,6 +11,7 @@ client$list_all_schemas()
 client$list_schemas(share = "deltasharingr")
 client$list_tables(share = "deltasharingr", schema = "simple")
 client$list_tables_in_share(share = "deltasharingr")
+client$list_all_tables()
 
 # table class
 ds_tbl <- client$table(share = "deltasharingr", schema = "simple", table = "all_types")
@@ -38,9 +39,11 @@ ds_tbl_tibble <- ds_tbl$load_as_tibble()
 # ds_tbl_tibble <- ds_tbl$load_as_tibble(infer_schema = TRUE)
 
 # For CDF, specify a starting version (or timestamp) before loading
-ds_tbl$set_cdf_options(starting_version = 3)
-ds_tbl$starting_version
+ds_tbl_cdf <- client$table(share = "deltasharingr", schema = "simple", table = "cdf_no_partition")
+current_version = ds_tbl_cdf$current_version$version
+ds_tbl_cdf$set_cdf_options(starting_version = current_version - 10L)
+ds_tbl_cdf$starting_version
 
-ds_tbl_cdf_arrow <- ds_tbl$load_table_changes_as_arrow()
-ds_tbl_cdf_tibble <- ds_tbl$load_table_changes_as_tibble()
+ds_tbl_cdf_arrow <- ds_tbl_cdf$load_as_arrow(changes = TRUE)
+ds_tbl_cdf_tibble <- ds_tbl_cdf$load_as_tibble(changes = TRUE)
 ```
