@@ -103,6 +103,10 @@ SharingTableReader <- R6::R6Class(
       self$version <- version
     },
 
+    set_timestamp = function(timestamp) {
+      self$timestamp <- timestamp
+    },
+
     #' @description Set CDF Options
     #' @details This is only supported on tables with change data feed (cdf)
     #' enabled.
@@ -245,53 +249,52 @@ SharingTableReader <- R6::R6Class(
     #' on disk.
     download = function(changes = FALSE) {
 
-      # validate starting param
-      if (changes) {
-        validate_starting_param(
-          starting_version = self$starting_version,
-          starting_timestamp = self$starting_timestamp
-        )
-      }
+      # query files that belong to table
+      self$get_files(changes = changes)
 
-      # download directory
+      # download directory, create if doesn't exist
       if (is.null(self$path)) {
         self$path <- tempdir()
       } else {
         if (!dir.exists(self$path)) dir.create(self$path)
       }
 
-      # query files that belong to table
-      self$get_files(changes)
-
-      # create a folder for the table, just in-case a directory is shared
-      # between other tables / data
-      # if table changes, add another subdirectory for those files
+      # create a sub-directory for the table within the path
       table_folder <- file.path(self$path, self$last_query$metaData$id)
-      if (changes) table_folder <- file.path(table_folder, "_table_changes")
-      if (!dir.exists(table_folder)) {
-        dir.create(table_folder)
-      }
+      if (!dir.exists(table_folder)) dir.create(table_folder)
+
+      # ensure that sub-directories to store data are always present (even if not used)
+      # this is to ensure "copy-skipping" resolution will behave
+      table_folder_cdf <- file.path(table_folder, "_table_changes")
+      table_folder_std <- file.path(table_folder, "_table")
+      if (!dir.exists(table_folder_std)) dir.create(table_folder_std)
+      if (!dir.exists(table_folder_cdf)) dir.create(table_folder_cdf)
 
       # determine what files already may be downloaded
       # id is unique - used to avoid re-downloads
       query_files <- self$last_query$files %>%
-        dplyr::rowwise() %>%
-        dplyr::mutate(
-          hivePartitions = list_to_hive_partition(partitionValues),
-          destPath = file.path(!!table_folder, hivePartitions),
-          file = paste0(id, ".parquet"),
-          relativePath = sub("^\\/", "", file.path(hivePartitions, file)),
-          filePath = file.path(destPath, file),
-          alreadyExists = file.exists(filePath)
+      # query_files <- table$last_query$files %>%
+        resolve_query_files(
+          changes = changes,
+          table_folder = table_folder
         )
 
-      new_query_files <- dplyr::filter(query_files, !alreadyExists)
+      if (changes) {
+        new_query_files <- dplyr::filter(query_files, to_download | to_copy_to_cdf)
+      } else {
+        new_query_files <- dplyr::filter(query_files, to_download | to_copt_to_root)
+      }
 
       # delete files not part of current table state
       # this is required so that arrow plays well with partitioning
       # no effective way to manage state since everything is parquet
+
+      # determine which files can be deleted
+      table_folder <- ifelse(changes, table_folder_cdf, table_folder_std)
+
       all_existing_files <- list.files(table_folder, recursive = TRUE)
       to_delete <- all_existing_files[!all_existing_files %in% query_files$relativePath]
+
       if (length(to_delete) > 0) {
         message("deleting ", length(to_delete), " files that are no longer referenced")
         file.remove(file.path(table_folder, to_delete))
@@ -306,8 +309,12 @@ SharingTableReader <- R6::R6Class(
           dir.create(path, recursive = TRUE)
         })
 
+        # if a file exists in either main directory or _table_changes copy it
+        # instead of re-downloading
+        # TODO: copy data between directory
+
         # download just what is required
-        download_new_files(
+        delta.sharing:::download_new_files(
           new_query_files = new_query_files,
           changes = changes
         )
@@ -324,6 +331,7 @@ SharingTableReader <- R6::R6Class(
         path = table_folder,
         partitions = partitions
       )
+
       return(dataset_meta)
 
     },
@@ -398,7 +406,17 @@ SharingTableReader <- R6::R6Class(
 
       purrr::flatten(res)
 
-    }
+    },
 
+    #' @field table_path Directory where saved data exists for table. This is
+    #' an extension of `path` combined with the table ID.
+    table_path = function(changes = FALSE) {
+      root <- file.path(self$path, self$metadata$metaData$id)
+      if (changes) {
+        file.path(root, "_table_changes")
+      } else {
+        file.path(root, "_table")
+      }
+    }
   )
 )

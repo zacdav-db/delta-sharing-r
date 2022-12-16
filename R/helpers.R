@@ -219,6 +219,65 @@ extract_file_metadata <- function(x, changes) {
   return(file_metadata)
 }
 
+# TODO: docs
+resolve_query_files <- function(x, table_folder, changes = FALSE) {
+
+  # add metadata to query files
+  # - where to save
+  # - check if they already exist locally (to skip re-downloading)
+
+  files <- x %>%
+    dplyr::rowwise() %>%
+    dplyr::mutate(
+      hivePartitions = delta.sharing:::list_to_hive_partition(partitionValues)
+    ) %>%
+    dplyr::ungroup()
+
+  if (changes) {
+    files <- files %>%
+      dplyr::mutate(
+        file = paste0(id, "_", change_type, ".parquet"),
+        destPath = file.path(!!table_folder, "_table_changes", hivePartitions),
+        filePath = file.path(destPath, file)
+      )
+  } else {
+    files <- files %>%
+      dplyr::mutate(
+        files, file = paste0(id, ".parquet"),
+        destPath = file.path(!!table_folder, "_table", hivePartitions),
+        filePath = file.path(destPath, file)
+      )
+  }
+
+  # both paths are generated to check if files can be skipped from
+  # download step later on, there are two types of skipping:
+  # 1. file exists in current directory (_table_changes or root)
+  # 2. can be copied between _table_changes and root directory
+  existing_files <- list.files(path = table_folder, recursive = TRUE) %>%
+    data.frame(file = .) %>%
+    dplyr::mutate(
+      id = gsub(".*?(.*\\/)?([a-z0-9]*?)(_.*?)?(\\.parquet)", "\\2", file, perl = TRUE),
+      is_in_cdf = grepl("^_table_changes", file)
+    )
+
+  existing_ids_root <- dplyr::filter(existing_files, !is_in_cdf)$id
+  existing_ids_cdf <- dplyr::filter(existing_files, is_in_cdf)$id
+
+  files <- files %>%
+    dplyr::mutate(
+      relativePath = sub("^\\/", "", file.path(hivePartitions, file)),
+      alreadyExistsRoot = id %in% existing_ids_root,
+      alreadyExistsInCDF = id %in% existing_ids_cdf,
+      alreadyExists = alreadyExistsRoot | alreadyExistsInCDF,
+      to_download = !alreadyExists,
+      to_copy_to_cdf = !alreadyExistsInCDF & alreadyExistsRoot,
+      to_copt_to_root = !alreadyExistsRoot & alreadyExistsInCDF
+    )
+
+  files
+
+}
+
 # TODO: Documentation
 download_new_files <- function(new_query_files, changes) {
 
@@ -238,40 +297,30 @@ download_new_files <- function(new_query_files, changes) {
       pb$tick()
     })
 
-  # if table changes, read into memory, append missing columns, rewrite to disk
-  if (changes) {
-    new_query_files %>%
-      purrr::pwalk(function(filePath, change_type, commit_timestamp, commit_version, ...) {
-
-        # load file into memory
-        tmp_df <- arrow::open_dataset(filePath, schema = NULL)
-
-        # if _change_type column missing, add it
-        if (!"_change_type" %in% names(tmp_df)) {
-          tmp_df <- tmp_df %>%
-            dplyr::mutate(
-              `_change_type` = dplyr::case_when(
-                !!change_type == "add"    ~ "insert",
-                !!change_type == "remove" ~ "delete",
-                TRUE ~ NA_character_
-              )
-            )
-        }
-
-        # add commit timestamp and commit version columns, write back to disk
-        tmp_df %>%
-          dplyr::mutate(
-            `_commit_timestamp` = commit_timestamp,
-            `_commit_version` = commit_version
-          ) %>%
-          arrow::write_parquet(filePath)
-      })
-  }
 }
 
 # TODO: Documentation
-validate_starting_param <- function(starting_version, starting_timestamp) {
-  if (is.null(starting_version) & is.null(starting_timestamp)) {
+version_is_valid <- function(x) {
+  floor(x) == x
+}
+
+# TODO: Documentation
+timestamp_is_valid <- function(x) {
+  # it should be defined as a character
+  if (is.character(x)) {
+    x <- as.POSIXct(x, format = "%Y-%m-%d %H:%M:%S")
+    return(!is.na(x))
+  }
+  FALSE
+}
+
+# TODO: Documentation
+validate_cdf_options <- function(starting_version, ending_version,
+                                 starting_timestamp, ending_timestamp) {
+
+  # minimum requirement is to have starting_* parameter
+  # can only specify either version or timestamp, not both
+  if (!xor(is.null(starting_version), is.null(starting_timestamp))) {
     rlang::abort(
       paste(
         "INVALID_PARAMETER_VALUE: Must pass either starting_version or",
@@ -279,100 +328,53 @@ validate_starting_param <- function(starting_version, starting_timestamp) {
       )
     )
   }
-}
 
-# TODO: Documentation
-version_is_valid <- function(x) {
-  if (is.numeric(x)) {
-    return(x %% 1 == 0)
-  } else if (is.character(x)) {
-    return(as.numeric(x) %% 1 == 0)
-  } else if (is.null(x)) {
-    return(TRUE)
+  if (all(!is.null(c(ending_version, ending_timestamp)))) {
+    rlang::abort(
+      paste(
+        "INVALID_PARAMETER_VALUE: If specifying an end point use either
+        ending_version or ending_timestamp using set_cdf_options()."
+      )
+    )
+  }
+
+  # assert valid version/timestamp parameters
+  if (!is.null(starting_version)) {
+    # ensure versions are valid values
+    if (any(!version_is_valid(c(starting_version, ending_version)))) {
+      rlang::abort("INVALID_PARAMETER_VALUE: Versions must be represented as integer values.")
+    }
+    # ensure start is before end
+    if (!is.null(ending_version) && (starting_version > ending_version)) {
+      rlang::abort(
+        paste(
+          "INVALID_PARAMETER_VALUE: `starting_version` must be less than or",
+          "equal to `ending_version`"
+        )
+      )
+    }
   } else {
-    return(FALSE)
-  }
-}
-
-# TODO: Documentation
-timestamp_is_valid <- function(x) {
-  if (is.null(x)) {
-    return(TRUE)
-  } else if (is.character(x)) {
-    tryCatch(
-      !is.na(as.POSIXct(x, format = "%Y-%m-%d %H:%M:%OS")),
-      error = function(err) FALSE
-    )
-  } else {
-    return(FALSE)
-  }
-}
-
-# TODO: Documentation
-validate_cdf_options <- function(
-    starting_version,
-    ending_version,
-    starting_timestamp,
-    ending_timestamp
-) {
-
-  # assert starting param provided
-  validate_starting_param(starting_version, starting_timestamp)
-  uses_version <- !is.null(starting_version)
-  uses_timestamp <- !is.null(starting_timestamp)
-
-  # assert versions and timestamps not mixed
-  if (
-    (uses_version & !is.null(ending_timestamp)) |
-    (uses_timestamp & !is.null(ending_version))
-  ) {
-    rlang::abort(
-      paste(
-        "INVALID_PARAMETER_VALUE: Must pass only one of version or timestamp,",
-        "not a combination of the two."
+    # ensure timestamps are valid
+    if (any(!timestamp_is_valid(c(starting_timestamp, ending_timestamp)))) {
+      rlang::abort(
+        paste(
+          "INVALID_PARAMETER_VALUE: Timestamps must be in a valid",
+          "yyyy-mm-dd hh:mm:ss[.fffffffff] string format."
+        )
       )
-    )
-  }
-
-  # assert valid versions/timestamps
-  if (!version_is_valid(starting_version) | !version_is_valid(ending_version)) {
-    rlang::abort(
-      paste(
-        "INVALID_PARAMETER_VALUE: Versions must be represented as integer values."
+    }
+    # ensure start is before end
+    if (!is.null(ending_timestamp) && (starting_timestamp > ending_timestamp)) {
+      rlang::abort(
+        paste(
+          "INVALID_PARAMETER_VALUE: `starting_timestamp` must be less than or",
+          "equal to `ending_timestamp`"
+        )
       )
-    )
-  }
-
-  if (!timestamp_is_valid(starting_timestamp) | !timestamp_is_valid(ending_timestamp)) {
-    rlang::abort(
-      paste(
-        "INVALID_PARAMETER_VALUE: Timestamps must be in a valid",
-        "yyyy-mm-dd hh:mm:ss[.fffffffff] string format."
-      )
-    )
+    }
   }
 
   # TODO: assert valid version, given table metadata and when CDF was enabled
   # TODO: assert valid timestamp, given table metadata and when CDF was enabled
-
-  # assert ending > starting
-  if (uses_version) {
-    if (!is.null(ending_version) && ending_version < starting_version) {
-      rlang::abort(
-        paste(
-          "INVALID_PARAMETER_VALUE: Ending version must be greater than or",
-          "equal to starting version."
-        )
-      )
-    }
-  } else if (uses_timestamp) {
-    if (!is.null(ending_timestamp) && ending_timestamp < starting_timestamp) {
-      rlang::abort(
-        paste(
-          "INVALID_PARAMETER_VALUE: Ending timestamp must be greater than or",
-          "equal to starting timestamp"
-        )
-      )
-    }
-  }
+  NULL
 }
