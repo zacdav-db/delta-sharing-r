@@ -1,7 +1,7 @@
 Package: delta.sharing
 Type: Package
 Title: R Delta Sharing Connector
-Version: 0.1.1
+Version: 0.2.0
 Authors@R: 
   c(
     person(given = "Zac",
@@ -24,7 +24,9 @@ Encoding: UTF-8
 LazyData: true
 Imports:
   arrow,
+  DBI,
   dplyr,
+  duckdb,
   jsonlite,
   httr2,
   magrittr,

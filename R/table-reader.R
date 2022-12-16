@@ -144,37 +144,41 @@ SharingTableReader <- R6::R6Class(
     },
 
     #' @description Load as Tibble
-    #' @param infer_schema Boolean (default: `TRUE`). If `FALSE` will use the
-    #' schema defined in the tables metadata on the sharing server.
-    #' When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
-    #' @return tibble of delta sharing table data
-    load_as_tibble = function(changes = FALSE, infer_schema = TRUE) {
-      dataset <- private$load_dataset(
-        changes = changes,
-        infer_schema = infer_schema
-      )
+    #' @return  A [tibble::tibble] S3 object.
+    load_tibble = function(changes = FALSE) {
+      dataset <- private$load_dataset(changes = changes)
       dplyr::collect(dataset)
     },
 
-    #' @description Load as Arrow
-    #' @param infer_schema Boolean (default: `TRUE`). If `FALSE` will use the
-    #' schema defined in the tables metadata on the sharing server.
-    #' When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
-    #' inferring the schema can be very useful for complex types, however it
-    #' will assume the local timezone for relevant columns, be cautious.
-    #' @return A [arrow::Dataset] R6 object.
-    load_as_arrow = function(changes = FALSE, infer_schema = TRUE) {
-      private$load_dataset(
-        changes = changes,
-        infer_schema = infer_schema
-      )
+    #' @description Load as Arrow Record Batch Reader
+    #' @return A [arrow::RecordBatchReader] R6 object.
+    load_arrow_batch = function(changes = FALSE) {
+      private$load_dataset(changes = changes)
     },
 
-    # load_as_spark = function() {
+    #' @description Load as Arrow Table
+    #' @return A [arrow::Table] or [arrow::Dataset] R6 object.
+    load_arrow_table = function(changes = FALSE) {
+      dataset <- private$load_dataset(changes = changes)
+      dataset$read_table()
+    },
+
+    #' @description Load as DuckDB Table
+    #' @return TODO
+    load_duckdb = function(changes = FALSE) {
+      dataset <- private$load_dataset(changes = changes)
+      arrow::to_duckdb(dataset)
+    },
+
+    # load_dt = function(changes = FALSE) {
     #   NULL
     # },
 
-    # load_as_sparklyr = function() {
+    # load_spark = function() {
+    #   NULL
+    # },
+
+    # load_sparklyr = function() {
     #   NULL
     # },
 
@@ -273,7 +277,6 @@ SharingTableReader <- R6::R6Class(
       # determine what files already may be downloaded
       # id is unique - used to avoid re-downloads
       query_files <- self$last_query$files %>%
-      # query_files <- table$last_query$files %>%
         resolve_query_files(
           changes = changes,
           table_folder = table_folder
@@ -290,14 +293,14 @@ SharingTableReader <- R6::R6Class(
       # no effective way to manage state since everything is parquet
 
       # determine which files can be deleted
-      table_folder <- ifelse(changes, table_folder_cdf, table_folder_std)
+      table_folder_del <- ifelse(changes, table_folder_cdf, table_folder_std)
 
-      all_existing_files <- list.files(table_folder, recursive = TRUE)
+      all_existing_files <- list.files(table_folder_del, recursive = TRUE)
       to_delete <- all_existing_files[!all_existing_files %in% query_files$relativePath]
 
       if (length(to_delete) > 0) {
         message("deleting ", length(to_delete), " files that are no longer referenced")
-        file.remove(file.path(table_folder, to_delete))
+        file.remove(file.path(table_folder_del, to_delete))
       }
 
       # if there are files to download
@@ -337,32 +340,18 @@ SharingTableReader <- R6::R6Class(
     },
 
     # TODO: Documentation
-    load_dataset = function(changes, infer_schema) {
+    load_dataset = function(changes) {
 
       # download table
       # TODO: check if current version is okay and downloads are required
       dataset_meta <- private$download(changes = changes)
 
-      # schema is fetched from self$metadata
-      # inferring schema will use {arrow} and the parquet files as-is
-      if (!infer_schema) {
-        metadata <- self$metadata$metaData
-        schema <- jsonlite::fromJSON(
-          txt = metadata$schemaString,
-          simplifyDataFrame = FALSE
-        )
-        schema <- convert_to_arrow_schema(schema, metadata$partitionColumns)
-      } else {
-        schema <- NULL
-      }
-
-      dataset <- arrow::open_dataset(
-        sources = dataset_meta$path,
-        schema = schema,
-        hive_style = TRUE,
-        partitioning = dataset_meta$partitions,
-        format = "parquet"
+      # always load via DuckDB
+      read_with_duckdb(
+        table_folder = dataset_meta$path,
+        changes = changes
       )
+
     }
 
   ),
@@ -410,13 +399,8 @@ SharingTableReader <- R6::R6Class(
 
     #' @field table_path Directory where saved data exists for table. This is
     #' an extension of `path` combined with the table ID.
-    table_path = function(changes = FALSE) {
-      root <- file.path(self$path, self$metadata$metaData$id)
-      if (changes) {
-        file.path(root, "_table_changes")
-      } else {
-        file.path(root, "_table")
-      }
+    table_path = function() {
+      file.path(self$path, self$metadata$metaData$id)
     }
   )
 )

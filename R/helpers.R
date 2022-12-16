@@ -236,7 +236,14 @@ resolve_query_files <- function(x, table_folder, changes = FALSE) {
   if (changes) {
     files <- files %>%
       dplyr::mutate(
-        file = paste0(id, "_", change_type, ".parquet"),
+        # _change_type, _commit_timestamp, _commit_version
+        change_type = dplyr::case_when(
+          change_type == "add" ~ "insert",
+          change_type == "remove" ~ "delete",
+          TRUE ~ change_type
+        ),
+        file_string = paste(id, "_", change_type, commit_timestamp, commit_version, sep = "_"),
+        file = paste0(file_string, ".parquet"),
         destPath = file.path(!!table_folder, "_table_changes", hivePartitions),
         filePath = file.path(destPath, file)
       )
@@ -378,3 +385,59 @@ validate_cdf_options <- function(starting_version, ending_version,
   # TODO: assert valid timestamp, given table metadata and when CDF was enabled
   NULL
 }
+
+# TODO: Documentation
+read_with_duckdb <- function(table_folder, changes) {
+  con <- DBI::dbConnect(duckdb::duckdb())
+
+
+  if (changes) {
+    tbl_path <- file.path(table_folder, "_table_changes/")
+    query <- glue::glue_sql("
+      create or replace table {tbl_path} as
+      with changes as (
+        select *
+        from read_parquet({file.path(tbl_path, '*__cdf_*')}, filename=true)
+      ),
+      other as (
+        select * exclude (filename), null as _change_type, filename
+        from read_parquet({file.path(tbl_path, '*__[i|d]*_*')}, filename=true)
+      ),
+      all_data as (
+        select * from changes
+        union
+        select * from other
+      ),
+      dataset as (
+        select
+          *,
+          str_split(regexp_extract(filename, '.*\\/(.*)\\..*', 1), '_') as metadata,
+          to_timestamp(metadata[5]::bigint/1000)::string as _change_timestamp,
+          metadata[6]::int as _change_version,
+          from all_data
+      )
+      select
+        *
+        exclude (filename, metadata)
+        replace (coalesce(_change_type, metadata[4]) as _change_type)
+      from dataset
+      ",
+      .con = con
+    )
+  } else {
+    tbl_path <- file.path(table_folder, "_table/")
+    query <- glue::glue_sql("
+      create or replace table {tbl_path} as
+      select *
+      from read_parquet({file.path(tbl_path, '*')})
+      ",
+      .con = con
+    )
+  }
+
+  # creates table
+  DBI::dbSendQuery(con, query)
+  arrow::to_arrow(dplyr::tbl(con, tbl_path))
+}
+
+
