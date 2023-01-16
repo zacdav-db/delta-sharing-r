@@ -58,9 +58,10 @@ SharingTableReader <- R6::R6Class(
     #' @param share Share for desired table
     #' @param schema schema for desired table
     #' @param table table name
+    #' @param conn DuckDB connection object
     #' @param creds Credentials for desired table
     #' @return A new `SharingTableReader` object
-    initialize = function(share, schema, table, creds) {
+    initialize = function(share, schema, table, conn, creds) {
       self$creds <- creds
       self$share <- share
       self$schema <- schema
@@ -71,6 +72,7 @@ SharingTableReader <- R6::R6Class(
         "tables", table,
         sep = "/"
       )
+      private$duckdb_connection <- conn
     },
 
     #' @description Define Predicate Hints
@@ -103,6 +105,11 @@ SharingTableReader <- R6::R6Class(
       self$version <- version
     },
 
+    #' @description Set Timestamp
+    #' @details This is only supported on tables with change data feed (cdf)
+    #' enabled.
+    #' @param timestamp String, an optional timestamp. If set, will return
+    #' files as of the specified timestamp of the table.
     set_timestamp = function(timestamp) {
       self$timestamp <- timestamp
     },
@@ -144,19 +151,25 @@ SharingTableReader <- R6::R6Class(
     },
 
     #' @description Load as Tibble
+    #' @param changes Boolean (default: FALSE), determines if table changes are
+    #' read instead of returning table as of a given version or time.
     #' @return  A [tibble::tibble] S3 object.
     load_tibble = function(changes = FALSE) {
       dataset <- private$load_dataset(changes = changes)
       dplyr::collect(dataset)
     },
 
-    #' @description Load as Arrow Record Batch Reader
-    #' @return A [arrow::RecordBatchReader] R6 object.
-    load_arrow_batch = function(changes = FALSE) {
-      private$load_dataset(changes = changes)
-    },
+    # @description Load as Arrow Record Batch Reader
+    # @param changes Boolean (default: FALSE), determines if table changes are
+    # read instead of returning table as of a given version or time.
+    # @return A [arrow::RecordBatchReader] R6 object.
+    #load_arrow_batch = function(changes = FALSE) {
+    #  private$load_dataset(changes = changes)
+    #},
 
     #' @description Load as Arrow Table
+    #' @param changes Boolean (default: FALSE), determines if table changes are
+    #' read instead of returning table as of a given version or time.
     #' @return A [arrow::Table] or [arrow::Dataset] R6 object.
     load_arrow_table = function(changes = FALSE) {
       dataset <- private$load_dataset(changes = changes)
@@ -164,6 +177,8 @@ SharingTableReader <- R6::R6Class(
     },
 
     #' @description Load as DuckDB Table
+    #' @param changes Boolean (default: FALSE), determines if table changes are
+    #' read instead of returning table as of a given version or time.
     #' @return TODO
     load_duckdb = function(changes = FALSE) {
       dataset <- private$load_dataset(changes = changes)
@@ -189,6 +204,8 @@ SharingTableReader <- R6::R6Class(
     },
 
     #' @description Get Table Files
+    #' @param changes Boolean (default: FALSE), determines if table changes are
+    #' read instead of returning table as of a given version or time.
     get_files = function(changes = FALSE) {
 
       if (changes) {
@@ -247,6 +264,9 @@ SharingTableReader <- R6::R6Class(
 
   ),
   private = list(
+
+    # DuckDB connection object
+    duckdb_connection = NULL,
 
     #' Download Associated Files
     #' Internal function that downloads table files and stores them
@@ -317,7 +337,7 @@ SharingTableReader <- R6::R6Class(
         # TODO: copy data between directory
 
         # download just what is required
-        delta.sharing:::download_new_files(
+        download_new_files(
           new_query_files = new_query_files,
           changes = changes
         )
@@ -349,7 +369,8 @@ SharingTableReader <- R6::R6Class(
       # always load via DuckDB
       read_with_duckdb(
         table_folder = dataset_meta$path,
-        changes = changes
+        changes = changes,
+        conn = private$duckdb_connection
       )
 
     }

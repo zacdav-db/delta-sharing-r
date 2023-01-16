@@ -23,10 +23,10 @@ ds_tbl$limit
 # (optional) where to download files (before arrow kicks in)
 ds_tbl$set_download_path("~/Desktop/share-download/")
 
-# load data in as arrow::Dataset 
-ds_tbl_arrow <- ds_tbl$load_as_arrow()
-# if schema mapping is casuing problems, infer the schema
-# ds_tbl_arrow <- ds_tbl$load_as_arrow(infer_schema = TRUE)
+# load data in with arrow
+ds_tbl_arrow <- ds_tbl$load_arrow_table()
+# or
+# ds_tbl_arrow <- ds_tbl$load_arrow_batch()
 
 # do standard {dplyr} things if you like that
 ds_tbl_arrow %>%
@@ -35,8 +35,10 @@ ds_tbl_arrow %>%
   collect()
 
 # just want a tibble? (alias for collect on arrow)
-ds_tbl_tibble <- ds_tbl$load_as_tibble()
-# ds_tbl_tibble <- ds_tbl$load_as_tibble(infer_schema = TRUE)
+ds_tbl_tibble <- ds_tbl$load_tibble()
+
+# or even DuckDB table
+ds_tbl_duckdb <- ds_tbl$load_duckdb()
 
 # For CDF, specify a starting version (or timestamp) before loading
 ds_tbl_cdf <- client$table(share = "deltasharingr", schema = "simple", table = "cdf_no_partition")
@@ -44,6 +46,7 @@ current_version = ds_tbl_cdf$current_version$version
 ds_tbl_cdf$set_cdf_options(starting_version = current_version - 10L)
 ds_tbl_cdf$starting_version
 
-ds_tbl_cdf_arrow <- ds_tbl_cdf$load_as_arrow(changes = TRUE)
-ds_tbl_cdf_tibble <- ds_tbl_cdf$load_as_tibble(changes = TRUE)
+ds_tbl_cdf_arrow <- ds_tbl_cdf$load_arrow_table(changes = TRUE)
+ds_tbl_cdf_tibble <- ds_tbl_cdf$load_tibble(changes = TRUE)
+ds_tbl_cdf_duckdb <- ds_tbl_cdf$load_duckdb(changes = TRUE)
 ```

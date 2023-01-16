@@ -15,6 +15,3 @@ SharingClient
 \description{
 Create Delta Sharing Client
 }
-\examples{
-sharing_client("config.share")
-}

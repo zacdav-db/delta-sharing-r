@@ -19,7 +19,7 @@ Authors@R:
     person("Databricks", role = c("cph", "fnd"))
   )
 Description: Connector for Delta Sharing in R.
-License: What license is it under?
+License: Apache License 2.0
 Encoding: UTF-8
 LazyData: true
 Imports:
@@ -29,8 +29,10 @@ Imports:
   duckdb,
   jsonlite,
   httr2,
+  glue,
   magrittr,
   progress,
   purrr,
+  rlang,
   tibble
 RoxygenNote: 7.2.0

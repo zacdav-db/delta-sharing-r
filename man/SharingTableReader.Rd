@@ -32,6 +32,14 @@ table the client plans to read.}
 \item{\code{path}}{Location used for downloading table data.}
 
 \item{\code{last_query}}{Most recent metadata fetched regarding table.}
+
+\item{\code{starting_version}}{The starting version of table changes.}
+
+\item{\code{ending_version}}{The ending version of table changes.}
+
+\item{\code{starting_timestamp}}{The starting timestamp of table changes.}
+
+\item{\code{ending_timestamp}}{The ending timestamp of table changes.}
 }
 \if{html}{\out{</div>}}
 }
@@ -41,6 +49,9 @@ table the client plans to read.}
 \item{\code{current_version}}{Get current version of table}
 
 \item{\code{metadata}}{Get table metadata}
+
+\item{\code{table_path}}{Directory where saved data exists for table. This is
+an extension of `path` combined with the table ID.}
 }
 \if{html}{\out{</div>}}
 }
@@ -51,8 +62,11 @@ table the client plans to read.}
 \item \href{#method-SharingTableReader-set_predicate}{\code{SharingTableReader$set_predicate()}}
 \item \href{#method-SharingTableReader-set_limit}{\code{SharingTableReader$set_limit()}}
 \item \href{#method-SharingTableReader-set_version}{\code{SharingTableReader$set_version()}}
-\item \href{#method-SharingTableReader-load_as_tibble}{\code{SharingTableReader$load_as_tibble()}}
-\item \href{#method-SharingTableReader-load_as_arrow}{\code{SharingTableReader$load_as_arrow()}}
+\item \href{#method-SharingTableReader-set_timestamp}{\code{SharingTableReader$set_timestamp()}}
+\item \href{#method-SharingTableReader-set_cdf_options}{\code{SharingTableReader$set_cdf_options()}}
+\item \href{#method-SharingTableReader-load_tibble}{\code{SharingTableReader$load_tibble()}}
+\item \href{#method-SharingTableReader-load_arrow_table}{\code{SharingTableReader$load_arrow_table()}}
+\item \href{#method-SharingTableReader-load_duckdb}{\code{SharingTableReader$load_duckdb()}}
 \item \href{#method-SharingTableReader-set_download_path}{\code{SharingTableReader$set_download_path()}}
 \item \href{#method-SharingTableReader-get_files}{\code{SharingTableReader$get_files()}}
 \item \href{#method-SharingTableReader-clone}{\code{SharingTableReader$clone()}}
@@ -64,7 +78,7 @@ table the client plans to read.}
 \subsection{Method \code{new()}}{
 Create a new `SharingTableReader` object
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$new(share, schema, table, creds)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$new(share, schema, table, conn, creds)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -75,6 +89,8 @@ Create a new `SharingTableReader` object
 \item{\code{schema}}{schema for desired table}
 
 \item{\code{table}}{table name}
+
+\item{\code{conn}}{DuckDB connection object}
 
 \item{\code{creds}}{Credentials for desired table}
 }
@@ -158,49 +174,122 @@ enabled.
 
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SharingTableReader-load_as_tibble"></a>}}
-\if{latex}{\out{\hypertarget{method-SharingTableReader-load_as_tibble}{}}}
-\subsection{Method \code{load_as_tibble()}}{
-Load as Tibble
+\if{html}{\out{<a id="method-SharingTableReader-set_timestamp"></a>}}
+\if{latex}{\out{\hypertarget{method-SharingTableReader-set_timestamp}{}}}
+\subsection{Method \code{set_timestamp()}}{
+Set Timestamp
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$load_as_tibble(infer_schema = TRUE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$set_timestamp(timestamp)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{infer_schema}}{Boolean (default: `TRUE`). If `FALSE` will use the
-schema defined in the tables metadata on the sharing server.
-When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.}
+\item{\code{timestamp}}{String, an optional timestamp. If set, will return
+files as of the specified timestamp of the table.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+This is only supported on tables with change data feed (cdf)
+enabled.
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-SharingTableReader-set_cdf_options"></a>}}
+\if{latex}{\out{\hypertarget{method-SharingTableReader-set_cdf_options}{}}}
+\subsection{Method \code{set_cdf_options()}}{
+Set CDF Options
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$set_cdf_options(
+  starting_version = NULL,
+  ending_version = NULL,
+  starting_timestamp = NULL,
+  ending_timestamp = NULL
+)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{starting_version}}{The starting version of table changes.}
+
+\item{\code{ending_version}}{The ending version of table changes.}
+
+\item{\code{starting_timestamp}}{The starting timestamp of table changes.}
+
+\item{\code{ending_timestamp}}{The ending timestamp of table changes.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+This is only supported on tables with change data feed (cdf)
+enabled.
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-SharingTableReader-load_tibble"></a>}}
+\if{latex}{\out{\hypertarget{method-SharingTableReader-load_tibble}{}}}
+\subsection{Method \code{load_tibble()}}{
+Load as Tibble
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$load_tibble(changes = FALSE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{changes}}{Boolean (default: FALSE), determines if table changes are
+read instead of returning table as of a given version or time.}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-tibble of delta sharing table data
+A [tibble::tibble] S3 object.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SharingTableReader-load_as_arrow"></a>}}
-\if{latex}{\out{\hypertarget{method-SharingTableReader-load_as_arrow}{}}}
-\subsection{Method \code{load_as_arrow()}}{
-Load as Arrow
+\if{html}{\out{<a id="method-SharingTableReader-load_arrow_table"></a>}}
+\if{latex}{\out{\hypertarget{method-SharingTableReader-load_arrow_table}{}}}
+\subsection{Method \code{load_arrow_table()}}{
+Load as Arrow Table
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$load_as_arrow(infer_schema = TRUE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$load_arrow_table(changes = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{infer_schema}}{Boolean (default: `TRUE`). If `FALSE` will use the
-schema defined in the tables metadata on the sharing server.
-When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
-inferring the schema can be very useful for complex types, however it
-will assume the local timezone for relevant columns, be cautious.}
+\item{\code{changes}}{Boolean (default: FALSE), determines if table changes are
+read instead of returning table as of a given version or time.}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-A [arrow::Dataset] R6 object.
+A [arrow::Table] or [arrow::Dataset] R6 object.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-SharingTableReader-load_duckdb"></a>}}
+\if{latex}{\out{\hypertarget{method-SharingTableReader-load_duckdb}{}}}
+\subsection{Method \code{load_duckdb()}}{
+Load as DuckDB Table
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$load_duckdb(changes = FALSE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{changes}}{Boolean (default: FALSE), determines if table changes are
+read instead of returning table as of a given version or time.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+TODO
 }
 }
 \if{html}{\out{<hr>}}
@@ -225,13 +314,21 @@ Set Download Path
 \if{latex}{\out{\hypertarget{method-SharingTableReader-get_files}{}}}
 \subsection{Method \code{get_files()}}{
 Get Table Files
-Download Associated Files
-Internal function that downloads table files and stores them
-on disk.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$get_files()}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingTableReader$get_files(changes = FALSE)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{changes}}{Boolean (default: FALSE), determines if table changes are
+read instead of returning table as of a given version or time.
+Download Associated Files
+Internal function that downloads table files and stores them
+on disk.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SharingTableReader-clone"></a>}}

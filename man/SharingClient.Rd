@@ -25,8 +25,8 @@ TODO
 \item \href{#method-SharingClient-list_all_schemas}{\code{SharingClient$list_all_schemas()}}
 \item \href{#method-SharingClient-list_tables}{\code{SharingClient$list_tables()}}
 \item \href{#method-SharingClient-list_tables_in_share}{\code{SharingClient$list_tables_in_share()}}
+\item \href{#method-SharingClient-list_all_tables}{\code{SharingClient$list_all_tables()}}
 \item \href{#method-SharingClient-table}{\code{SharingClient$table()}}
-\item \href{#method-SharingClient-clone}{\code{SharingClient$clone()}}
 }
 }
 \if{html}{\out{<hr>}}
@@ -109,6 +109,8 @@ List tables within schema
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
+\item{\code{share}}{Name of the share to list schemas}
+
 \item{\code{schema}}{Name of the scehma to list tables within}
 }
 \if{html}{\out{</div>}}
@@ -138,6 +140,19 @@ tibble of the available tables within given share
 }
 }
 \if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-SharingClient-list_all_tables"></a>}}
+\if{latex}{\out{\hypertarget{method-SharingClient-list_all_tables}{}}}
+\subsection{Method \code{list_all_tables()}}{
+List all tables for all schemas in available shares
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_all_tables()}\if{html}{\out{</div>}}
+}
+
+\subsection{Returns}{
+tibble of the available tables accessible with credentials
+}
+}
+\if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SharingClient-table"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingClient-table}{}}}
 \subsection{Method \code{table()}}{
@@ -159,23 +174,6 @@ Create reference to delta sharing table
 }
 \subsection{Returns}{
 R6 class of `SharingTableReader` for specified table
-}
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SharingClient-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-SharingClient-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$clone(deep = FALSE)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
 }
 }
 }
