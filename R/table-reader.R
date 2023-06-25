@@ -384,6 +384,7 @@ SharingTableReader <- R6::R6Class(
       req <- req_share(
         creds = self$creds,
         method = "HEAD",
+        # endpoint = paste0(self$endpoint_base, "/version"),
         endpoint = self$endpoint_base
       )
       version <- make_req(req)

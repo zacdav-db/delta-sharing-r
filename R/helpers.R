@@ -16,7 +16,7 @@ print.DeltaShareCredentials <- function(x, ...) {
 #' @param ... Additional args
 #' @export
 print.DeltaShareTableVersion <- function(x, ...) {
-  x <- paste0(x$`delta-table-version`, " [", x$date, "]\n")
+  x <- paste0(x$`version`, " [", x$date, "]\n")
   cat(x)
   invisible(x)
 }
