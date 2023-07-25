@@ -4,11 +4,8 @@
 #'
 #' @return SharingClient
 #' @export
-#'
-#' @examples
-#' sharing_client("config.share")
 sharing_client <- function(credentials) {
-  delta.sharing::SharingClient$new(credentials)
+  SharingClient$new(credentials)
 }
 
 #' Sharing Client
@@ -20,6 +17,8 @@ sharing_client <- function(credentials) {
 #' @export
 SharingClient <- R6::R6Class(
   classname = "SharingClient",
+  lock_class = TRUE,
+  cloneable = FALSE,
   public = list(
 
     #' @field creds Delta sharing credentials.
@@ -41,6 +40,7 @@ SharingClient <- R6::R6Class(
         stop("Credentials are expired as of ", creds$expirationTime)
       }
       self$creds <- creds
+      private$duckdb_connection <- DBI::dbConnect(duckdb::duckdb())
     },
 
     #' @description Lists available shares
@@ -84,6 +84,7 @@ SharingClient <- R6::R6Class(
     },
 
     #' @description List tables within schema
+    #' @param share Name of the share to list schemas
     #' @param schema Name of the scehma to list tables within
     #' @return tibble of the available tables within given schema
     list_tables = function(share, schema) {
@@ -117,6 +118,15 @@ SharingClient <- R6::R6Class(
 
     },
 
+    #' @description List all tables for all schemas in available shares
+    #' @return tibble of the available tables accessible with credentials
+    list_all_tables = function() {
+
+      shares <- self$list_shares()
+      purrr::map_dfr(shares$name, ~self$list_tables_in_share(share = .x))
+
+    },
+
     #' @description Create reference to delta sharing table
     #' @param share Share the schema/table resides within
     #' @param schema Schema the table resides within
@@ -127,24 +137,13 @@ SharingClient <- R6::R6Class(
         share = share,
         schema = schema,
         table = table,
+        conn = private$duckdb_connection,
         creds = self$creds
       )
     }
 
-    #TODO: update docs
-    ##' @description Create reference to delta sharing table changes
-    ##' @param share Share the schema/table resides within
-    ##' @param schema Schema the table resides within
-    ##' @param table Table to query changes of
-    ##' @return R6 class of `SharingTableReader` for specified table
-    # table_changes = function(share, schema, table) {
-    #   SharingTableChangesReader$new(
-    #     share = share,
-    #     schema = schema,
-    #     table = table,
-    #     creds = self$creds
-    #   )
-    # }
-
+  ),
+  private = list(
+    duckdb_connection = NULL
   )
 )

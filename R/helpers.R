@@ -16,7 +16,7 @@ print.DeltaShareCredentials <- function(x, ...) {
 #' @param ... Additional args
 #' @export
 print.DeltaShareTableVersion <- function(x, ...) {
-  x <- paste0(x$`delta-table-version`, " [", x$date, "]\n")
+  x <- paste0(x$`version`, " [", x$date, "]\n")
   cat(x)
   invisible(x)
 }
@@ -196,3 +196,256 @@ list_to_hive_partition <- function(x) {
   string <- purrr::imap_chr(x, ~paste(.y, .x, sep = "="))
   paste(string, collapse = "/")
 }
+
+# TODO: Documentation
+extract_file_metadata <- function(x, changes) {
+  file_type <- if (changes) names(x)[1] else "file"
+  x <- x[[file_type]]
+
+  file_metadata <- list(
+    url = x$url,
+    id = x$id,
+    partitionValues = list(x$partitionValues),
+    size = x$size,
+    stats = if (!is.null(x$stats)) list(jsonlite::fromJSON(x$stats)) else x$stats
+  )
+
+  if (changes) {
+    file_metadata[["change_type"]] <- file_type
+    file_metadata[["commit_timestamp"]] <- x$timestamp
+    file_metadata[["commit_version"]] <- x$version
+  }
+
+  return(file_metadata)
+}
+
+# TODO: docs
+resolve_query_files <- function(x, table_folder, changes = FALSE) {
+
+  # add metadata to query files
+  # - where to save
+  # - check if they already exist locally (to skip re-downloading)
+
+  files <- x %>%
+    dplyr::rowwise() %>%
+    dplyr::mutate(
+      hivePartitions = list_to_hive_partition(.data$partitionValues)
+    ) %>%
+    dplyr::ungroup()
+
+  if (changes) {
+    files <- files %>%
+      dplyr::mutate(
+        # _change_type, _commit_timestamp, _commit_version
+        change_type = dplyr::case_when(
+          change_type == "add" ~ "insert",
+          change_type == "remove" ~ "delete",
+          TRUE ~ change_type
+        ),
+        file_string = paste(id, "_", .data$change_type, .data$commit_timestamp, .data$commit_version, sep = "_"),
+        file = paste0(.data$file_string, ".parquet"),
+        destPath = file.path(!!table_folder, "_table_changes", .data$hivePartitions),
+        filePath = file.path(.data$destPath, .data$file)
+      )
+  } else {
+    files <- files %>%
+      dplyr::mutate(
+        file = paste0(.data$id, ".parquet"),
+        destPath = file.path(!!table_folder, "_table", .data$hivePartitions),
+        filePath = file.path(.data$destPath, .data$file)
+      )
+  }
+
+  # both paths are generated to check if files can be skipped from
+  # download step later on, there are two types of skipping:
+  # 1. file exists in current directory (_table_changes or root)
+  # 2. can be copied between _table_changes and root directory
+  existing_files <- list.files(path = table_folder, recursive = TRUE)
+  existing_files <- data.frame(file = existing_files) %>%
+    dplyr::mutate(
+      id = gsub(".*?(.*\\/)?([a-z0-9]*?)(_.*?)?(\\.parquet)", "\\2", .data$file, perl = TRUE),
+      is_in_cdf = grepl("^_table_changes", .data$file)
+    )
+
+  existing_ids_root <- dplyr::filter(existing_files, !.data$is_in_cdf)$id
+  existing_ids_cdf <- dplyr::filter(existing_files, .data$is_in_cdf)$id
+
+  files <- files %>%
+    dplyr::mutate(
+      relativePath = sub("^\\/", "", file.path(.data$hivePartitions, .data$file)),
+      alreadyExistsRoot = id %in% existing_ids_root,
+      alreadyExistsInCDF = id %in% existing_ids_cdf,
+      alreadyExists = .data$alreadyExistsRoot | .data$alreadyExistsInCDF,
+      to_download = !.data$alreadyExists,
+      to_copy_to_cdf = !.data$alreadyExistsInCDF & .data$alreadyExistsRoot,
+      to_copt_to_root = !.data$alreadyExistsRoot & .data$alreadyExistsInCDF
+    )
+
+  files
+
+}
+
+# TODO: Documentation
+download_new_files <- function(new_query_files, changes) {
+
+  # create progress bar
+  pb <- progress::progress_bar$new(
+    format = "  downloading files (:elapsedfull) [:bar] :current/:total (:percent) [:eta]",
+    total = nrow(new_query_files),
+    clear = FALSE,
+    width = 100
+  )
+  pb$tick(0)
+
+  # download new files
+  new_query_files %>%
+    purrr::pwalk(function(url, filePath, ...) {
+      utils::download.file(url, destfile = filePath, quiet = TRUE)
+      pb$tick()
+    })
+
+}
+
+# TODO: Documentation
+version_is_valid <- function(x) {
+  floor(x) == x
+}
+
+# TODO: Documentation
+timestamp_is_valid <- function(x) {
+  # it should be defined as a character
+  if (is.character(x)) {
+    x <- as.POSIXct(x, format = "%Y-%m-%d %H:%M:%S")
+    return(!is.na(x))
+  }
+  FALSE
+}
+
+# TODO: Documentation
+validate_cdf_options <- function(starting_version, ending_version,
+                                 starting_timestamp, ending_timestamp) {
+
+  # minimum requirement is to have starting_* parameter
+  # can only specify either version or timestamp, not both
+  if (!xor(is.null(starting_version), is.null(starting_timestamp))) {
+    rlang::abort(
+      paste(
+        "INVALID_PARAMETER_VALUE: Must pass either starting_version or",
+        "starting_timestamp using set_cdf_options() before performing CDF read."
+      )
+    )
+  }
+
+  # if end version/timestamp is present, must match the starting param type
+  if (!is.null(starting_version) && !is.null(ending_timestamp)) {
+    rlang::abort(
+      paste(
+        "INVALID_PARAMETER_VALUE: `ending_timestamp` is only valid when",
+        "specifying `starting_timestamp` using set_cdf_options()."
+      )
+    )
+  }
+  if (!is.null(starting_timestamp) && !is.null(ending_version)) {
+    rlang::abort(
+      paste(
+        "INVALID_PARAMETER_VALUE: `ending_version` is only valid when",
+        "specifying `starting_version` using set_cdf_options()."
+      )
+    )
+  }
+
+  # assert valid version/timestamp parameters
+  if (!is.null(starting_version)) {
+    # ensure versions are valid values
+    if (any(!version_is_valid(c(starting_version, ending_version)))) {
+      rlang::abort("INVALID_PARAMETER_VALUE: Versions must be represented as integer values.")
+    }
+    # ensure start is before end
+    if (!is.null(ending_version) && (starting_version > ending_version)) {
+      rlang::abort(
+        paste(
+          "INVALID_PARAMETER_VALUE: `starting_version` must be less than or",
+          "equal to `ending_version`"
+        )
+      )
+    }
+  } else {
+    # ensure timestamps are valid
+    if (any(!timestamp_is_valid(c(starting_timestamp, ending_timestamp)))) {
+      rlang::abort(
+        paste(
+          "INVALID_PARAMETER_VALUE: Timestamps must be in a valid",
+          "yyyy-mm-dd hh:mm:ss[.fffffffff] string format."
+        )
+      )
+    }
+    # ensure start is before end
+    if (!is.null(ending_timestamp) && (starting_timestamp > ending_timestamp)) {
+      rlang::abort(
+        paste(
+          "INVALID_PARAMETER_VALUE: `starting_timestamp` must be less than or",
+          "equal to `ending_timestamp`"
+        )
+      )
+    }
+  }
+
+  # TODO: assert valid version, given table metadata and when CDF was enabled
+  # TODO: assert valid timestamp, given table metadata and when CDF was enabled
+  NULL
+}
+
+# TODO: Documentation
+#' @importFrom glue glue_sql
+read_with_duckdb <- function(table_folder, changes, conn) {
+
+  if (changes) {
+    tbl_path <- file.path(table_folder, "_table_changes/")
+    query <- glue::glue_sql("
+      create or replace table {tbl_path} as
+      with changes as (
+        select *
+        from read_parquet({file.path(tbl_path, '*__cdf_*')}, filename=true)
+      ),
+      other as (
+        select * exclude (filename), null as _change_type, filename
+        from read_parquet({file.path(tbl_path, '*__[i|d]*_*')}, filename=true)
+      ),
+      all_data as (
+        select * from changes
+        union
+        select * from other
+      ),
+      dataset as (
+        select
+          *,
+          str_split(regexp_extract(filename, '.*\\/(.*)\\..*', 1), '_') as metadata,
+          to_timestamp(metadata[5]::bigint/1000)::string as _change_timestamp,
+          metadata[6]::int as _change_version,
+          from all_data
+      )
+      select
+        *
+        exclude (filename, metadata)
+        replace (coalesce(_change_type, metadata[4]) as _change_type)
+      from dataset
+      ",
+      .con = conn
+    )
+  } else {
+    tbl_path <- file.path(table_folder, "_table/")
+    query <- glue::glue_sql("
+      create or replace table {tbl_path} as
+      select *
+      from read_parquet({file.path(tbl_path, '*')})
+      ",
+      .con = conn
+    )
+  }
+
+  # creates table
+  DBI::dbSendQuery(conn, query)
+  arrow::to_arrow(dplyr::tbl(conn, tbl_path))
+}
+
+

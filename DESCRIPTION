@@ -1,13 +1,17 @@
 Package: delta.sharing
 Type: Package
 Title: R Delta Sharing Connector
-Version: 0.1.1
+Version: 0.2.0
 Authors@R: 
   c(
     person(given = "Zac",
            family = "Davies",
            role = c("aut", "cre"),
            email = "zac@databricks.com"),
+    person(given = "Tyler",
+           family = "Richardett",
+           role = c("aut"),
+           email = "tyler.richardett@databricks.com"),
     person(given = "Div",
            family = "Saini",
            role = c("aut"),
@@ -15,16 +19,20 @@ Authors@R:
     person("Databricks", role = c("cph", "fnd"))
   )
 Description: Connector for Delta Sharing in R.
-License: What license is it under?
+License: Apache License 2.0
 Encoding: UTF-8
 LazyData: true
 Imports:
   arrow,
+  DBI,
   dplyr,
+  duckdb,
   jsonlite,
   httr2,
+  glue,
   magrittr,
   progress,
   purrr,
+  rlang,
   tibble
 RoxygenNote: 7.2.0

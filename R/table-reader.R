@@ -40,15 +40,28 @@ SharingTableReader <- R6::R6Class(
     #' @field last_query Most recent metadata fetched regarding table.
     last_query = NULL,
 
+    #' @field starting_version The starting version of table changes.
+    starting_version = NULL,
+
+    #' @field ending_version The ending version of table changes.
+    ending_version = NULL,
+
+    #' @field starting_timestamp The starting timestamp of table changes.
+    starting_timestamp = NULL,
+
+    #' @field ending_timestamp The ending timestamp of table changes.
+    ending_timestamp = NULL,
+
     #' @description Create a new `SharingTableReader` object
     #' @details This object should be instantiated via `SharingClient$table(...)`
     #' and not directly.
     #' @param share Share for desired table
     #' @param schema schema for desired table
     #' @param table table name
+    #' @param conn DuckDB connection object
     #' @param creds Credentials for desired table
     #' @return A new `SharingTableReader` object
-    initialize = function(share, schema, table, creds) {
+    initialize = function(share, schema, table, conn, creds) {
       self$creds <- creds
       self$share <- share
       self$schema <- schema
@@ -59,6 +72,7 @@ SharingTableReader <- R6::R6Class(
         "tables", table,
         sep = "/"
       )
+      private$duckdb_connection <- conn
     },
 
     #' @description Define Predicate Hints
@@ -91,56 +105,95 @@ SharingTableReader <- R6::R6Class(
       self$version <- version
     },
 
+    #' @description Set Timestamp
+    #' @details This is only supported on tables with change data feed (cdf)
+    #' enabled.
+    #' @param timestamp String, an optional timestamp. If set, will return
+    #' files as of the specified timestamp of the table.
+    set_timestamp = function(timestamp) {
+      self$timestamp <- timestamp
+    },
+
+    #' @description Set CDF Options
+    #' @details This is only supported on tables with change data feed (cdf)
+    #' enabled.
+    #' @param starting_version The starting version of table changes.
+    #' @param ending_version The ending version of table changes.
+    #' @param starting_timestamp The starting timestamp of table changes.
+    #' @param ending_timestamp The ending timestamp of table changes.
+    set_cdf_options = function(
+      starting_version = NULL,
+      ending_version = NULL,
+      starting_timestamp = NULL,
+      ending_timestamp = NULL
+    ) {
+
+      # validate passed arguments
+      validate_cdf_options(
+        starting_version = starting_version,
+        ending_version = ending_version,
+        starting_timestamp = starting_timestamp,
+        ending_timestamp = ending_timestamp
+      )
+
+      # TODO: automatically cast anything resembling a valid timestamp to a
+      # ZD Note: I'd rather not do this the more I think about it.
+      # Extra effort to maintain, and if a package used to do it changes then it
+      # breaks things.
+      # correctly formatted string
+
+      # set attributes
+      self$starting_version <- starting_version
+      self$ending_version <- ending_version
+      self$starting_timestamp <- starting_timestamp
+      self$ending_timestamp <- ending_timestamp
+
+    },
+
     #' @description Load as Tibble
-    #' @param infer_schema Boolean (default: `TRUE`). If `FALSE` will use the
-    #' schema defined in the tables metadata on the sharing server.
-    #' When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
-    #' @return tibble of delta sharing table data
-    load_as_tibble = function(infer_schema = TRUE) {
-      dataset <- self$load_as_arrow(infer_schema = infer_schema)
+    #' @param changes Boolean (default: FALSE), determines if table changes are
+    #' read instead of returning table as of a given version or time.
+    #' @return  A [tibble::tibble] S3 object.
+    load_tibble = function(changes = FALSE) {
+      dataset <- private$load_dataset(changes = changes)
       dplyr::collect(dataset)
     },
 
-    #' @description Load as Arrow
-    #' @param infer_schema Boolean (default: `TRUE`). If `FALSE` will use the
-    #' schema defined in the tables metadata on the sharing server.
-    #' When `TRUE` the schema is inferred via [arrow::open_dataset()] on read.
-    #' inferring the schema can be very useful for complex types, however it
-    #' will assume the local timezone for relevant columns, be cautious.
-    #' @return A [arrow::Dataset] R6 object.
-    load_as_arrow = function(infer_schema = TRUE) {
+    # @description Load as Arrow Record Batch Reader
+    # @param changes Boolean (default: FALSE), determines if table changes are
+    # read instead of returning table as of a given version or time.
+    # @return A [arrow::RecordBatchReader] R6 object.
+    #load_arrow_batch = function(changes = FALSE) {
+    #  private$load_dataset(changes = changes)
+    #},
 
-      # download table
-      # TODO: check if current version is okay and downloads are required
-      dataset_meta <- private$download()
-
-      # schema is fetched from self$metadata
-      # inferring schema will use {arrow} and the parquet files as-is
-      if (!infer_schema) {
-        metadata <- self$metadata$metaData
-        schema <- jsonlite::fromJSON(
-          txt = metadata$schemaString,
-          simplifyDataFrame = FALSE
-        )
-        schema <- convert_to_arrow_schema(schema, metadata$partitionColumns)
-      } else {
-        schema <- NULL
-      }
-
-      dataset <- arrow::open_dataset(
-        sources = dataset_meta$path,
-        schema = schema,
-        hive_style = TRUE,
-        partitioning = dataset_meta$partitions,
-        format = "parquet"
-      )
+    #' @description Load as Arrow Table
+    #' @param changes Boolean (default: FALSE), determines if table changes are
+    #' read instead of returning table as of a given version or time.
+    #' @return A [arrow::Table] or [arrow::Dataset] R6 object.
+    load_arrow_table = function(changes = FALSE) {
+      dataset <- private$load_dataset(changes = changes)
+      dataset$read_table()
     },
 
-    # load_as_spark = function() {
+    #' @description Load as DuckDB Table
+    #' @param changes Boolean (default: FALSE), determines if table changes are
+    #' read instead of returning table as of a given version or time.
+    #' @return TODO
+    load_duckdb = function(changes = FALSE) {
+      dataset <- private$load_dataset(changes = changes)
+      arrow::to_duckdb(dataset)
+    },
+
+    # load_dt = function(changes = FALSE) {
     #   NULL
     # },
 
-    # load_as_sparklyr = function() {
+    # load_spark = function() {
+    #   NULL
+    # },
+
+    # load_sparklyr = function() {
     #   NULL
     # },
 
@@ -151,21 +204,44 @@ SharingTableReader <- R6::R6Class(
     },
 
     #' @description Get Table Files
-    get_files = function() {
+    #' @param changes Boolean (default: FALSE), determines if table changes are
+    #' read instead of returning table as of a given version or time.
+    get_files = function(changes = FALSE) {
 
-      endpoint <- paste0(self$endpoint_base, "/query")
-      body <- list(
-        predicateHints = self$predicates,
-        limitHint = self$limit,
-        version = self$version
-      )
+      if (changes) {
 
-      req <- req_share(
-        creds = self$creds,
-        method = "POST",
-        endpoint = endpoint,
-        body = body
-      )
+        endpoint <- paste0(self$endpoint_base, "/changes")
+        params <- list(
+          startingVersion = self$starting_version,
+          endingVersion = self$ending_version,
+          startingTimestamp = self$starting_timestamp,
+          endingTimestamp = self$ending_timestamp
+        )
+
+        req <- req_share(
+          creds = self$creds,
+          method = "GET",
+          endpoint = endpoint,
+          params = params
+        )
+
+      } else {
+
+        endpoint <- paste0(self$endpoint_base, "/query")
+        body <- list(
+          predicateHints = self$predicates,
+          limitHint = self$limit,
+          version = self$version
+        )
+
+        req <- req_share(
+          creds = self$creds,
+          method = "POST",
+          endpoint = endpoint,
+          body = body
+        )
+
+      }
 
       res <- req %>%
         httr2::req_retry(max_tries = 3) %>%
@@ -176,16 +252,10 @@ SharingTableReader <- R6::R6Class(
       self$last_query <- list(
         protocol = res[[1]][[1]],
         metaData = res[[2]][[1]],
-        files = purrr::map_dfr(res[-c(1, 2)], ~{
-          .x <- .x$file
-          list(
-            url = .x$url,
-            id = .x$id,
-            partitionValues = list(.x$partitionValues),
-            size = .x$size,
-            stats = list(jsonlite::fromJSON(.x$stats))
-          )
-        })
+        files = purrr::map_dfr(
+          res[-c(1, 2)],
+          ~extract_file_metadata(.x, changes = changes)
+        )
       )
 
       self$last_query
@@ -195,51 +265,62 @@ SharingTableReader <- R6::R6Class(
   ),
   private = list(
 
+    # DuckDB connection object
+    duckdb_connection = NULL,
+
     #' Download Associated Files
     #' Internal function that downloads table files and stores them
     #' on disk.
-    download = function() {
+    download = function(changes = FALSE) {
 
-      # download directory
+      # query files that belong to table
+      self$get_files(changes = changes)
+
+      # download directory, create if doesn't exist
       if (is.null(self$path)) {
         self$path <- tempdir()
       } else {
         if (!dir.exists(self$path)) dir.create(self$path)
       }
 
-      # query files that belong to table
-      self$get_files()
-
-      # create a folder for the table, just in-case a directory is shared
-      # between other tables / data
+      # create a sub-directory for the table within the path
       table_folder <- file.path(self$path, self$last_query$metaData$id)
-      if (!dir.exists(table_folder)) {
-        dir.create(table_folder)
-      }
+      if (!dir.exists(table_folder)) dir.create(table_folder)
+
+      # ensure that sub-directories to store data are always present (even if not used)
+      # this is to ensure "copy-skipping" resolution will behave
+      table_folder_cdf <- file.path(table_folder, "_table_changes")
+      table_folder_std <- file.path(table_folder, "_table")
+      if (!dir.exists(table_folder_std)) dir.create(table_folder_std)
+      if (!dir.exists(table_folder_cdf)) dir.create(table_folder_cdf)
 
       # determine what files already may be downloaded
       # id is unique - used to avoid re-downloads
       query_files <- self$last_query$files %>%
-        dplyr::rowwise() %>%
-        dplyr::mutate(
-          hivePartitions = list_to_hive_partition(partitionValues),
-          destPath = file.path(!!table_folder, hivePartitions),
-          file = paste0(id, ".parquet"),
-          relativePath = sub("^\\/", "", file.path(hivePartitions, file)),
-          filePath = file.path(destPath, file),
-          alreadyExists = file.exists(filePath)
+        resolve_query_files(
+          changes = changes,
+          table_folder = table_folder
         )
 
-      new_query_files <- dplyr::filter(query_files, !alreadyExists)
+      if (changes) {
+        new_query_files <- dplyr::filter(query_files, to_download | to_copy_to_cdf)
+      } else {
+        new_query_files <- dplyr::filter(query_files, to_download | to_copt_to_root)
+      }
 
       # delete files not part of current table state
       # this is required so that arrow plays well with partitioning
       # no effective way to manage state since everything is parquet
-      all_existing_files <- list.files(table_folder, recursive = TRUE)
+
+      # determine which files can be deleted
+      table_folder_del <- ifelse(changes, table_folder_cdf, table_folder_std)
+
+      all_existing_files <- list.files(table_folder_del, recursive = TRUE)
       to_delete <- all_existing_files[!all_existing_files %in% query_files$relativePath]
+
       if (length(to_delete) > 0) {
         message("deleting ", length(to_delete), " files that are no longer referenced")
-        file.remove(file.path(table_folder, to_delete))
+        file.remove(file.path(table_folder_del, to_delete))
       }
 
       # if there are files to download
@@ -251,24 +332,18 @@ SharingTableReader <- R6::R6Class(
           dir.create(path, recursive = TRUE)
         })
 
-        # create progress bar
-        pb <- progress::progress_bar$new(
-          format = "  downloading files (:elapsedfull) [:bar] :current/:total (:percent) [:eta]",
-          total = nrow(new_query_files),
-          clear = FALSE,
-          width = 100
-        )
-        pb$tick(0)
+        # if a file exists in either main directory or _table_changes copy it
+        # instead of re-downloading
+        # TODO: copy data between directory
 
         # download just what is required
-        new_query_files %>%
-          dplyr::select(url, filePath) %>%
-          purrr::pwalk(function(url, filePath) {
-            download.file(url, destfile = filePath, quiet = TRUE)
-            pb$tick()
-          })
+        download_new_files(
+          new_query_files = new_query_files,
+          changes = changes
+        )
       }
 
+      # detect partitioning
       if (length(self$last_query$metaData$partitionColumns) == 0) {
         partitions <- NULL
       } else {
@@ -279,7 +354,24 @@ SharingTableReader <- R6::R6Class(
         path = table_folder,
         partitions = partitions
       )
+
       return(dataset_meta)
+
+    },
+
+    # TODO: Documentation
+    load_dataset = function(changes) {
+
+      # download table
+      # TODO: check if current version is okay and downloads are required
+      dataset_meta <- private$download(changes = changes)
+
+      # always load via DuckDB
+      read_with_duckdb(
+        table_folder = dataset_meta$path,
+        changes = changes,
+        conn = private$duckdb_connection
+      )
 
     }
 
@@ -292,9 +384,15 @@ SharingTableReader <- R6::R6Class(
       req <- req_share(
         creds = self$creds,
         method = "HEAD",
+        # endpoint = paste0(self$endpoint_base, "/version"),
         endpoint = self$endpoint_base
       )
       version <- make_req(req)
+      version <- list(
+        version = as.integer(version$`delta-table-version`),
+        date = version$date,
+        server = version$server
+      )
       class(version) <- "DeltaShareTableVersion"
       version
 
@@ -312,12 +410,19 @@ SharingTableReader <- R6::R6Class(
       )
 
       res <- req %>%
+        httr2::req_retry(max_tries = 3) %>%
+        httr2::req_error(body = req_error_body) %>%
         httr2::req_perform() %>%
         clean_xndjson()
 
       purrr::flatten(res)
 
-    }
+    },
 
+    #' @field table_path Directory where saved data exists for table. This is
+    #' an extension of `path` combined with the table ID.
+    table_path = function() {
+      file.path(self$path, self$metadata$metaData$id)
+    }
   )
 )
