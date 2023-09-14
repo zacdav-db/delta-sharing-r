@@ -1,5 +1,8 @@
 # R Delta Sharing Connector
 
+#### Note: Working on an updated version, coming soon :)
+
+
 ``` r
 # connect to client
 library(delta.sharing)
