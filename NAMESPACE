@@ -3,8 +3,6 @@
 S3method(print,DeltaShareCredentials)
 S3method(print,DeltaShareTableVersion)
 export(SharingClient)
-export(SharingTableReader)
-export(TableBuilder)
 export(sharing_client)
 export(sharing_creds_from_env)
 import(arrow)
