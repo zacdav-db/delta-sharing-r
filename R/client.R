@@ -26,21 +26,15 @@ SharingClient <- R6::R6Class(
     creds = NULL,
 
     #' @description Create a new `DeltaShareCredentials` object
-    #' @param credentials Path to delta share credentials
+    #' @param credentials Path to delta share credentials or a
+    #' `DeltaShareCredentials` object (see `sharing_creds_from_env`).
     #' @return A new `DeltaShareCredentials` object
     initialize = function(credentials) {
-      creds <- jsonlite::read_json(credentials)
-      class(creds) <- "DeltaShareCredentials"
-      # convert expiration time and check validity
-      creds$expirationTime <- strptime(
-        x = creds$expirationTime,
-        format = "%Y-%m-%dT%H:%M:%S",
-        tz = "UTC"
-      )
-      if (Sys.time() > creds$expirationTime) {
-        stop("Credentials are expired as of ", creds$expirationTime)
+      if (!is.DeltaShareCredentials(credentials)) {
+        credentials <- jsonlite::read_json(credentials)
+        credentials <- process_credentials(credentials)
       }
-      self$creds <- creds
+      self$creds <- credentials
     },
 
     #' @description Lists available shares

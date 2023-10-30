@@ -1,17 +1,13 @@
 Package: delta.sharing
 Type: Package
 Title: R Delta Sharing Connector
-Version: 0.1.1
+Version: 0.1.2
 Authors@R: 
   c(
     person(given = "Zac",
            family = "Davies",
            role = c("aut", "cre"),
            email = "zac@databricks.com"),
-    person(given = "Div",
-           family = "Saini",
-           role = c("aut"),
-           email = "div.saini@databricks.com"),
     person("Databricks", role = c("cph", "fnd"))
   )
 Description: Connector for Delta Sharing in R.
