@@ -41,7 +41,8 @@ Create a new `DeltaShareCredentials` object
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{credentials}}{Path to delta share credentials}
+\item{\code{credentials}}{Path to delta share credentials or a
+`DeltaShareCredentials` object (see `sharing_creds_from_env`).}
 }
 \if{html}{\out{</div>}}
 }
