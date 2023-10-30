@@ -1,15 +1,3 @@
-#' Print DeltaShareCredentials
-#'
-#' @param x Object of class `DeltaShareCredentials`
-#' @param ... Additional args
-#' @export
-print.DeltaShareCredentials <- function(x, ...) {
-  x <- paste0("(V", x$shareCredentialsVersion, ") [", x$endpoint, "]\n")
-  cat(x)
-  invisible(x)
-}
-
-
 #' Print DeltaShareTableVersion
 #'
 #' @param x Object of class `DeltaShareTableVersion`
@@ -33,150 +21,6 @@ clean_file_metadata <- function(x) {
     partitionValues = x$partitionValues,
     url = x$url
   )
-}
-
-
-#' Map to Arrow Types
-#'
-#' @details TODO
-#'
-#' @param type Character, name of type to convert to Arrow.
-#' @param settings Named list, additional metadata relevant to mapping.
-#'
-#' @return ArrowObject
-#' @importFrom stats setNames
-to_arrow_types <- function(type, settings = list()) {
-
-  # if type was already an arrow object, spit it back out
-  if (inherits(type, c("DataType", "ArrowObject"))) {
-    return(type)
-  }
-
-  # resolve nested types (generally)
-  if (is.list(settings$element_type)) {
-    settings$element_type <- to_arrow_types(
-      type = settings$element_type$type,
-      settings = list(element_type = settings$element_type$elementType)
-    )
-  }
-
-  # resolve nested types (`MapType()` items)
-  if (is.list(settings$item_type)) {
-    settings$item_type <- to_arrow_types(
-      type = settings$item_type$type,
-      settings = list(element_type = settings$item_type$elementType)
-    )
-  }
-
-  # determine arrow type
-  switch(
-    type,
-    "byte"      = arrow::int8(),
-    "short"     = arrow::int16(),
-    "integer"   = arrow::int32(),
-    "long"      = arrow::int64(),
-    "float"     = arrow::float32(),
-    "double"    = arrow::float64(),
-    "decimal"   = arrow::decimal128(
-      precision = settings$decimal_precision,
-      scale = settings$decimal_scale
-    ),
-    "string"    = arrow::string(),
-    "boolean"   = arrow::boolean(),
-    "binary"    = arrow::binary(),
-    "timestamp" = arrow::timestamp(unit = "us", timezone = "UTC"),
-    "date"      = arrow::date32(),
-    "interval"  = arrow::duration(unit = "us"),
-    "array"     = arrow::list_of(to_arrow_types(settings$element_type)),
-    "map"       = arrow::map_of(
-      key_type = to_arrow_types(settings$key_type),
-      item_type = to_arrow_types(settings$item_type)
-    ),
-    "struct"    = do.call(
-      arrow::struct,
-      setNames(
-        create_arrow_type_list(settings$fields),
-        purrr::map_chr(settings$fields, "name")
-      )
-    )
-  )
-}
-
-
-# TODO: Document + example
-create_arrow_type_list <- function(fields) {
-
-  purrr::map(fields, function(x) {
-
-    settings <- list()
-
-    # detect nested type (type will be a list)
-    if (!is.list(x$type)) {
-
-      # get type settings if needed
-      type <- x$type
-
-      if (grepl("decimal", type)) {
-        settings$decimal_precision <- as.integer(gsub(".*\\((\\d+),(\\d+)\\)", "\\1", type))
-        settings$decimal_scale <- as.integer(gsub(".*\\((\\d+),(\\d+)\\)", "\\2", type))
-      }
-
-      # remove brackets if they are present
-      type <- gsub("(.*?)\\(.*", "\\1", type)
-
-      # convert
-      arrow_type <- to_arrow_types(type, settings)
-
-
-    } else {
-
-      # handle complex types
-      type <- x$type$type
-
-      if (type == "array") {
-        settings$element_type <- x$type$elementType
-      } else if (type == "struct") {
-        settings$fields <- x$type$fields
-      } else if (type == "map") {
-        settings$item_type <- x$type$valueType
-        settings$key_type <- x$type$keyType
-      }
-
-      arrow_type <- to_arrow_types(type, settings)
-
-    }
-
-    return(arrow_type)
-
-  })
-
-}
-
-#' Convert Schema from Delta to Arrow
-#' @details
-#' Maps types from delta to arrow.
-#' Will require parsing `schemaString`.
-#'
-#' e.g.
-#' `jsonlite::fromJSON(self$metadata$metaData$schemaString, simplifyDataFrame = FALSE)`
-#'
-#' Partition columns are overrode to be `arrow::string()`.
-#'
-#' @param schema `schemaString` fields object (parsed from JSON to list).
-#' @param partitions character vector of partition names
-#' @return A [arrow:schema()] object
-convert_to_arrow_schema <- function(schema, partitions = list()) {
-  parsed_schema <- create_arrow_type_list(schema$fields)
-  names(parsed_schema) <- purrr::map_chr(schema$fields, "name")
-  # columns will need to be re-organised (partitions to the right)
-  # for now they are always treated as string type
-  if (length(partitions) > 1) {
-    pcheck <- names(parsed_schema) %in% partitions
-    pcols <- purrr::map(seq_along(partitions), ~arrow::string())
-    names(pcols) <- partitions
-    parsed_schema <- c(parsed_schema[!pcheck], pcols)
-  }
-  do.call(arrow::schema, parsed_schema)
 }
 
 #' Clean x-ndjson (New Line Delimited JSON)
@@ -219,92 +63,92 @@ extract_file_metadata <- function(x, changes) {
   return(file_metadata)
 }
 
-# TODO: docs
-resolve_query_files <- function(x, table_folder, changes = FALSE) {
-
-  # add metadata to query files
-  # - where to save
-  # - check if they already exist locally (to skip re-downloading)
-
-  files <- x %>%
-    dplyr::rowwise() %>%
-    dplyr::mutate(
-      hivePartitions = list_to_hive_partition(.data$partitionValues)
-    ) %>%
-    dplyr::ungroup()
-
-  if (changes) {
-    files <- files %>%
-      dplyr::mutate(
-        # _change_type, _commit_timestamp, _commit_version
-        change_type = dplyr::case_when(
-          change_type == "add" ~ "insert",
-          change_type == "remove" ~ "delete",
-          TRUE ~ change_type
-        ),
-        file_string = paste(id, "_", .data$change_type, .data$commit_timestamp, .data$commit_version, sep = "_"),
-        file = paste0(.data$file_string, ".parquet"),
-        destPath = file.path(!!table_folder, "_table_changes", .data$hivePartitions),
-        filePath = file.path(.data$destPath, .data$file)
-      )
-  } else {
-    files <- files %>%
-      dplyr::mutate(
-        file = paste0(.data$id, ".parquet"),
-        destPath = file.path(!!table_folder, "_table", .data$hivePartitions),
-        filePath = file.path(.data$destPath, .data$file)
-      )
-  }
-
-  # both paths are generated to check if files can be skipped from
-  # download step later on, there are two types of skipping:
-  # 1. file exists in current directory (_table_changes or root)
-  # 2. can be copied between _table_changes and root directory
-  existing_files <- list.files(path = table_folder, recursive = TRUE)
-  existing_files <- data.frame(file = existing_files) %>%
-    dplyr::mutate(
-      id = gsub(".*?(.*\\/)?([a-z0-9]*?)(_.*?)?(\\.parquet)", "\\2", .data$file, perl = TRUE),
-      is_in_cdf = grepl("^_table_changes", .data$file)
-    )
-
-  existing_ids_root <- dplyr::filter(existing_files, !.data$is_in_cdf)$id
-  existing_ids_cdf <- dplyr::filter(existing_files, .data$is_in_cdf)$id
-
-  files <- files %>%
-    dplyr::mutate(
-      relativePath = sub("^\\/", "", file.path(.data$hivePartitions, .data$file)),
-      alreadyExistsRoot = id %in% existing_ids_root,
-      alreadyExistsInCDF = id %in% existing_ids_cdf,
-      alreadyExists = .data$alreadyExistsRoot | .data$alreadyExistsInCDF,
-      to_download = !.data$alreadyExists,
-      to_copy_to_cdf = !.data$alreadyExistsInCDF & .data$alreadyExistsRoot,
-      to_copt_to_root = !.data$alreadyExistsRoot & .data$alreadyExistsInCDF
-    )
-
-  files
-
-}
+# # TODO: docs
+# resolve_query_files <- function(x, table_folder, changes = FALSE) {
+# 
+#   # add metadata to query files
+#   # - where to save
+#   # - check if they already exist locally (to skip re-downloading)
+# 
+#   files <- x %>%
+#     dplyr::rowwise() %>%
+#     dplyr::mutate(
+#       hivePartitions = list_to_hive_partition(.data$partitionValues)
+#     ) %>%
+#     dplyr::ungroup()
+# 
+#   if (changes) {
+#     files <- files %>%
+#       dplyr::mutate(
+#         # _change_type, _commit_timestamp, _commit_version
+#         change_type = dplyr::case_when(
+#           change_type == "add" ~ "insert",
+#           change_type == "remove" ~ "delete",
+#           TRUE ~ change_type
+#         ),
+#         file_string = paste(id, "_", .data$change_type, .data$commit_timestamp, .data$commit_version, sep = "_"),
+#         file = paste0(.data$file_string, ".parquet"),
+#         destPath = file.path(!!table_folder, "_table_changes", .data$hivePartitions),
+#         filePath = file.path(.data$destPath, .data$file)
+#       )
+#   } else {
+#     files <- files %>%
+#       dplyr::mutate(
+#         file = paste0(.data$id, ".parquet"),
+#         destPath = file.path(!!table_folder, "_table", .data$hivePartitions),
+#         filePath = file.path(.data$destPath, .data$file)
+#       )
+#   }
+# 
+#   # both paths are generated to check if files can be skipped from
+#   # download step later on, there are two types of skipping:
+#   # 1. file exists in current directory (_table_changes or root)
+#   # 2. can be copied between _table_changes and root directory
+#   existing_files <- list.files(path = table_folder, recursive = TRUE)
+#   existing_files <- data.frame(file = existing_files) %>%
+#     dplyr::mutate(
+#       id = gsub(".*?(.*\\/)?([a-z0-9]*?)(_.*?)?(\\.parquet)", "\\2", .data$file, perl = TRUE),
+#       is_in_cdf = grepl("^_table_changes", .data$file)
+#     )
+# 
+#   existing_ids_root <- dplyr::filter(existing_files, !.data$is_in_cdf)$id
+#   existing_ids_cdf <- dplyr::filter(existing_files, .data$is_in_cdf)$id
+# 
+#   files <- files %>%
+#     dplyr::mutate(
+#       relativePath = sub("^\\/", "", file.path(.data$hivePartitions, .data$file)),
+#       alreadyExistsRoot = id %in% existing_ids_root,
+#       alreadyExistsInCDF = id %in% existing_ids_cdf,
+#       alreadyExists = .data$alreadyExistsRoot | .data$alreadyExistsInCDF,
+#       to_download = !.data$alreadyExists,
+#       to_copy_to_cdf = !.data$alreadyExistsInCDF & .data$alreadyExistsRoot,
+#       to_copt_to_root = !.data$alreadyExistsRoot & .data$alreadyExistsInCDF
+#     )
+# 
+#   files
+# 
+# }
 
 # TODO: Documentation
-download_new_files <- function(new_query_files, changes) {
-
-  # create progress bar
-  pb <- progress::progress_bar$new(
-    format = "  downloading files (:elapsedfull) [:bar] :current/:total (:percent) [:eta]",
-    total = nrow(new_query_files),
-    clear = FALSE,
-    width = 100
-  )
-  pb$tick(0)
-
-  # download new files
-  new_query_files %>%
-    purrr::pwalk(function(url, filePath, ...) {
-      utils::download.file(url, destfile = filePath, quiet = TRUE)
-      pb$tick()
-    })
-
-}
+# download_new_files <- function(new_query_files, changes) {
+# 
+#   # create progress bar
+#   pb <- progress::progress_bar$new(
+#     format = "  downloading files (:elapsedfull) [:bar] :current/:total (:percent) [:eta]",
+#     total = nrow(new_query_files),
+#     clear = FALSE,
+#     width = 100
+#   )
+#   pb$tick(0)
+# 
+#   # download new files
+#   new_query_files %>%
+#     purrr::pwalk(function(url, filePath, ...) {
+#       utils::download.file(url, destfile = filePath, quiet = TRUE)
+#       pb$tick()
+#     })
+# 
+# }
 
 # TODO: Documentation
 version_is_valid <- function(x) {
@@ -395,57 +239,81 @@ validate_cdf_options <- function(starting_version, ending_version,
   NULL
 }
 
-# TODO: Documentation
-#' @importFrom glue glue_sql
-read_with_duckdb <- function(table_folder, changes, conn) {
-
-  if (changes) {
-    tbl_path <- file.path(table_folder, "_table_changes/")
-    query <- glue::glue_sql("
-      create or replace table {tbl_path} as
-      with changes as (
-        select *
-        from read_parquet({file.path(tbl_path, '*__cdf_*')}, filename=true)
-      ),
-      other as (
-        select * exclude (filename), null as _change_type, filename
-        from read_parquet({file.path(tbl_path, '*__[i|d]*_*')}, filename=true)
-      ),
-      all_data as (
-        select * from changes
-        union
-        select * from other
-      ),
-      dataset as (
-        select
-          *,
-          str_split(regexp_extract(filename, '.*\\/(.*)\\..*', 1), '_') as metadata,
-          to_timestamp(metadata[5]::bigint/1000)::string as _change_timestamp,
-          metadata[6]::int as _change_version,
-          from all_data
-      )
-      select
-        *
-        exclude (filename, metadata)
-        replace (coalesce(_change_type, metadata[4]) as _change_type)
-      from dataset
-      ",
-      .con = conn
-    )
-  } else {
-    tbl_path <- file.path(table_folder, "_table/")
-    query <- glue::glue_sql("
-      create or replace table {tbl_path} as
-      select *
-      from read_parquet({file.path(tbl_path, '*')})
-      ",
-      .con = conn
-    )
-  }
-
-  # creates table
-  DBI::dbSendQuery(conn, query)
-  arrow::to_arrow(dplyr::tbl(conn, tbl_path))
-}
-
-
+# gen_select <- function(partitions) {
+#   partitions <- c(partitions, "*")
+#   glue::glue_sql(paste(partitions, collapse = ", "))
+# }
+#' 
+#' # TODO: Documentation
+#' #' @importFrom glue glue_sql
+#' read_with_duckdb <- function(table_folder, id, partitions, changes, conn) {
+#'   
+#'   if (changes) {
+#'     tbl_path <- file.path(table_folder, "_table_changes", globs)
+#'   } else {
+#'     tbl_path <- file.path(table_folder, "_table", globs)
+#'   }
+#'   
+#'   if (is.null(partitions)) {
+#'     data_path <- file.path(tbl_path, '*')
+#'   } else {
+#'     globs <- do.call(file.path, as.list(rep("*", length(partitions))))
+#'     data_path <- file.path(tbl_path, '*')
+#'   }
+#'   
+#' 
+#'   
+#'   print(table_folder)
+#'   print(id)
+#'   print(partitions)
+#'   print(globs)
+#'   
+#'   
+#'   if (changes) {
+#'     query <- glue::glue_sql("
+#'       create or replace table {id} as
+#'       with changes as (
+#'         select *
+#'         from read_parquet({file.path(tbl_path, '*__cdf_*')}, filename=true)
+#'       ),
+#'       other as (
+#'         select * exclude (filename), null as _change_type, filename
+#'         from read_parquet({file.path(tbl_path, '*__[i|d]*_*')}, filename=true)
+#'       ),
+#'       all_data as (
+#'         select * from changes
+#'         union
+#'         select * from other
+#'       ),
+#'       dataset as (
+#'         select
+#'           *,
+#'           str_split(regexp_extract(filename, '.*\\/(.*)\\..*', 1), '_') as metadata,
+#'           to_timestamp(metadata[5]::bigint/1000)::string as _change_timestamp,
+#'           metadata[6]::int as _change_version,
+#'           from all_data
+#'       )
+#'       select
+#'         *
+#'         exclude (filename, metadata)
+#'         replace (coalesce(_change_type, metadata[4]) as _change_type)
+#'       from dataset
+#'       ",
+#'       .con = conn
+#'     )
+#'   } else {
+#'     query <- glue::glue_sql("
+#'       create or replace table {id} as
+#'       select *
+#'       from read_parquet({data_path}, hive_partitioning = TRUE)
+#'     ", .con = conn
+#'     )
+#'     print(query)
+#'   }
+#' 
+#'   # creates table
+#'   DBI::dbSendQuery(conn, query)
+#'   arrow::to_arrow(dplyr::tbl(conn, id))
+#' }
+#' 
+#' 
