@@ -176,13 +176,16 @@ replacement for any hosted check.
 
 ### macOS deployment target
 
-The Unix Makevars exports a macOS deployment target to both R's compiler and
-Cargo. It preserves an explicit caller value. When none is set, it uses
-`rustc --print=deployment-target`, which is the Rust toolchain's supported
-target default (11.0 on arm64 and 10.12 on x86_64 for Rust 1.88). This matters
-because Cargo build scripts compile bundled C and assembly in zstd and
-`aws-lc-sys`; without the environment value, current Apple Clang treats the
-SDK version as those objects' minimum OS.
+The Unix Makevars preserves a caller-supplied macOS deployment target for both
+R's compiler and Cargo. When none is set, R's compiler retains the target
+selected by the R toolchain and the Cargo recipe derives
+`MACOSX_DEPLOYMENT_TARGET` from `rustc --print=deployment-target` immediately
+before the native build. That is the Rust toolchain's supported target default
+(11.0 on arm64 and 10.12 on x86_64 for Rust 1.88). The detection runs in the
+portable shell recipe rather than GNU make conditionals. This matters because
+Cargo build scripts compile bundled C and assembly in zstd and `aws-lc-sys`;
+without the environment value, current Apple Clang treats the SDK version as
+those objects' minimum OS.
 
 ## Ownership contract
 

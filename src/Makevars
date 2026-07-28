@@ -2,16 +2,6 @@ TARGET_DIR = ./rust/target/r-package
 LIBDIR = $(TARGET_DIR)/release
 STATLIB = $(LIBDIR)/libdelta_sharing_native.a
 
-# Cargo build scripts compile bundled C and assembly sources. On macOS, Clang
-# otherwise treats the current SDK as their minimum OS version. Match rustc's
-# supported target default unless the caller has chosen a deployment target.
-ifeq ($(shell uname -s),Darwin)
-ifeq ($(strip $(MACOSX_DEPLOYMENT_TARGET)),)
-MACOSX_DEPLOYMENT_TARGET := $(shell rustc --print=deployment-target 2>/dev/null | sed 's/^[^=]*=//')
-endif
-export MACOSX_DEPLOYMENT_TARGET
-endif
-
 PKG_CPPFLAGS = -DSTRICT_R_HEADERS -DR_NO_REMAP
 PKG_LIBS = -L$(LIBDIR) -ldelta_sharing_native
 
@@ -23,20 +13,29 @@ $(SHLIB): $(STATLIB)
 
 $(STATLIB):
 	@set -e; \
-	cargo_flags="--locked"; \
-	if test -f rust/vendor.tar.xz || test -f rust/vendor-config.toml; then \
-		test -f rust/vendor.tar.xz; \
-		test -f rust/vendor-config.toml; \
-		rm -Rf vendor .cargo; \
-		tar xf rust/vendor.tar.xz; \
-		mkdir -p .cargo; \
-		cp rust/vendor-config.toml .cargo/config.toml; \
-		export CARGO_HOME="$(CURDIR)/.cargo"; \
-		cargo_flags="--frozen"; \
-	fi; \
-	cargo build $$cargo_flags -j 2 --release \
-		--manifest-path=rust/Cargo.toml \
-		--target-dir=$(TARGET_DIR)
+		deployment_target="$(MACOSX_DEPLOYMENT_TARGET)"; \
+		if test "`uname -s`" = Darwin; then \
+			if test -z "$$deployment_target"; then \
+				deployment_target="`rustc --print=deployment-target 2>/dev/null | sed 's/^[^=]*=//'`"; \
+			fi; \
+			test -n "$$deployment_target"; \
+			MACOSX_DEPLOYMENT_TARGET="$$deployment_target"; \
+			export MACOSX_DEPLOYMENT_TARGET; \
+		fi; \
+		cargo_flags="--locked"; \
+		if test -f rust/vendor.tar.xz || test -f rust/vendor-config.toml; then \
+			test -f rust/vendor.tar.xz; \
+			test -f rust/vendor-config.toml; \
+			rm -Rf vendor .cargo; \
+			tar xf rust/vendor.tar.xz; \
+			mkdir -p .cargo; \
+			cp rust/vendor-config.toml .cargo/config.toml; \
+			export CARGO_HOME="$(CURDIR)/.cargo"; \
+			cargo_flags="--frozen"; \
+		fi; \
+		cargo build $$cargo_flags -j 2 --release \
+			--manifest-path=rust/Cargo.toml \
+			--target-dir=$(TARGET_DIR)
 
 .PHONY: rust-clean
 

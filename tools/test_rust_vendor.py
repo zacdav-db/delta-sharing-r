@@ -120,6 +120,32 @@ directory = "vendor"
                 recipe,
             )
             self.assertIn('cargo_flags="--frozen"', recipe)
+            self.assertIn(
+                "cargo build $$cargo_flags -j 2 --release",
+                recipe,
+            )
+            self.assertIn("rust-clean: $(SHLIB)", recipe)
+            self.assertIn(
+                "rm -Rf $(TARGET_DIR) .cargo vendor",
+                recipe,
+            )
+
+        unix_recipe = makevars.read_text(encoding="utf-8")
+        for extension in (
+            "+=",
+            ":=",
+            "$(call",
+            "$(eval",
+            "$(patsubst",
+            "$(shell",
+            "$(wildcard",
+            ".NOTPARALLEL",
+            "ifdef",
+            "ifeq",
+            "ifndef",
+            "ifneq",
+        ):
+            self.assertNotIn(extension, unix_recipe)
 
     def test_macos_build_uses_rust_target_default_and_preserves_override(self) -> None:
         makevars = rust_vendor.REPOSITORY_ROOT / "src" / "Makevars"

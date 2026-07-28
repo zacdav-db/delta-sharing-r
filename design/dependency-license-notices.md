@@ -120,9 +120,11 @@ vendor pair and installed license outputs, but no unpacked vendor directory,
 generator tools, or override-input duplicates. A full
 network-blocked/frozen-Cargo `R CMD check --no-manual --no-build-vignettes`
 installed the package and passed all package tests. It reported only the
-existing GNU-extension warning for `src/Makevars`; the installed package kept
-the two dependency-license files and no vendor, Cargo-home, or target tree.
-The final source archive, after adding the non-bundled `Config/Needs/*` R
-records, also passed the exact-source no-install package check with the same
-warning. Repeat the complete procedure if the integration lockfile,
-DESCRIPTION, or native sources change.
+then-existing GNU-extension warning for `src/Makevars`; the installed package
+kept the two dependency-license files and no vendor, Cargo-home, or target
+tree. The final source archive, after adding the non-bundled `Config/Needs/*` R
+records, also passed the exact-source no-install package check with that
+warning. The current portable shell recipe removes the GNU make constructs
+that caused it; an exact-source package check still must confirm the warning is
+gone. Repeat the complete procedure if the integration lockfile, DESCRIPTION,
+or native sources change.
