@@ -30,6 +30,33 @@ R_LIBS="$BENCH_R_LIB" \
 Darwin uses `/usr/bin/time -l`; Linux requires GNU `/usr/bin/time -v`.
 Unsupported platforms fail explicitly instead of guessing RSS units.
 
+## Recorded Darwin arm64 evidence
+
+Two compact, machine-labelled artifacts preserve the raw timing/RSS samples
+and lifecycle outcomes:
+
+- `evidence/manifest-memory-darwin-arm64-0c88b9e.json` is the original
+  development capture based on integration commit `0c88b9e`. Its harness was
+  still uncommitted, which the artifact records explicitly.
+- `evidence/manifest-memory-darwin-arm64-09dbd9b.json` repeats the standard run
+  from clean harness commit `09dbd9b`.
+
+The clean capture used R 4.5.1 on Darwin 25.4.0 arm64, three fresh subprocesses
+per successful workload, and a 157.812 MiB median zero-file peak-RSS baseline.
+
+| Files | Median elapsed | Median peak RSS | RSS above baseline | Wire bytes | Commit bytes | Incremental RSS / wire |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1,000 | 0.425 s | 157.609 MiB | 0 MiB | 0.250 MiB | 0.166 MiB | 0x |
+| 10,000 | 4.229 s | 232.609 MiB | 74.797 MiB | 2.499 MiB | 1.660 MiB | 29.931x |
+| 100,000 | 45.227 s | 607.922 MiB | 450.109 MiB | 24.987 MiB | 16.594 MiB | 18.014x |
+
+The zero incremental 1,000-file median is baseline noise, not a zero-memory
+claim. At 100,000 files the first and clean captures agree within 0.1 MiB on
+incremental peak RSS and 1% on median elapsed time. This is a material local
+signal: planning uses about 450 MiB above the zero-file process to transform a
+25 MiB wire manifest into a 17 MiB commit. It is not a release threshold or
+cross-platform proof.
+
 ## Lifecycle cases
 
 For the largest configured workload the harness also injects a commit-write
@@ -56,6 +83,12 @@ The JSON artifact reports wall time, wire bytes, commit bytes, fresh-process
 peak RSS, and peak RSS above the zero-file baseline. No release workload RSS
 limit has yet been agreed, so the harness records action retention as
 `not_evaluable` instead of inventing a passing threshold.
+
+The repeatable 100,000-file result justifies designing an R-side mitigation,
+but a safe staged implementation is not a narrow patch: it must preserve
+global duplicate detection, deterministic type/ID ordering, atomic
+publication, redaction, expiry checks, and cleanup across success and failure.
+This evidence-only change therefore does not alter production behavior.
 
 If the observed memory is outside the agreed deployment envelope, the next
 implementation should be a permission-restricted R staging sink that validates

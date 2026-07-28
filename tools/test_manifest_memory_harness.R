@@ -74,4 +74,48 @@ stopifnot(identical(
   1024 * 1024
 ))
 
+evidence_paths <- file.path(
+  repo_root,
+  "design",
+  "evidence",
+  c(
+    "manifest-memory-darwin-arm64-0c88b9e.json",
+    "manifest-memory-darwin-arm64-09dbd9b.json"
+  )
+)
+stopifnot(all(file.exists(evidence_paths)))
+evidence <- lapply(
+  evidence_paths,
+  jsonlite::read_json,
+  simplifyVector = FALSE
+)
+stopifnot(identical(evidence[[1L]]$environment$git_worktree_dirty, TRUE))
+stopifnot(identical(evidence[[2L]]$environment$git_worktree_dirty, FALSE))
+for (artifact in evidence) {
+  stopifnot(identical(
+    artifact$gates$temporary_root_lifecycle,
+    "pass"
+  ))
+  stopifnot(identical(
+    artifact$gates$adr_003_rust_scope_expansion,
+    "not_met"
+  ))
+  stopifnot(identical(
+    artifact$lifecycle$explicit_release$response_closes,
+    1L
+  ))
+  stopifnot(identical(
+    artifact$lifecycle$explicit_release$roots_after_cleanup,
+    0L
+  ))
+  stopifnot(identical(
+    artifact$lifecycle$write_error_100000$roots_after_cleanup,
+    0L
+  ))
+  stopifnot(identical(
+    artifact$lifecycle$finalizer_100000$roots_after_cleanup,
+    0L
+  ))
+}
+
 cat("manifest memory harness tests: PASS\n")
