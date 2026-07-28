@@ -19,6 +19,3 @@ comment:
   layout: "reach, diff, flags, files"
   behavior: default
   require_changes: true
-
-ignore:
-  - "R/extendr-wrappers.R"

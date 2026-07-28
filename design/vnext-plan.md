@@ -36,10 +36,10 @@ Rebuild the package around an R-first client and a narrow Delta Kernel bridge:
    A deliberately narrow internal adapter isolates the package from the
    kernel's pre-1.0 Rust API changes.
 
-The recommended R/Rust bridge is `extendr` with `rextendr` development
-scaffolding. Arrow data itself must cross the boundary through the stable Arrow
-C Data/C Stream ABI, not through R vectors, an Arrow C++ ABI, or per-batch
-serialization.
+The R/Rust bridge is a small registered C `.Call` shim over pure Rust
+`extern "C"` status functions. Arrow data itself crosses the boundary through
+the stable Arrow C Data/C Stream ABI, not through R vectors, an Arrow C++ ABI,
+or per-batch serialization.
 
 S7 adoption still requires a packaging/lifetime proof on every target platform,
 but the proof is an implementation gate rather than an object-system selection
@@ -827,8 +827,8 @@ Recommended defaults are in parentheses:
 
 1. Public object system (**S7, accepted**).
 2. Functional API versus R6 method chaining (**functional**).
-3. Rust bridge: extendr/rextendr versus savvy/direct C (**extendr plus a narrow
-   Arrow C ABI function**).
+3. Rust bridge (**registered C control shim plus pure Rust Arrow C ABI,
+   accepted**).
 4. Rust scope (**Delta Kernel and Kernel-coupled Arrow/lifecycle glue only,
    accepted**).
 5. Minimum R version (**R 4.3**, unless a target Databricks Runtime requires
@@ -850,4 +850,4 @@ Recommended defaults are in parentheses:
 - [nanoarrow R interface](https://arrow.apache.org/nanoarrow/latest/getting-started/r.html)
 - [S7 overview](https://rconsortium.github.io/S7/)
 - [Using S7 in a package](https://rconsortium.github.io/S7/articles/packages.html)
-- [Using Rust in an R package with rextendr](https://extendr.github.io/rextendr/articles/package.html)
+- [Writing R Extensions: registering native routines](https://cran.r-project.org/doc/manuals/r-release/R-exts.html#Registering-native-routines)

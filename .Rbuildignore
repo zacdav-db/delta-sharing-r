@@ -6,7 +6,12 @@
 ^\.gitignore$
 ^codecov\.yml$
 ^coverage$
+^bench$
 ^design$
 ^tools$
 ^delta\.sharing_[0-9.]+\.tar\.gz$
 ^delta\.sharing\.Rcheck$
+^src/\.cargo$
+^src/rust/target$
+^src/vendor$
+^src/.*\.(o|so)$

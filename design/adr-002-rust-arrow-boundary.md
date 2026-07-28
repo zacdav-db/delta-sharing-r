@@ -1,6 +1,6 @@
 # ADR 002: Rust, Delta Kernel, and Arrow boundary
 
-Status: Rust/Kernel/Arrow contract accepted; binding proof pending
+Status: Rust/Kernel/Arrow and slim C binding accepted; platform proof pending
 Decision owner: package maintainer  
 Decision date: 2026-07-28
 
@@ -14,10 +14,11 @@ between Rust and R would add copies and version coupling.
 Delta Kernel currently has a pre-1.0 Rust API and selects a specific Arrow Rust
 version. The R `{arrow}` package can have a different release cadence.
 
-## Accepted contract and proposed binding
+## Accepted contract and binding
 
-- Integrate Rust package code with `extendr`; use `rextendr` only as a
-  development/scaffolding tool.
+- Use a narrow registered C `.Call` shim for R argument validation and routine
+  registration.
+- Expose pure Rust `extern "C"` status functions that never call the R API.
 - Build a static Rust library into the R package shared object.
 - Pin Delta Kernel and its default engine behind a single internal adapter.
 - Convert kernel `EngineData` to a Rust `RecordBatchReader`.
@@ -28,25 +29,24 @@ version. The R `{arrow}` package can have a different release cadence.
 Rust-owned mutable state, Delta Kernel isolation, and the Arrow C Stream
 boundary are accepted only for Kernel execution. R owns the client, HTTP,
 protocol, and planning responsibilities described in `adr-003-rust-scope.md`.
-The specialist foundation must still prove that extendr/rextendr satisfies
-packaging and lifecycle requirements before the binding choice is treated as
-complete.
+The binding foundation must still prove packaging and lifecycle requirements
+on every supported platform before Phase 1 is complete.
 
 The native library exports Kernel invocation and Arrow stream operations only.
 It must not grow authentication, discovery, Delta Sharing HTTP, NDJSON parsing,
 retry policy, or a separate Parquet reader.
 
-## Why extendr
+## Why the registered C shim
 
-extendr has current external-pointer support, generated registered wrappers, R
-error handling, and established R-package scaffolding. It is a better default
-than maintaining a broad handwritten R C API. Savvy is credible and should be
-kept in mind, but switching binding frameworks would not change the Arrow ABI
-decision and does not currently offer enough benefit to offset ecosystem risk.
+The package needs only a few control-plane calls at the native boundary. A
+small registered C shim validates R values, extracts the nanoarrow stream
+pointer, and converts a completed Rust status into an R result. Rust owns no R
+objects and calls no R API. This keeps long jumps out of Rust frames and avoids
+adding a general R binding framework plus its transitive source surface.
 
-The Arrow stream move/population function should remain deliberately narrow and
-may use a small C-compatible entry point rather than trying to make extendr
-understand Arrow objects.
+This is not a broad handwritten R API. New C/Rust entry points remain subject
+to ADR 003 and must be necessary for Kernel invocation, Arrow transport, or
+Kernel-coupled lifecycle.
 
 ## Ownership contract
 
@@ -64,10 +64,17 @@ callback independently keeps its referenced buffers alive.
 
 ## Rejected alternatives
 
-### Convert batches to R vectors in extendr
+### Convert batches to R vectors in a binding framework
 
 Rejected because it copies data, loses or complicates nested Arrow types, calls
 the R allocator in the hot path, and prevents direct Arrow consumers.
+
+### General-purpose Rust/R binding framework
+
+Rejected for this narrow boundary because the package requires only registered
+control calls and Arrow C Stream pointer transfer. Adding a broader framework
+would increase dependency, vendoring, and review surface without changing the
+data path.
 
 ### Arrow IPC in memory or on disk
 
