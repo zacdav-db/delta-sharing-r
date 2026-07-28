@@ -1,31 +1,45 @@
 test_that("profile and client constructors create S7 descriptors", {
-  profile <- SharingProfile("config.share")
+  profile <- SharingProfile(test_profile())
   client <- SharingClient(profile)
 
   expect_true(S7::S7_inherits(profile, SharingProfile))
   expect_true(S7::S7_inherits(client, SharingClient))
-  expect_identical(profile@source_type, "path")
-  expect_identical(profile@label, "config.share")
+  expect_identical(profile@source_type, "list")
+  expect_identical(profile@label, "inline profile")
+  expect_identical(profile@version, 1)
+  expect_identical(profile@endpoint, "https://sharing.example.test/api")
+  expect_identical(profile@auth_type, "bearer_token")
   expect_identical(client@profile, profile)
-  expect_identical(client@state, "descriptor")
+  expect_identical(
+    delta.sharing:::.client_context(client)$state,
+    "configured"
+  )
 })
 
 test_that("sharing_client accepts supported profile source forms", {
-  inline_json <- sharing_client('{"bearerToken":"secret"}')
-  inline_raw <- sharing_client(charToRaw('{"bearerToken":"secret"}'))
-  inline_list <- sharing_client(list(bearerToken = "secret"))
-  connection <- textConnection('{"bearerToken":"secret"}')
+  profile_json <- paste0(
+    '{"shareCredentialsVersion":1,',
+    '"endpoint":"https://sharing.example.test/api",',
+    '"bearerToken":"secret"}'
+  )
+  inline_json <- sharing_client(profile_json)
+  inline_raw <- sharing_client(charToRaw(profile_json))
+  inline_list <- sharing_client(test_profile())
+  connection <- textConnection(profile_json)
   on.exit(close(connection), add = TRUE)
   inline_connection <- sharing_client(connection)
+  path_profile <- sharing_profile(test_path(
+    "fixtures",
+    "profiles",
+    "bearer-v1.json"
+  ))
 
   expect_identical(inline_json@profile@source_type, "json")
   expect_identical(inline_raw@profile@source_type, "json")
   expect_identical(inline_list@profile@source_type, "list")
   expect_identical(inline_connection@profile@source_type, "connection")
-  expect_identical(
-    sharing_profile("config.share")@source_type,
-    "path"
-  )
+  expect_identical(path_profile@source_type, "path")
+  expect_identical(path_profile@label, "bearer-v1.json")
 })
 
 test_that("profile source types are validated", {
@@ -47,7 +61,7 @@ test_that("descriptor properties are read-only", {
   changes <- sharing_changes(table, starting_version = 3)
 
   expect_read_only(table@client@profile, "source_type", "json")
-  expect_read_only(table@client, "profile", SharingProfile("other.share"))
+  expect_read_only(table@client, "profile", SharingProfile(test_profile()))
   expect_read_only(table@identifier, "table", "other")
   expect_read_only(table, "identifier", table_identifier("a", "b", "c"))
   expect_read_only(snapshot, "version", 4)

@@ -1,0 +1,7 @@
+{
+  "shareCredentialsVersion": 2,
+  "type": "basic",
+  "endpoint": "https://sharing.example.test/api/",
+  "username": "fixture-user",
+  "password": "fixture-password"
+}

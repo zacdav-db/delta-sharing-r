@@ -1,8 +1,17 @@
-test_client <- function(profile = "test.share") {
+test_profile <- function() {
+  list(
+    shareCredentialsVersion = 1,
+    endpoint = "https://sharing.example.test/api",
+    bearerToken = "test-only-bearer-token",
+    expirationTime = "2099-01-01T00:00:00Z"
+  )
+}
+
+test_client <- function(profile = test_profile()) {
   sharing_client(profile)
 }
 
-test_table <- function(profile = "test.share") {
+test_table <- function(profile = test_profile()) {
   sharing_table(test_client(profile), "sales.default.orders")
 }
 

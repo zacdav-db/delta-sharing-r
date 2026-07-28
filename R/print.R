@@ -19,13 +19,19 @@ S7::method(print, SharingProfile) <- function(x, ...) {
   .print_header("SharingProfile")
   cat(" source: ", x@source_type, "\n", sep = "")
   cat(" label: ", x@label, "\n", sep = "")
+  cat(" version: ", format(x@version, scientific = FALSE), "\n", sep = "")
+  cat(" endpoint: ", x@endpoint, "\n", sep = "")
+  cat(" auth: ", x@auth_type, "\n", sep = "")
   invisible(x)
 }
 
 S7::method(print, SharingClient) <- function(x, ...) {
+  context <- .client_context(x)
   .print_header("SharingClient")
   cat(" profile: ", x@profile@label, "\n", sep = "")
-  cat(" state: ", x@state, "\n", sep = "")
+  cat(" endpoint: ", x@profile@endpoint, "\n", sep = "")
+  cat(" auth: ", x@profile@auth_type, "\n", sep = "")
+  cat(" state: ", context$state, "\n", sep = "")
   invisible(x)
 }
 

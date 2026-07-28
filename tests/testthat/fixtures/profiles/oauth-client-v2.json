@@ -1,0 +1,9 @@
+{
+  "shareCredentialsVersion": 2,
+  "type": "oauth_client_credentials",
+  "endpoint": "https://sharing.example.test/api/",
+  "tokenEndpoint": "https://identity.example.test/oauth/token",
+  "clientId": "fixture-client",
+  "clientSecret": "fixture-client-secret",
+  "scope": "delta-sharing.read"
+}

@@ -6,6 +6,9 @@
       <SharingProfile>
        source: list
        label: inline profile
+       version: 1
+       endpoint: https://sharing.example.test
+       auth: bearer_token
 
 ---
 
@@ -14,7 +17,9 @@
     Output
       <SharingClient>
        profile: inline profile
-       state: descriptor
+       endpoint: https://sharing.example.test
+       auth: bearer_token
+       state: configured
 
 # identifier and table printing is unambiguous
 

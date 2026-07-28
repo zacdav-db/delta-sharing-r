@@ -1,6 +1,7 @@
 test_that("profile and client printing never expose credentials", {
   secret <- "SUPER-SECRET-BEARER-TOKEN"
   profile <- SharingProfile(list(
+    shareCredentialsVersion = 1,
     endpoint = "https://sharing.example.test",
     bearerToken = secret
   ))

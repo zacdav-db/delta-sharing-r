@@ -19,10 +19,27 @@ A read-only \code{SharingProfile} object.
 \description{
 \code{SharingProfile} is a small, read-only descriptor for a standard Delta
 Sharing profile source. The source may be a file path, inline JSON, a
-connection, or an inline list. Source contents are deliberately excluded
-from properties and printed output so credentials cannot be disclosed by
-normal inspection.
+connection, or an inline list. Construction parses and validates profile
+versions 1 and 2 without making a network request. Only safe metadata is
+exposed as properties; credential material is held behind an opaque
+package-private handle and is excluded from printed output.
 }
 \details{
 Most users create this object indirectly with \code{\link[=sharing_client]{sharing_client()}}.
+}
+\section{Supported profiles}{
+
+Profile version 1 supports bearer credentials. Profile version 2 supports
+\code{bearer_token}, \code{basic}, \code{oauth_client_credentials}, and
+\code{oauth_jwt_bearer_private_key_jwt} descriptors. OAuth exchange and
+private-key loading happen in the later authentication layer, not during
+construction.
+
+JSON, file, and connection inputs are limited to 1 MiB. A supplied open
+connection is consumed from its current position and remains open. A
+supplied closed connection is opened for reading and closed after parsing.
+
+The endpoint and token endpoint must be absolute HTTP(S) URLs without
+embedded credentials, query strings, or fragments. Bearer expiration times
+use RFC 3339.
 }

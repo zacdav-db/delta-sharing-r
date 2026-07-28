@@ -24,9 +24,12 @@ test_that("execution interface injects discovery without client mutation", {
   interface <- test_execution_interface(recorder)
 
   delta.sharing:::.with_execution_interface(interface, {
-    client <- sharing_client("profile.share")
+    client <- test_client()
 
-    expect_identical(client@state, "descriptor")
+    expect_identical(
+      delta.sharing:::.client_context(client)$state,
+      "configured"
+    )
     expect_identical(list_shares(client)$name, c("sales", "product"))
     expect_identical(list_schemas(client)$name, "default")
     expect_identical(list_schemas(client, "sales")$share, "sales")
@@ -50,7 +53,7 @@ test_that("table metadata operations receive structured identifiers", {
 
   delta.sharing:::.with_execution_interface(interface, {
     table <- sharing_table(
-      sharing_client("profile.share"),
+      test_client(),
       share = "sales.eu",
       schema = "default",
       table = "events.v2"
@@ -80,7 +83,7 @@ test_that("read generics dispatch one immutable specification", {
 
   delta.sharing:::.with_execution_interface(interface, {
     table <- sharing_table(
-      sharing_client("profile.share"),
+      test_client(),
       "sales.default.orders"
     )
     snapshot <- sharing_read(table, columns = "id", limit = 5)
@@ -139,7 +142,7 @@ test_that("as.data.frame uses the same data-frame adapter", {
 
   delta.sharing:::.with_execution_interface(interface, {
     snapshot <- sharing_read(sharing_table(
-      sharing_client("profile.share"),
+      test_client(),
       "sales.default.orders"
     ))
 
@@ -184,7 +187,7 @@ test_that("untyped execution errors are wrapped without leaking messages", {
   ))
 
   delta.sharing:::.with_execution_interface(interface, {
-    client <- sharing_client("profile.share")
+    client <- test_client()
     condition <- expect_error(
       list_shares(client),
       class = "delta_sharing_protocol_error"

@@ -13,9 +13,10 @@ SharingClient(profile)
 A read-only \code{SharingClient} object.
 }
 \description{
-A \code{SharingClient} stores a safe profile descriptor. Future authenticated
-client context is R-owned and remains outside public properties; only active
-Delta Kernel scans and Arrow buffers cross the native boundary.
+A \code{SharingClient} stores a safe profile descriptor. Its mutable
+authentication context is R-owned, hidden behind a package-private handle,
+and never exposed as an S7 property. Construction validates configuration
+but performs no token exchange or network request.
 }
 \details{
 Most users call \code{\link[=sharing_client]{sharing_client()}} rather than this class constructor.

@@ -7,9 +7,10 @@
 #'
 #' `SharingProfile` is a small, read-only descriptor for a standard Delta
 #' Sharing profile source. The source may be a file path, inline JSON, a
-#' connection, or an inline list. Source contents are deliberately excluded
-#' from properties and printed output so credentials cannot be disclosed by
-#' normal inspection.
+#' connection, or an inline list. Construction parses and validates profile
+#' versions 1 and 2 without making a network request. Only safe metadata is
+#' exposed as properties; credential material is held behind an opaque
+#' package-private handle and is excluded from printed output.
 #'
 #' Most users create this object indirectly with [sharing_client()].
 #'
@@ -18,75 +19,52 @@
 #' @param source_type Optional explicit source type: `"path"`, `"json"`,
 #'   `"connection"`, or `"list"`.
 #' @return A read-only `SharingProfile` object.
+#' @section Supported profiles:
+#' Profile version 1 supports bearer credentials. Profile version 2 supports
+#' `bearer_token`, `basic`, `oauth_client_credentials`, and
+#' `oauth_jwt_bearer_private_key_jwt` descriptors. OAuth exchange and
+#' private-key loading happen in the later authentication layer, not during
+#' construction.
+#'
+#' JSON, file, and connection inputs are limited to 1 MiB. A supplied open
+#' connection is consumed from its current position and remains open. A
+#' supplied closed connection is opened for reading and closed after parsing.
+#'
+#' The endpoint and token endpoint must be absolute HTTP(S) URLs without
+#' embedded credentials, query strings, or fragments. Bearer expiration times
+#' use RFC 3339.
 #' @export
 SharingProfile <- S7::new_class(
   "SharingProfile",
   package = "delta.sharing",
   properties = list(
     source_type = .readonly_property(S7::class_character, ".source_type"),
-    label = .readonly_property(S7::class_character, ".label")
+    label = .readonly_property(S7::class_character, ".label"),
+    version = .readonly_property(S7::class_numeric, ".version"),
+    endpoint = .readonly_property(S7::class_character, ".endpoint"),
+    auth_type = .readonly_property(S7::class_character, ".auth_type"),
+    expiration_time = .readonly_property(
+      .optional_timestamp,
+      ".expiration_time"
+    )
   ),
   constructor = function(source, source_type = NULL) {
-    if (is.null(source_type)) {
-      source_type <- if (inherits(source, "connection")) {
-        "connection"
-      } else if (is.raw(source)) {
-        "json"
-      } else if (is.list(source)) {
-        "list"
-      } else if (.is_scalar_character(source)) {
-        if (startsWith(trimws(source), "{")) "json" else "path"
-      } else {
-        .abort_delta_sharing(
-          "`source` must be a profile path, inline JSON, raw vector, connection, or list.",
-          type = "validation",
-          operation = "sharing_client"
-        )
-      }
-    }
-
-    source_types <- c("path", "json", "connection", "list")
-    if (!.is_scalar_character(source_type) ||
-        !source_type %in% source_types) {
-      .abort_delta_sharing(
-        paste0(
-          "`source_type` must be one of ",
-          paste(sprintf("\"%s\"", source_types), collapse = ", "),
-          "."
-        ),
-        type = "validation",
-        operation = "sharing_client"
-      )
-    }
-
-    valid_source <- switch(
-      source_type,
-      path = .is_scalar_character(source),
-      json = (.is_scalar_character(source) || is.raw(source)),
-      connection = inherits(source, "connection"),
-      list = is.list(source)
-    )
-    if (!valid_source) {
-      .abort_delta_sharing(
-        sprintf("`source` is not valid for source type \"%s\".", source_type),
-        type = "validation",
-        operation = "sharing_client"
-      )
-    }
-
-    label <- switch(
-      source_type,
-      path = basename(source),
-      json = "inline JSON",
-      connection = "connection",
-      list = "inline profile"
+    parsed <- .parse_profile_source(source, source_type)
+    credential_handle <- .new_private_handle(
+      .profile_credentials_registry,
+      parsed$credentials,
+      "profile"
     )
 
     S7::new_object(
       S7::S7_object(),
-      .source = source,
-      .source_type = source_type,
-      .label = label
+      .source_type = parsed$source_type,
+      .label = parsed$label,
+      .version = parsed$version,
+      .endpoint = parsed$endpoint,
+      .auth_type = parsed$auth_type,
+      .expiration_time = parsed$expiration_time,
+      .credential_handle = credential_handle
     )
   },
   validator = function(self) {
@@ -95,6 +73,14 @@ SharingProfile <- S7::new_class(
       "@source_type must identify a supported profile source"
     } else if (!.is_scalar_character(self@label)) {
       "@label must be one non-empty string"
+    } else if (!is.numeric(self@version) ||
+        length(self@version) != 1L ||
+        !self@version %in% .profile_versions) {
+      "@version must be 1 or 2"
+    } else if (!.is_scalar_character(self@endpoint)) {
+      "@endpoint must be one absolute HTTP(S) URL"
+    } else if (!.is_scalar_character(self@auth_type)) {
+      "@auth_type must identify the configured authentication type"
     }
   }
 )
@@ -109,9 +95,10 @@ SharingProfile <- S7::new_class(
 
 #' An immutable Delta Sharing client descriptor
 #'
-#' A `SharingClient` stores a safe profile descriptor. Future authenticated
-#' client context is R-owned and remains outside public properties; only active
-#' Delta Kernel scans and Arrow buffers cross the native boundary.
+#' A `SharingClient` stores a safe profile descriptor. Its mutable
+#' authentication context is R-owned, hidden behind a package-private handle,
+#' and never exposed as an S7 property. Construction validates configuration
+#' but performs no token exchange or network request.
 #'
 #' Most users call [sharing_client()] rather than this class constructor.
 #'
@@ -122,22 +109,24 @@ SharingClient <- S7::new_class(
   "SharingClient",
   package = "delta.sharing",
   properties = list(
-    profile = .readonly_property(class = SharingProfile, ".profile"),
-    state = .readonly_property(S7::class_character, ".state")
+    profile = .readonly_property(class = SharingProfile, ".profile")
   ),
   constructor = function(profile) {
     profile <- .as_sharing_profile(profile)
+    context_handle <- .new_private_handle(
+      .client_context_registry,
+      .new_client_context(profile),
+      "client"
+    )
     S7::new_object(
       S7::S7_object(),
       .profile = profile,
-      .state = "descriptor"
+      .context_handle = context_handle
     )
   },
   validator = function(self) {
     if (!.object_is(self@profile, SharingProfile)) {
       "@profile must be a SharingProfile"
-    } else if (!identical(self@state, "descriptor")) {
-      "@state must be \"descriptor\""
     }
   }
 )

@@ -15,7 +15,8 @@ A \link{SharingClient}.
 }
 \description{
 \code{sharing_client()} creates a small immutable descriptor from a standard
-Delta Sharing profile source. Authentication and HTTP behavior will be
-supplied by the later R protocol layer; construction performs no network
-request.
+Delta Sharing profile source. The profile is parsed and validated
+immediately. Credential material and future refresh state remain in a
+hidden R-owned context; construction performs no network request or OAuth
+exchange.
 }
