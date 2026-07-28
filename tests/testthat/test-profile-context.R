@@ -163,7 +163,8 @@ test_that("serialized descriptor copies are secret-free and inert", {
   auth_clients <- lapply(auth_profiles, sharing_client)
   cached_secret <- "cached-access-token-must-not-appear"
   for (auth_client in auth_clients) {
-    delta.sharing:::.client_context(auth_client)$access_token <- cached_secret
+    auth_context <- delta.sharing:::.client_context(auth_client)
+    auth_context$access_token <- cached_secret
   }
   auth_bytes <- lapply(auth_clients, serialize, connection = NULL)
   auth_secrets <- c(
