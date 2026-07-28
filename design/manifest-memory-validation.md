@@ -40,6 +40,8 @@ and lifecycle outcomes:
   still uncommitted, which the artifact records explicitly.
 - `evidence/manifest-memory-darwin-arm64-09dbd9b.json` repeats the standard run
   from clean harness commit `09dbd9b`.
+- `evidence/manifest-memory-darwin-arm64-d44c576.json` records the R-only
+  bounded staging implementation from clean commit `d44c576`.
 
 The clean capture used R 4.5.1 on Darwin 25.4.0 arm64, three fresh subprocesses
 per successful workload, and a 157.812 MiB median zero-file peak-RSS baseline.
@@ -57,6 +59,23 @@ signal: planning uses about 450 MiB above the zero-file process to transform a
 25 MiB wire manifest into a 17 MiB commit. It is not a release threshold or
 cross-platform proof.
 
+The staged capture used the same host/workload with 1,024-action in-memory
+runs and a 16-way R merge. Its zero-file baseline was 158.188 MiB.
+
+| Files | Median elapsed | Median peak RSS | RSS above baseline | Incremental RSS / wire |
+|---:|---:|---:|---:|---:|
+| 1,000 | 0.471 s | 163.625 MiB | 5.438 MiB | 21.728x |
+| 10,000 | 6.253 s | 241.062 MiB | 82.875 MiB | 33.163x |
+| 100,000 | 76.753 s | 311.188 MiB | 153.000 MiB | 6.123x |
+
+At 100,000 files, staged incremental peak RSS is 297.109 MiB lower, a 66.0%
+reduction from the clean pre-staging capture. Median elapsed time increases
+from 45.227 to 76.753 seconds, a 69.7% regression. At 10,000 files the staged
+path is also worse: 47.9% slower with 10.8% more incremental peak RSS. The
+implementation therefore resolves the material large-manifest retention
+problem by making memory bounded, but it is explicitly a memory-for-time
+tradeoff rather than a general performance win.
+
 ## Lifecycle cases
 
 For the largest configured workload the harness also injects a commit-write
@@ -72,26 +91,30 @@ controlled lifecycle gate requires:
 
 ## Retention model and decision rule
 
-The HTTP body is pulled in bounded chunks, but the current planner retains all
-normalized file actions until publication. Pagination retains page lists and
-then flattens them. Synthetic-log validation builds whole-manifest state,
-ordering, and action views, then encodes every commit line before the writer
-opens the commit. Peak R memory is therefore `O(file_count)` with several
-simultaneous representations. It is hard count-bounded, not unbounded.
+The pre-staging planner pulled HTTP in bounded chunks but retained normalized
+file actions, page lists, flattened files, validation/order views, and every
+encoded commit line until publication. Its peak R memory was therefore
+`O(file_count)` with several simultaneous representations.
+
+The production planner now validates each decoded action immediately and keeps
+at most 1,024 encoded records in memory. It writes permission-restricted action,
+ID, and path runs, then performs shell-free 16-way R merges. Separate ID/path
+merges enforce global duplicates; the action merge preserves deterministic
+type/ID order. The final commit is streamed from the merged action run and the
+run tree is removed before atomic publication. Pagination no longer retains
+page file lists or constructs a flattened whole-manifest list.
 
 The JSON artifact reports wall time, wire bytes, commit bytes, fresh-process
 peak RSS, and peak RSS above the zero-file baseline. No release workload RSS
 limit has yet been agreed, so the harness records action retention as
 `not_evaluable` instead of inventing a passing threshold.
 
-The repeatable 100,000-file result justifies designing an R-side mitigation,
-but a safe staged implementation is not a narrow patch: it must preserve
-global duplicate detection, deterministic type/ID ordering, atomic
-publication, redaction, expiry checks, and cleanup across success and failure.
-This evidence-only change therefore does not alter production behavior.
+Focused production tests prove byte-identical commits against the retained-list
+reference, multi-page behavior, duplicates within a run and across final merge
+passes, mixed/malformed action rejection, Parquet totals/version checks,
+deletion-vector protocol checks, commit-source early-return protection, and
+cleanup after page mismatch, write error, explicit release, and finalization.
 
-If the observed memory is outside the agreed deployment envelope, the next
-implementation should be a permission-restricted R staging sink that validates
-and writes bounded action runs before deterministic merge/publication. This is
-R-owned protocol and planning work. These measurements have no Rust comparator
-and do not satisfy ADR 003's gate for expanding Rust ownership.
+This remains R-owned protocol/planning work. The memory result has no Rust
+comparator and does not satisfy ADR 003's gate for expanding Rust ownership.
+An agreed release RSS/time envelope and non-Darwin capture remain open.

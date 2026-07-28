@@ -38,6 +38,27 @@ standard <- mm_config("standard")
 stopifnot(identical(quick$file_counts, c(100L, 1000L, 10000L)))
 stopifnot(identical(standard$file_counts, c(1000L, 10000L, 100000L)))
 
+retention <- mm_retention_model()
+stopifnot(grepl("bounded", retention$normalized_actions, fixed = TRUE))
+stopifnot(grepl("not retained", retention$pagination, fixed = TRUE))
+stopifnot(!grepl(
+  "all file actions retained",
+  paste(unlist(retention), collapse = " "),
+  fixed = TRUE
+))
+gates <- mm_manifest_gates(TRUE)
+retention_gate <- Filter(
+  function(gate) identical(gate$id, "production-action-retention"),
+  gates
+)[[1L]]
+rust_gate <- Filter(
+  function(gate) identical(gate$id, "adr-003-rust-scope-expansion"),
+  gates
+)[[1L]]
+stopifnot(identical(retention_gate$status, "not_evaluable"))
+stopifnot(grepl("bounded", retention_gate$criterion, fixed = TRUE))
+stopifnot(identical(rust_gate$status, "not_met"))
+
 worker_options <- mmw_parse_cli(c(
   "--files", "25",
   "--chunk-files", "7",

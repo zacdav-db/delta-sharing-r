@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "artifact_form": "compact checked-in extraction of the full local JSON artifact",
+  "environment": {
+    "captured_at_utc": "2026-07-28T21:05:30Z",
+    "git_commit": "d44c5768df38ca3a15f84a7fdd14d538c168e66e",
+    "git_branch": "codex/manifest-memory-validation-vnext",
+    "git_worktree_dirty": false,
+    "r_version": "R version 4.5.1 (2025-06-13)",
+    "platform": "aarch64-apple-darwin20",
+    "os": "Darwin",
+    "release": "25.4.0",
+    "machine": "arm64",
+    "package_version": "0.2.0.9000",
+    "peak_rss_backend": "Darwin /usr/bin/time -l; bytes"
+  },
+  "configuration": {
+    "mode": "standard",
+    "file_counts": [1000, 10000, 100000],
+    "repetitions": 3,
+    "chunk_files": 256,
+    "staging_run_files": 1024,
+    "merge_fan_in": 16
+  },
+  "raw_samples": {
+    "baseline": {
+      "elapsed_seconds": [0.023, 0.028, 0.026],
+      "peak_rss_bytes": [165871616, 163987456, 165904384]
+    },
+    "1000": {
+      "elapsed_seconds": [0.473, 0.47, 0.471],
+      "peak_rss_bytes": [174997504, 170868736, 171573248]
+    },
+    "10000": {
+      "elapsed_seconds": [6.105, 6.622, 6.253],
+      "peak_rss_bytes": [247758848, 252772352, 254771200]
+    },
+    "100000": {
+      "elapsed_seconds": [76.753, 76.918, 75.919],
+      "peak_rss_bytes": [326303744, 312377344, 326598656]
+    }
+  },
+  "summaries": {
+    "baseline_median_peak_rss_bytes": 165871616,
+    "1000": {
+      "median_elapsed_seconds": 0.471,
+      "median_peak_rss_bytes": 171573248,
+      "median_incremental_peak_rss_bytes": 5701632,
+      "wire_bytes": 262407,
+      "commit_bytes": 174313,
+      "incremental_rss_to_wire_ratio": 21.7282008483005
+    },
+    "10000": {
+      "median_elapsed_seconds": 6.253,
+      "median_peak_rss_bytes": 252772352,
+      "median_incremental_peak_rss_bytes": 86900736,
+      "wire_bytes": 2620407,
+      "commit_bytes": 1740313,
+      "incremental_rss_to_wire_ratio": 33.1630681798667
+    },
+    "100000": {
+      "median_elapsed_seconds": 76.753,
+      "median_peak_rss_bytes": 326303744,
+      "median_incremental_peak_rss_bytes": 160432128,
+      "wire_bytes": 26200407,
+      "commit_bytes": 17400313,
+      "incremental_rss_to_wire_ratio": 6.12326854311843
+    }
+  },
+  "before_after_100000": {
+    "before_commit": "09dbd9b79d996988baf37696457622799fedc2ca",
+    "before_median_elapsed_seconds": 45.227,
+    "before_median_incremental_peak_rss_bytes": 471973888,
+    "elapsed_increase_percent": 69.7061454436505,
+    "incremental_peak_rss_reduction_percent": 66.0082632777938
+  },
+  "retention_model": {
+    "input_transport": "bounded pull chunks",
+    "normalized_actions": "at most one bounded encoded action run buffer retained in R",
+    "pagination": "file actions staged directly; page file lists not retained",
+    "validation": "bounded action/ID/path runs with shell-free R merges for global duplicate checks and deterministic ordering",
+    "encoding": "final commit streamed from one merged action run",
+    "hard_action_limit": 1000000,
+    "conclusion": "R memory is bounded by run size and merge fan-in rather than total file count; disk staging remains O(file_count)."
+  },
+  "lifecycle": {
+    "explicit_release": {
+      "response_closes": 1,
+      "live_roots_before_release": 1,
+      "roots_after_cleanup": 0
+    },
+    "write_error_100000": {
+      "elapsed_seconds": 72.066,
+      "peak_rss_bytes": 313425920,
+      "response_closes": 1,
+      "condition_class": "delta_sharing_protocol_error",
+      "roots_after_cleanup": 0
+    },
+    "finalizer_100000": {
+      "elapsed_seconds": 74.004,
+      "peak_rss_bytes": 305692672,
+      "response_closes": 1,
+      "gc_attempts": 2,
+      "roots_after_cleanup": 0
+    }
+  },
+  "gates": {
+    "temporary_root_lifecycle": "pass",
+    "production_action_retention": "not_evaluable; no agreed release RSS/time threshold",
+    "adr_003_rust_scope_expansion": "not_met"
+  }
+}

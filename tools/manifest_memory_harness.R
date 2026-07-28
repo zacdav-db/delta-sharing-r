@@ -279,6 +279,55 @@ mm_all_cleanup_passed <- function(samples) {
   }, logical(1)))
 }
 
+mm_manifest_gates <- function(cleanup_passed) {
+  list(
+    list(
+      id = "temporary-root-lifecycle",
+      status = if (cleanup_passed) "pass" else "fail",
+      criterion = paste(
+        "success/explicit release, injected write failure, and finalization",
+        "leave zero roots; every response closes exactly once"
+      )
+    ),
+    list(
+      id = "production-action-retention",
+      status = "not_evaluable",
+      criterion = paste(
+        "release workload envelope has no agreed RSS/time threshold;",
+        "production retains one bounded encoded action run and bounded",
+        "merge cursors rather than a whole normalized manifest"
+      )
+    ),
+    list(
+      id = "adr-003-rust-scope-expansion",
+      status = "not_met",
+      criterion = paste(
+        "this R-owned planning workload has no Rust comparator and its",
+        "disk-backed staging implementation does not justify Rust expansion"
+      )
+    )
+  )
+}
+
+mm_retention_model <- function() {
+  list(
+    input_transport = "bounded pull chunks",
+    normalized_actions =
+      "at most one bounded encoded action run buffer retained in R",
+    pagination = "file actions staged directly; page file lists not retained",
+    validation = paste(
+      "bounded action/ID/path runs with shell-free R merges for",
+      "global duplicate checks and deterministic ordering"
+    ),
+    encoding = "final commit streamed from one merged action run",
+    hard_action_limit = 1000000L,
+    conclusion = paste(
+      "R memory is bounded by run size and merge fan-in rather than total",
+      "file count; disk staging remains O(file_count)."
+    )
+  )
+}
+
 mm_write_artifact <- function(artifact, path) {
   parent <- dirname(path)
   if (!dir.exists(parent) && !dir.create(parent, recursive = TRUE)) {
@@ -350,57 +399,29 @@ mm_run <- function(repo_root, config, output) {
   artifact <- list(
     schema_version = 1L,
     environment = mm_environment(repo_root, backend),
-    configuration = config,
+    configuration = c(
+      config,
+      list(
+        staging_run_files =
+          delta.sharing:::.snapshot_stage_run_files,
+        merge_fan_in =
+          delta.sharing:::.snapshot_stage_merge_fan_in
+      )
+    ),
     measurements = list(
       baselines = baselines,
       successful_preparations = successful,
       lifecycle = lifecycle
     ),
     summaries = summaries,
-    gates = list(
-      list(
-        id = "temporary-root-lifecycle",
-        status = if (cleanup_passed) "pass" else "fail",
-        criterion = paste(
-          "success/explicit release, injected write failure, and finalization",
-          "leave zero roots; every response closes exactly once"
-        )
-      ),
-      list(
-        id = "production-action-retention",
-        status = "not_evaluable",
-        criterion = paste(
-          "release workload envelope has no agreed peak-RSS threshold;",
-          "the implementation is count-bounded but retains all normalized",
-          "actions and complete encoded commit lines"
-        )
-      ),
-      list(
-        id = "adr-003-rust-scope-expansion",
-        status = "not_met",
-        criterion = paste(
-          "this R-owned planning workload has no Rust comparator and any",
-          "mitigation is an R staging sink; it cannot justify Rust expansion"
-        )
-      )
-    ),
-    retention_model = list(
-      input_transport = "bounded pull chunks",
-      normalized_actions = "all file actions retained until publication",
-      pagination = "page lists retained, then flattened",
-      validation = "states/order/action views allocated across all files",
-      encoding = "all synthetic commit lines retained before write",
-      hard_action_limit = 1000000L,
-      conclusion = paste(
-        "Memory is O(file_count), hard count-bounded rather than unbounded,",
-        "with several concurrent R representations."
-      )
-    ),
+    gates = mm_manifest_gates(cleanup_passed),
+    retention_model = mm_retention_model(),
     limitations = c(
       "Peak RSS includes R startup and loaded package/native libraries; the artifact reports a fresh-process zero-file baseline.",
       "Generated HTTPS actions are deterministic and representative but do not include wide stats, partitions, deletion vectors, or maximum-size fields.",
       "Local timings are trend evidence, not a cross-platform release baseline.",
-      "The standard 100,000-file workload is the default per-page request ceiling, not the one-million-action absolute guardrail."
+      "The standard 100,000-file workload is the default per-page request ceiling, not the one-million-action absolute guardrail.",
+      "Disk-backed staging intentionally trades additional local I/O and merge time for bounded R-side manifest memory."
     )
   )
   mm_write_artifact(artifact, output)
