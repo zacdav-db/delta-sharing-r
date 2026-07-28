@@ -203,6 +203,25 @@ Emitted Arrow arrays retain their buffers independently. Panics during
 construction or batch pulls are contained and returned as status/error
 payloads.
 
+The hosted Linux sanitizer gate has two complementary layers. Cargo tests run
+the native crate and a rebuilt standard library under AddressSanitizer and
+LeakSanitizer. A second phase compiles the package's C shim and Rust static
+library with AddressSanitizer, installs the package into an isolated R library,
+verifies that the installed shared object links the sanitizer runtime, and
+runs `tools/installed_sanitizer_gate.R` with leak detection enabled. That
+installed-process gate repeatedly covers explicit release, stream exhaustion,
+typed pull failure, panic containment, garbage-collection finalization,
+nanoarrow data-frame conversion, and early/full real Kernel snapshot
+consumption. The script requires native diagnostics to return to zero after
+each case. The workflow definition is scaffolding only; G7 remains open until
+the hosted job supplies a passing sanitizer log from the integrated commit.
+The installed build selects an explicit target so sanitizer flags do not
+instrument host build scripts or procedural macros, and Rust defers to the
+external sanitizer runtime linked by R's C toolchain. When Cargo's standard
+`CARGO_BUILD_TARGET` setting is present, the portable shell recipe copies that
+target's static library into the normal R link location; normal package builds
+retain their existing host-target path.
+
 The registered C shim wraps each initialized stream with owner-thread interrupt
 polling. It uses `R_ToplevelExec(R_CheckUserInterrupt, ...)` before owner-thread
 batch pulls so an R interrupt cannot long-jump across Arrow or Rust ownership.
@@ -217,6 +236,14 @@ when nanoarrow or Arrow observes it inside conversion code before the next
 callback. That owner-thread fallback releases the outer stream and raises the
 same typed condition. It is required because different consumers choose their
 own safe interrupt polling points; it does not call R from a foreign thread.
+
+The subprocess lifecycle test now runs on Windows as well as Unix. It delivers
+SIGINT on Unix and CTRL+BREAK on Windows through `processx`, with the stream
+constructed and consumed by the child process's main R thread. Interrupt
+delivery itself is asserted, and the test requires typed cancellation,
+exact-once release, an invalidated outer pointer, zero pending cleanup, and
+prepared-root removal. A hosted Windows pass is still required evidence; the
+test no longer skips that platform.
 
 The cleanup token is native lifecycle glue, not a Rust synthetic-log
 implementation. R creates and populates the log. The token can only be

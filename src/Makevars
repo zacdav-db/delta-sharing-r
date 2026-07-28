@@ -35,7 +35,12 @@ $(STATLIB):
 		fi; \
 		cargo build $$cargo_flags -j 2 --release \
 			--manifest-path=rust/Cargo.toml \
-			--target-dir=$(TARGET_DIR)
+			--target-dir=$(TARGET_DIR); \
+		if test -n "$$CARGO_BUILD_TARGET"; then \
+			mkdir -p "$(LIBDIR)"; \
+			cp "$(TARGET_DIR)/$$CARGO_BUILD_TARGET/release/libdelta_sharing_native.a" \
+				"$(STATLIB)"; \
+		fi
 
 .PHONY: rust-clean
 

@@ -149,9 +149,10 @@ work remains in any implementation phase.
   validation remains a hosted-CI evidence item.
 - [x] Add the macOS, Linux, Windows, and R-version matrix.
 - [x] Add a pinned Rust advisory, license, and source-policy job.
-- [x] Add Rust sanitizer jobs; MSRV, stable, platform, and coverage jobs are
-  conditional on the native crate landing. Hosted execution evidence remains
-  part of G7.
+- [x] Add Rust sanitizer jobs plus an installed-package lifecycle gate across
+  R, the registered C shim, nanoarrow, and real Kernel streams; MSRV, stable,
+  platform, and coverage jobs are conditional on the native crate landing.
+  Hosted sanitizer execution evidence remains part of G7.
 
 #### S7 API foundation
 
@@ -394,7 +395,7 @@ or main-line integration.
 | 3, 5 | Pull-response close lifecycle (`72cf1ab`) | Integrated | Snapshot and CDF cleanup retries failed closes, stays armed for finalization, redacts close failures, and disarms exactly once after success |
 | 3, 7 | Temporary-root hardening (`024413e`) | Integrated locally | R-owned synthetic-log roots validate their trusted parent, owner, permissions, marker, canonical identity, and replacement state before recursive cleanup; hosted Windows ACL/reparse-point proof remains open |
 | 7 | Serialization and diagnostics (`a4e22df`, `9214629`) | Integrated | Descriptors serialize without live handles or secrets and deserialize inert; per-stream immutable diagnostics remain available after release |
-| 7 | Interrupt cancellation (`b8e3f68`, `23673c1`) | Integrated locally | Real SIGINT subprocesses cancel and release synthetic, snapshot, CDF, direct-pull, Arrow, and data-frame paths exactly once on macOS; Windows hosted proof remains open |
+| 7 | Interrupt cancellation (`b8e3f68`, `23673c1`) | Integrated locally; hosted Windows gate enabled | Real subprocess interrupts cancel and release synthetic, snapshot, CDF, direct-pull, Arrow, and data-frame paths exactly once; the gate uses SIGINT on Unix and CTRL+BREAK plus Windows-correct file URIs on Windows, where a hosted pass remains open |
 | 7 | Performance/lifecycle evidence (`72f8e8b`, `6096774`) | Integrated | Reproducible Kernel comparator and lifecycle harnesses record throughput/RSS/cancellation; current release thresholds are unresolved and do not justify expanding Rust |
 | 3, 7 | Manifest staging and memory evidence (`ebad8dc`, `5fbc522`, `0dc89eb`, `2f8b507`) | Integrated locally | Permission-restricted R staging runs replace material whole-manifest retention; the recorded 100,000-file workload cuts incremental peak RSS by 66.0% while preserving exact close/root cleanup, with a 69.7% preparation-time cost |
 | 7 | Offline source portability (`2494378`) | Integrated locally | Frozen source-package install/check succeeds without network from the deterministic vendored Rust archive; hosted Linux/other target evidence remains open |

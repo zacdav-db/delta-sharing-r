@@ -130,7 +130,7 @@ jobs:
           --locked
 
   sanitizer:
-    name: AddressSanitizer and LeakSanitizer
+    name: Rust and installed R lifecycle sanitizers
     needs: discover
     if: needs.discover.outputs.present == 'true'
     runs-on: ubuntu-24.04
@@ -161,6 +161,74 @@ jobs:
           --workspace
           --all-features
           --locked
+
+      - name: Install R
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - name: Install hard R package dependencies
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          dependencies: '"hard"'
+          cache-version: 1
+
+      - name: Install the instrumented R package
+        shell: bash
+        env:
+          CARGO_BUILD_TARGET: ${{ env.RUST_SANITIZER_TARGET }}
+          CARGO_PROFILE_RELEASE_DEBUG: "1"
+          CARGO_PROFILE_RELEASE_LTO: "false"
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: "1"
+          CARGO_PROFILE_RELEASE_STRIP: "false"
+          RUSTFLAGS: -Zsanitizer=address -Zexternal-clangrt -Cforce-frame-pointers=yes
+          RUSTUP_TOOLCHAIN: ${{ env.RUST_SANITIZER_NIGHTLY }}
+        run: |
+          sanitizer_library="$RUNNER_TEMP/delta-sharing-sanitizer-library"
+          sanitizer_makevars="$RUNNER_TEMP/delta-sharing-sanitizer-Makevars"
+          mkdir -p "$sanitizer_library"
+          cat > "$sanitizer_makevars" <<'EOF'
+          CFLAGS += -O1 -g -fsanitize=address -fno-omit-frame-pointer
+          CXXFLAGS += -O1 -g -fsanitize=address -fno-omit-frame-pointer
+          LDFLAGS += -fsanitize=address
+          EOF
+
+          read -r r_cc _ <<< "$(R CMD config CC)"
+          asan_runtime="$("$r_cc" -print-file-name=libasan.so)"
+          test -f "$asan_runtime"
+
+          R_MAKEVARS_USER="$sanitizer_makevars" \
+          LD_PRELOAD="$asan_runtime${LD_PRELOAD:+:$LD_PRELOAD}" \
+          ASAN_OPTIONS="detect_leaks=0:halt_on_error=1" \
+            R CMD INSTALL \
+              --preclean \
+              --clean \
+              --library="$sanitizer_library" \
+              .
+
+          {
+            echo "DELTA_SHARING_ASAN_RUNTIME=$asan_runtime"
+            echo "DELTA_SHARING_SANITIZER_LIBRARY=$sanitizer_library"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify the installed native library is instrumented
+        shell: bash
+        run: |
+          native_library="$DELTA_SHARING_SANITIZER_LIBRARY/delta.sharing/libs/delta.sharing.so"
+          test -f "$native_library"
+          ldd "$native_library" | grep -F "$(basename "$DELTA_SHARING_ASAN_RUNTIME")"
+
+      - name: Exercise the installed R, C, nanoarrow, and Kernel lifecycle
+        shell: bash
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1
+          LSAN_OPTIONS: exitcode=23:max_leaks=20
+          DELTA_SHARING_SANITIZER_FIXTURE: ${{ github.workspace }}/tests/testthat/fixtures/delta/local-table
+          DELTA_SHARING_SANITIZER_ITERATIONS: "16"
+        run: >-
+          LD_PRELOAD="$DELTA_SHARING_ASAN_RUNTIME${LD_PRELOAD:+:$LD_PRELOAD}"
+          Rscript --vanilla tools/installed_sanitizer_gate.R
 
   msrv:
     name: Rust 1.88 (MSRV)
