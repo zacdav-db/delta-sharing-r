@@ -1,0 +1,6 @@
+{
+  "shareCredentialsVersion": 1,
+  "endpoint": "https://sharing.example.test/api",
+  "bearerToken": "fixture-token-not-a-secret",
+  "expirationTime": "2099-01-01T00:00:00"
+}

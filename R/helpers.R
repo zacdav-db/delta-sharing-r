@@ -1,15 +1,3 @@
-#' Print DeltaShareCredentials
-#'
-#' @param x Object of class `DeltaShareCredentials`
-#' @param ... Additional args
-#' @export
-print.DeltaShareCredentials <- function(x, ...) {
-  x <- paste0("(V", x$shareCredentialsVersion, ") [", x$endpoint, "]\n")
-  cat(x)
-  invisible(x)
-}
-
-
 #' Print DeltaShareTableVersion
 #'
 #' @param x Object of class `DeltaShareTableVersion`

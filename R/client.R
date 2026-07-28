@@ -6,7 +6,18 @@
 #' @export
 #'
 #' @examples
-#' sharing_client("config.share")
+#' profile <- tempfile(fileext = ".share")
+#' writeLines(
+#'   paste0(
+#'     '{"shareCredentialsVersion":1,',
+#'     '"endpoint":"https://sharing.example.test/api",',
+#'     '"bearerToken":"example-token-not-a-secret",',
+#'     '"expirationTime":"2099-01-01T00:00:00"}'
+#'   ),
+#'   profile
+#' )
+#' client <- sharing_client(profile)
+#' unlink(profile)
 sharing_client <- function(credentials) {
   delta.sharing::SharingClient$new(credentials)
 }
@@ -78,7 +89,8 @@ SharingClient <- R6::R6Class(
     },
 
     #' @description List tables within schema
-    #' @param schema Name of the scehma to list tables within
+    #' @param share Name of the share containing the schema
+    #' @param schema Name of the schema to list tables within
     #' @return tibble of the available tables within given schema
     list_tables = function(share, schema) {
 
@@ -125,12 +137,7 @@ SharingClient <- R6::R6Class(
       )
     }
 
-    #TODO: update docs
-    ##' @description Create reference to delta sharing table changes
-    ##' @param share Share the schema/table resides within
-    ##' @param schema Schema the table resides within
-    ##' @param table Table to query changes of
-    ##' @return R6 class of `SharingTableReader` for specified table
+    # TODO: Implement table change reads in the vNext API.
     # table_changes = function(share, schema, table) {
     #   SharingTableChangesReader$new(
     #     share = share,

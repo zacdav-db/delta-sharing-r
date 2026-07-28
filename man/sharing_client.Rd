@@ -16,5 +16,16 @@ SharingClient
 Create Delta Sharing Client
 }
 \examples{
-sharing_client("config.share")
+profile <- tempfile(fileext = ".share")
+writeLines(
+  paste0(
+    '{"shareCredentialsVersion":1,',
+    '"endpoint":"https://sharing.example.test/api",',
+    '"bearerToken":"example-token-not-a-secret",',
+    '"expirationTime":"2099-01-01T00:00:00"}'
+  ),
+  profile
+)
+client <- sharing_client(profile)
+unlink(profile)
 }

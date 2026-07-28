@@ -1,7 +1,7 @@
 Package: delta.sharing
 Type: Package
-Title: R Delta Sharing Connector
-Version: 0.1.2
+Title: High-Performance Delta Sharing Client
+Version: 0.2.0.9000
 Authors@R: 
   c(
     person(given = "Zac",
@@ -10,17 +10,31 @@ Authors@R:
            email = "zac@databricks.com"),
     person("Databricks", role = c("cph", "fnd"))
   )
-Description: Connector for Delta Sharing in R.
-License: What license is it under?
+Description: Connects R to Delta Sharing servers for table discovery and
+  Arrow-native data access. The package implements the open Delta Sharing
+  protocol and is being rebuilt around a streaming native reader.
+License: Apache License (>= 2) | file LICENSE
+URL: https://github.com/zacdav-db/delta-sharing-r
+BugReports: https://github.com/zacdav-db/delta-sharing-r/issues
+Depends:
+  R (>= 4.2.0)
 Encoding: UTF-8
-LazyData: true
 Imports:
   arrow,
   dplyr,
-  jsonlite,
   httr2,
+  jsonlite,
   magrittr,
   progress,
   purrr,
+  R6,
   tibble
-RoxygenNote: 7.2.0
+Suggests:
+  covr,
+  testthat (>= 3.0.0)
+Config/Needs/check: rcmdcheck
+Config/Needs/coverage: covr
+Config/Needs/documentation: roxygen2
+Config/testthat/edition: 3
+Config/testthat/parallel: true
+RoxygenNote: 7.3.2

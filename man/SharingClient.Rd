@@ -110,7 +110,9 @@ List tables within schema
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{schema}}{Name of the scehma to list tables within}
+\item{\code{share}}{Name of the share containing the schema}
+
+\item{\code{schema}}{Name of the schema to list tables within}
 }
 \if{html}{\out{</div>}}
 }

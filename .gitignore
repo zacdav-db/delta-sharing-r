@@ -2,3 +2,10 @@
 .Rhistory
 .RData
 .Ruserdata
+.DS_Store
+/*.tar.gz
+/*.Rcheck
+/check
+/coverage
+/target
+/src/rust/target
