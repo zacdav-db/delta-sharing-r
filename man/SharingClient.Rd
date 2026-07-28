@@ -17,6 +17,8 @@ A \code{SharingClient} stores a safe profile descriptor. Its mutable
 authentication context is R-owned, hidden behind a package-private handle,
 and never exposed as an S7 property. Construction validates configuration
 but performs no token exchange or network request.
+A serialized copy is inert: it contains no credentials or token state and
+cannot use the original process-local client context.
 }
 \details{
 Most users call \code{\link[=sharing_client]{sharing_client()}} rather than this class constructor.

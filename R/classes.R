@@ -26,6 +26,10 @@
 #' private-key loading happen lazily when an authenticated request needs a new
 #' access token, not during construction.
 #'
+#' Serialized copies contain only the safe descriptor fields. They deliberately
+#' lose access to the process-local credential handle and cannot authenticate;
+#' construct a fresh profile from its source in the receiving R process.
+#'
 #' JSON, file, and connection inputs are limited to 1 MiB. A supplied open
 #' binary connection is consumed from its current position and remains open. A
 #' supplied closed connection is opened for bounded binary reads and closed
@@ -101,6 +105,8 @@ SharingProfile <- S7::new_class(
 #' authentication context is R-owned, hidden behind a package-private handle,
 #' and never exposed as an S7 property. Construction validates configuration
 #' but performs no token exchange or network request.
+#' A serialized copy is inert: it contains no credentials or token state and
+#' cannot use the original process-local client context.
 #'
 #' Most users call [sharing_client()] rather than this class constructor.
 #'

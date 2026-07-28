@@ -15,16 +15,22 @@
 
 .new_private_handle <- function(registry, value, prefix) {
   id <- .private_handle_sequence(prefix)
-  assign(id, value, envir = registry)
-
+  nonce <- new.env(parent = emptyenv())
   handle <- new.env(parent = emptyenv())
   handle$id <- id
+  handle$nonce <- nonce
+  lockEnvironment(handle, bindings = TRUE)
+
+  assign(id, list(value = value, nonce = nonce), envir = registry)
   reg.finalizer(
     handle,
     function(handle) {
       id <- handle$id
       if (exists(id, envir = registry, inherits = FALSE)) {
-        rm(list = id, envir = registry)
+        record <- get(id, envir = registry, inherits = FALSE)
+        if (is.list(record) && identical(record$nonce, handle$nonce)) {
+          rm(list = id, envir = registry)
+        }
       }
     },
     onexit = TRUE
@@ -34,15 +40,22 @@
 
 .private_handle_value <- function(object, attribute, registry, kind) {
   handle <- attr(object, attribute, exact = TRUE)
-  if (!is.environment(handle) ||
-      !.is_scalar_character(handle$id) ||
-      !exists(handle$id, envir = registry, inherits = FALSE)) {
+  record <- if (is.environment(handle) &&
+      .is_scalar_character(handle$id) &&
+      exists(handle$id, envir = registry, inherits = FALSE)) {
+    get(handle$id, envir = registry, inherits = FALSE)
+  } else {
+    NULL
+  }
+  if (!is.list(record) ||
+      !is.environment(handle$nonce) ||
+      !identical(handle$nonce, record$nonce)) {
     .abort_delta_sharing(
       sprintf("The internal %s is no longer available.", kind),
       type = "validation"
     )
   }
-  get(handle$id, envir = registry, inherits = FALSE)
+  record$value
 }
 
 .profile_credentials <- function(profile) {

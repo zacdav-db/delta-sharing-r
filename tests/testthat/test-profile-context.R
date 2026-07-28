@@ -74,6 +74,115 @@ test_that("credentials and mutable client state are not S7 properties", {
   expect_identical(S7::prop_names(client), "profile")
 })
 
+test_that("serialized descriptor copies are secret-free and inert", {
+  secret <- "serialized-profile-secret-must-not-appear"
+  profile <- sharing_profile(list(
+    shareCredentialsVersion = 2,
+    type = "bearer_token",
+    endpoint = "https://sharing.example.test/api",
+    bearerToken = secret
+  ))
+  client <- sharing_client(profile)
+  table <- sharing_table(client, "sales.default.orders")
+  read <- sharing_read(table, columns = "id", limit = 1)
+  changes <- sharing_changes(
+    table,
+    starting_version = 1,
+    ending_version = 2
+  )
+
+  descriptors <- list(
+    profile = profile,
+    client = client,
+    table = table,
+    read = read,
+    changes = changes
+  )
+  encoded <- lapply(descriptors, serialize, connection = NULL)
+  expect_true(all(vapply(
+    encoded,
+    function(value) length(grepRaw(secret, value, fixed = TRUE)) == 0L,
+    logical(1)
+  )))
+
+  copies <- lapply(encoded, unserialize)
+  expect_error(
+    delta.sharing:::.profile_credentials(copies$profile),
+    "no longer available",
+    class = "delta_sharing_validation_error"
+  )
+  for (name in c("client", "table", "read", "changes")) {
+    copy_client <- switch(
+      name,
+      client = copies[[name]],
+      table = copies[[name]]@client,
+      copies[[name]]@table@client
+    )
+    expect_error(
+      delta.sharing:::.client_context(copy_client),
+      "no longer available",
+      class = "delta_sharing_validation_error"
+    )
+  }
+
+  copy <- unserialize(serialize(client, NULL))
+  expect_error(
+    delta.sharing:::.client_context(copy),
+    "no longer available",
+    class = "delta_sharing_validation_error"
+  )
+  rm(copy)
+  invisible(gc())
+  expect_identical(
+    delta.sharing:::.client_context(client)$state,
+    "configured"
+  )
+
+  path <- tempfile("serialized-client-", fileext = ".rds")
+  on.exit(unlink(path), add = TRUE)
+  saveRDS(client, path, compress = FALSE)
+  expect_length(
+    grepRaw(
+      secret,
+      readBin(path, "raw", n = file.info(path)$size),
+      fixed = TRUE
+    ),
+    0L
+  )
+  expect_error(
+    delta.sharing:::.client_context(readRDS(path)),
+    "no longer available",
+    class = "delta_sharing_validation_error"
+  )
+
+  auth_profiles <- list(
+    sharing_profile(test_path("fixtures", "profiles", "basic-v2.json")),
+    sharing_profile(test_path("fixtures", "profiles", "oauth-client-v2.json")),
+    sharing_profile(test_path("fixtures", "profiles", "private-key-v2.json"))
+  )
+  auth_clients <- lapply(auth_profiles, sharing_client)
+  cached_secret <- "cached-access-token-must-not-appear"
+  for (auth_client in auth_clients) {
+    delta.sharing:::.client_context(auth_client)$access_token <- cached_secret
+  }
+  auth_bytes <- lapply(auth_clients, serialize, connection = NULL)
+  auth_secrets <- c(
+    "fixture-password",
+    "fixture-client-secret",
+    "/test-only/private-key.pem",
+    cached_secret
+  )
+  for (value in auth_bytes) {
+    expect_true(all(vapply(
+      auth_secrets,
+      function(auth_secret) {
+        length(grepRaw(auth_secret, value, fixed = TRUE)) == 0L
+      },
+      logical(1)
+    )))
+  }
+})
+
 test_that("profile structures fail early with typed safe conditions", {
   invalid_profiles <- list(
     list(endpoint = "https://sharing.example.test", bearerToken = "secret"),

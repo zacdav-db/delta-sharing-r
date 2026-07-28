@@ -122,8 +122,9 @@ Raw SQL mutation methods are not part of vNext.
 - Direct S7 property access is not a normal workflow and is not the public
   contract.
 - There are no public R6 classes or mutable setters.
-- Query objects are not serializable if they capture a live native client
-  handle; failure must be explicit.
+- Profile, client, table, and query descriptors serialize only safe public
+  metadata. A deserialized copy is deliberately inert: its process-local
+  credential and client-context handles fail closed and explicitly on use.
 - There is no implicit package-managed download directory.
 - There is no row-by-row or batch-by-batch R conversion in the stream path.
 - There is no table-to-latest-read materialization shortcut.

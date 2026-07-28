@@ -155,8 +155,8 @@ work remains in any implementation phase.
 #### S7 API foundation
 
 - [x] Implement the classes and canonical constructors in the interface matrix.
-- [x] Prove construction, validation, printing, copying, serialization
-  rejection, generic dispatch, and package load/unload.
+- [x] Prove construction, validation, printing, copying, secret-free inert
+  serialization, generic dispatch, and package load/unload.
 - [x] Keep descriptors independent of live scan state.
 - [x] Implement structured condition classes and secret-safe formatting.
 - [x] Generate and check documentation and namespace registration.
