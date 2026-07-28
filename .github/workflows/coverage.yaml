@@ -18,8 +18,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      # Keep the clean vNext R implementation above a useful whole-tree floor.
-      DELTA_SHARING_MIN_COVERAGE: "80"
+      # Enforce the clean vNext completion gate on the whole R implementation.
+      DELTA_SHARING_MIN_COVERAGE: "90"
       R_KEEP_PKG_SOURCE: yes
 
     steps:

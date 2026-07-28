@@ -264,6 +264,7 @@ reader architecture.
 - [ ] Close all correctness and security review findings.
 - [ ] Complete R and Rust dependency/license notices and source-build policy.
 - [ ] Meet the coverage gates below with reviewed exclusions.
+- [x] Enforce and pass the 90% whole-tree R line-coverage gate.
 - [ ] Pass package checks on minimum, release, and development R.
 - [ ] Pass macOS arm64/x86_64, Linux x86_64/arm64, and Windows x86_64 builds.
 - [ ] Pass Rust MSRV and stable builds.
@@ -335,7 +336,7 @@ or main-line integration.
 | Phase | Lane/commit | Integration status | Evidence |
 |---|---|---|---|
 | 0 | Integration governance | Complete | Roadmap, interface matrix, and ADR 003 |
-| 1 | Test/package/CI foundation (`b5734a4`, `aa89e47`, `d4f7836`) | Integrated | `testthat`, 80% interim coverage gate, R/platform matrices, package checks |
+| 1 | Test/package/CI foundation (`b5734a4`, `aa89e47`, `d4f7836`) | Integrated | `testthat`, initial 80% coverage floor, R/platform matrices, package checks |
 | 1 | S7 and R foundation (`fe0d522`, `936f5cf`) | Integrated | Immutable clean-break descriptors, dispatch, validation, documentation, lifecycle guards |
 | 1 | Minimal Kernel/Arrow foundation (`2279ee6`) | Local foundation integrated | Registered C shim, pinned Kernel, Arrow C Stream, 15 Rust tests, installed R lifecycle proof; real scan and platform proof remain open |
 | 2 | R profiles/auth/control plane (`7379493` through `aa0f8a6`) | Foundations integrated | Profile v1/v2 parsing, bearer/basic/OAuth client auth, retry, pagination, bounded authenticated HTTP |
@@ -343,12 +344,15 @@ or main-line integration.
 | 2 | Public discovery/metadata execution (`e149544`) | Integrated | Raw-segment transport alignment, authenticated callbacks, pagination, bounded parsing, unload reset |
 | 3 | R snapshot synthetic log (`497a4f9`) | Integrated | Atomic 0700/0600 preparation, private signed-URL state, deterministic release/finalizer, Kernel URI |
 | 3 | R snapshot request/planning (`0b1a709`) | Integrated | Pull-only Query Table transport, bounded incremental NDJSON, pagination consistency, expiry enforcement, and prepared-log invocation |
-| 3 | Kernel snapshot execution (`cc71c58`) | Integrated internally | Real Kernel Snapshot/Scan, projection, exact limits, bounded Arrow batches, and prepared-log lifecycle; public dispatch and platform proof remain open |
-| 4–7 | Materializers, CDF, Parquet normalization, hardening | Not started or not yet integrated | Completion gates remain mandatory |
+| 3 | Kernel snapshot execution (`cc71c58`, `941fd46`) | Integrated publicly | Real Kernel Snapshot/Scan, projection, exact limits, bounded Arrow batches, public stream dispatch, and prepared-log lifecycle; platform proof remains open |
+| 4 | Eager materializers (`a42e189`) | Integrated | Arrow and data-frame outputs consume one lazy Arrow stream without IPC or a second scan |
+| 5–7 | CDF, Parquet normalization, remaining hardening | Active or open | Exact CDF provider-version preservation is proven against Kernel 0.22; implementation and remaining completion gates stay active |
+| 7 | R coverage hardening (`d1598b8`) | Integrated | Exact combined-tree coverage is 90.79%; tooling and CI enforce the final 90% R gate |
 
 Current integration evidence: the R planning and native execution handoffs each
 pass built-source package checks on macOS arm64, and the integrated native tree
-passes strict clippy plus 28 Rust tests. The last measured R line coverage is
-87.55%; an exact integrated package/coverage run follows public stream wiring.
-The final 90% R coverage, 85% Rust coverage, cross-platform, performance,
-offline packaging, binary-size, and lifecycle gates remain open.
+passes strict clippy plus 28 Rust tests. The public snapshot stream and eager
+materializers pass built-source package checks, and exact integrated R line
+coverage is 90.79% against the enforced 90% gate. The 85% Rust coverage,
+cross-platform, performance, offline packaging, binary-size, and remaining
+lifecycle gates remain open.

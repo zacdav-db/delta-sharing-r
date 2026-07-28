@@ -20,7 +20,7 @@ writeLines(
 
 minimum <- as.numeric(Sys.getenv(
   "DELTA_SHARING_MIN_COVERAGE",
-  unset = "80"
+  unset = "90"
 ))
 
 message(sprintf(
