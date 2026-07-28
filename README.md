@@ -1,8 +1,9 @@
 # Delta Sharing for R
 
 The vNext API uses small immutable S7 descriptors. Query configuration creates
-new snapshot or change data feed specifications; mutable execution state stays
-behind the future Rust/Delta Kernel boundary.
+new snapshot or change data feed specifications. Profiles, authentication,
+HTTP, protocol handling, and planning stay in R; Rust is limited to Delta
+Kernel scans and the Arrow/native lifecycle tied to an active stream.
 
 ``` r
 library(delta.sharing)

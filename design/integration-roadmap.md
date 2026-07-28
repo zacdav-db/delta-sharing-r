@@ -139,22 +139,25 @@ work remains in any implementation phase.
 
 #### Test, package, and CI foundation
 
-- [ ] Repair package metadata and adopt the intended license.
-- [ ] Declare minimum R and system requirements.
-- [ ] Add `testthat` edition 3 infrastructure and deterministic fixtures.
-- [ ] Add R coverage measurement and an initial enforced floor.
-- [ ] Add `R CMD check`, lint/format, documentation, and source-package jobs.
-- [ ] Add the macOS, Linux, Windows, R-version, and optional-dependency matrix.
-- [ ] Define how Rust MSRV/stable, audit, sanitizer, and coverage jobs attach.
+- [x] Repair package metadata and adopt the intended license.
+- [x] Declare the minimum R version; native system requirements remain coupled
+  to the Kernel/Arrow landing.
+- [x] Add `testthat` edition 3 infrastructure and deterministic fixtures.
+- [x] Add R coverage measurement and an initial enforced 80% floor.
+- [x] Add `R CMD check`, documentation, and source-package jobs; lint/format
+  validation remains a hosted-CI evidence item.
+- [x] Add the macOS, Linux, Windows, and R-version matrix.
+- [ ] Add Rust audit and sanitizer jobs; MSRV, stable, platform, and coverage
+  jobs are already conditional on the native crate landing.
 
 #### S7 API foundation
 
-- [ ] Implement the classes and canonical constructors in the interface matrix.
-- [ ] Prove construction, validation, printing, copying, serialization
+- [x] Implement the classes and canonical constructors in the interface matrix.
+- [x] Prove construction, validation, printing, copying, serialization
   rejection, generic dispatch, and package load/unload.
-- [ ] Keep descriptors independent of live scan state.
-- [ ] Implement structured condition classes and secret-safe formatting.
-- [ ] Generate and check documentation and namespace registration.
+- [x] Keep descriptors independent of live scan state.
+- [x] Implement structured condition classes and secret-safe formatting.
+- [x] Generate and check documentation and namespace registration.
 
 #### Minimal Kernel/Arrow foundation
 
