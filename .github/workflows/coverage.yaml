@@ -18,8 +18,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      # The pre-vNext tree is 18.24%; Codecov gates changed lines at 80%.
-      DELTA_SHARING_MIN_COVERAGE: "18"
+      # Keep the clean vNext R implementation above a useful whole-tree floor.
+      DELTA_SHARING_MIN_COVERAGE: "80"
       R_KEEP_PKG_SOURCE: yes
 
     steps:

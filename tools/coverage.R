@@ -18,11 +18,9 @@ writeLines(
   file.path(coverage_dir, "percent.txt")
 )
 
-# This whole-tree floor records the pre-vNext baseline. Codecov separately
-# requires 80% coverage on changed lines so new code cannot inherit that debt.
 minimum <- as.numeric(Sys.getenv(
   "DELTA_SHARING_MIN_COVERAGE",
-  unset = "18"
+  unset = "80"
 ))
 
 message(sprintf(
