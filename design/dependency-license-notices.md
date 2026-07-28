@@ -115,7 +115,7 @@ The two generated outputs passed byte-for-byte regeneration, manifest-to-bundle
 digest verification, and focused determinism, lock/metadata mismatch, stale
 override, override-checksum tamper, inventory tamper, and bundle tamper tests.
 
-The final compact vendor pair was included in a 29,187,334-byte source package
+The final compact vendor pair was included in a 29,187,483-byte source package
 without an unpacked vendor directory, generator tools, or override-input
 duplicates. Exact `R CMD check --as-cran --no-manual` installed that source,
 passed all package tests and vignettes, and reported zero errors, zero warnings,

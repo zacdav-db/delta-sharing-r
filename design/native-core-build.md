@@ -357,8 +357,8 @@ the final post-CDF lockfile.
 The final local artifact pass after the snapshot/CDF and portability handoffs
 regenerated the same 28,805,176-byte vendor archive, then produced:
 
-- a 29,187,334-byte source archive with SHA-256
-  `3ebf1d2f8d9731bc2a7bfc2916f639331e9b4dd4427c61b2247056fd99e490c9`;
+- a final-HEAD 29,187,483-byte source archive with SHA-256
+  `a89c1b656cbcb9f6623960519efebae193ade30dd2e855936b931b6015c883bd`;
 - an exact `R CMD check --as-cran --no-manual` result with zero errors, zero
   warnings, and one explained development-version/source-size note;
 - an 11,057,349-byte macOS arm64 binary archive with SHA-256
