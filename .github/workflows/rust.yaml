@@ -18,6 +18,8 @@ env:
   RUST_MANIFEST_PATH: src/rust/Cargo.toml
   RUST_MSRV: "1.88"
   RUST_MIN_COVERAGE: "85"
+  RUST_SANITIZER_NIGHTLY: nightly-2026-07-28
+  RUST_SANITIZER_TARGET: x86_64-unknown-linux-gnu
 
 jobs:
   discover:
@@ -122,6 +124,39 @@ jobs:
       - name: Run stable Rust tests
         run: >-
           cargo test
+          --manifest-path "$RUST_MANIFEST_PATH"
+          --workspace
+          --all-features
+          --locked
+
+  sanitizer:
+    name: AddressSanitizer and LeakSanitizer
+    needs: discover
+    if: needs.discover.outputs.present == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned nightly Rust with standard-library sources
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: ${{ env.RUST_SANITIZER_NIGHTLY }}
+          components: rust-src
+
+      - name: Run native ownership tests under ASan and LSan
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          RUSTDOCFLAGS: -Zsanitizer=address
+          RUSTFLAGS: -Zsanitizer=address
+        run: >-
+          cargo +${RUST_SANITIZER_NIGHTLY} test
+          -Zbuild-std
+          --target "$RUST_SANITIZER_TARGET"
           --manifest-path "$RUST_MANIFEST_PATH"
           --workspace
           --all-features
