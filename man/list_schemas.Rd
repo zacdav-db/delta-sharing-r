@@ -13,7 +13,7 @@ list_schemas(client, share = NULL)
 shares are listed.}
 }
 \value{
-A data frame of schemas.
+A base data frame with stable \code{share} and \code{name} character columns.
 }
 \description{
 List schemas

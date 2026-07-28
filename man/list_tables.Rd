@@ -15,7 +15,9 @@ list_tables(client, share = NULL, schema = NULL)
 omitted, all accessible tables are listed.}
 }
 \value{
-A data frame of tables.
+A base data frame with stable \code{share}, \code{schema}, \code{name}, \code{share_id},
+and \code{id} character columns plus an \code{access_modes} list-column. Storage
+locations and auxiliary locations are deliberately excluded.
 }
 \description{
 List tables

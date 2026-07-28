@@ -81,11 +81,11 @@ sharing_changes <- S7::new_generic(
 
 #' List shares
 #'
-#' The future R implementation must return a compact data frame containing all
-#' pages.
+#' Discovery results use a compact data frame containing all pages.
 #'
 #' @param client A [SharingClient].
-#' @return A data frame of shares.
+#' @return A base data frame with stable `name`, `id`, `display_name`, and
+#'   `comment` character columns. Missing optional values are `NA`.
 #' @export
 list_shares <- S7::new_generic(
   "list_shares",
@@ -98,7 +98,7 @@ list_shares <- S7::new_generic(
 #' @param client A [SharingClient].
 #' @param share Optional share name. When omitted, schemas in all accessible
 #'   shares are listed.
-#' @return A data frame of schemas.
+#' @return A base data frame with stable `share` and `name` character columns.
 #' @export
 list_schemas <- S7::new_generic(
   "list_schemas",
@@ -114,7 +114,9 @@ list_schemas <- S7::new_generic(
 #' @param share Optional share name.
 #' @param schema Optional schema name. `schema` requires `share`. When both are
 #'   omitted, all accessible tables are listed.
-#' @return A data frame of tables.
+#' @return A base data frame with stable `share`, `schema`, `name`, `share_id`,
+#'   and `id` character columns plus an `access_modes` list-column. Storage
+#'   locations and auxiliary locations are deliberately excluded.
 #' @export
 list_tables <- S7::new_generic(
   "list_tables",

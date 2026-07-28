@@ -1,0 +1,9 @@
+{
+  "items": [
+    {
+      "share": "operations",
+      "name": "reporting",
+      "bearerToken": "schema-secret-must-not-leak"
+    }
+  ]
+}

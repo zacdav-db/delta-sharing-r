@@ -10,9 +10,9 @@ list_shares(client)
 \item{client}{A \link{SharingClient}.}
 }
 \value{
-A data frame of shares.
+A base data frame with stable \code{name}, \code{id}, \code{display_name}, and
+\code{comment} character columns. Missing optional values are \code{NA}.
 }
 \description{
-The future R implementation must return a compact data frame containing all
-pages.
+Discovery results use a compact data frame containing all pages.
 }

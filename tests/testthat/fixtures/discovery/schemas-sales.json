@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "share": "sales",
+      "name": "default",
+      "location": "s3://private-bucket/schema?sig=must-not-leak"
+    },
+    {
+      "share": "sales",
+      "name": "analytics"
+    }
+  ]
+}
