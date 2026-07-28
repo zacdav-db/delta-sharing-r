@@ -410,15 +410,8 @@ print.delta_sharing_snapshot_request <- function(x, ...) {
       type = "validation"
     )
   }
-  closed <- FALSE
-  close_response <- function() {
-    if (!closed) {
-      closed <<- TRUE
-      try(response$close(), silent = TRUE)
-    }
-    invisible(NULL)
-  }
-  on.exit(close_response(), add = TRUE)
+  close_guard <- .new_snapshot_pull_close_guard(response)
+  on.exit(.close_snapshot_pull_guard(close_guard), add = TRUE)
 
   status <- response$status
   if (!is.numeric(status) ||

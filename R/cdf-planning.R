@@ -246,15 +246,8 @@ print.delta_sharing_cdf_request <- function(x, ...) {
     delta_sharing_error = function(condition) .cdf_rethrow(condition)
   )
   max_chunks <- .snapshot_positive_integer(max_chunks, "max_chunks")
-  closed <- FALSE
-  close_response <- function() {
-    if (!closed) {
-      closed <<- TRUE
-      try(response$close(), silent = TRUE)
-    }
-    invisible(NULL)
-  }
-  on.exit(close_response(), add = TRUE)
+  close_guard <- .new_snapshot_pull_close_guard(response)
+  on.exit(.close_snapshot_pull_guard(close_guard), add = TRUE)
 
   status <- response$status
   if (!is.numeric(status) ||

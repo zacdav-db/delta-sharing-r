@@ -299,6 +299,99 @@ test_that("a page is pulled incrementally and always closed", {
   )
 })
 
+test_that("pull response cleanup is retryable and disarms only after success", {
+  recorder <- new.env(parent = emptyenv())
+  recorder$closes <- 0L
+  close_secret <- "first-close-private-secret"
+  response <- planned_pull_response(
+    planned_snapshot_bytes("snapshot-page-1.ndjson")
+  )
+  response$close <- function() {
+    recorder$closes <- recorder$closes + 1L
+    if (recorder$closes == 1L) {
+      stop(close_secret)
+    }
+    invisible(NULL)
+  }
+  guard <- delta.sharing:::.new_snapshot_pull_close_guard(response)
+
+  expect_false(delta.sharing:::.close_snapshot_pull_guard(
+    guard,
+    attempts = 1L
+  ))
+  expect_false(guard$closed)
+  expect_true(delta.sharing:::.close_snapshot_pull_guard(
+    guard,
+    attempts = 1L
+  ))
+  expect_true(guard$closed)
+  expect_true(delta.sharing:::.close_snapshot_pull_guard(guard))
+  expect_identical(recorder$closes, 2L)
+})
+
+test_that("page cleanup retries close failures without exposing conditions", {
+  bytes <- planned_snapshot_bytes("snapshot-page-1.ndjson")
+  retry_recorder <- new.env(parent = emptyenv())
+  retry_recorder$closes <- 0L
+  retry_response <- planned_pull_response(bytes)
+  retry_response$close <- function() {
+    retry_recorder$closes <- retry_recorder$closes + 1L
+    if (retry_recorder$closes == 1L) {
+      stop("retry-close-private-secret")
+    }
+    invisible(NULL)
+  }
+
+  expect_silent(page <- delta.sharing:::.consume_snapshot_page(
+    retry_response
+  ))
+  expect_identical(page$table_version, 42)
+  expect_identical(retry_recorder$closes, 2L)
+
+  permanent_recorder <- new.env(parent = emptyenv())
+  permanent_recorder$closes <- 0L
+  permanent_response <- planned_pull_response(bytes)
+  permanent_response$close <- function() {
+    permanent_recorder$closes <- permanent_recorder$closes + 1L
+    stop("permanent-close-private-secret")
+  }
+
+  expect_silent(page <- delta.sharing:::.consume_snapshot_page(
+    permanent_response
+  ))
+  expect_identical(page$table_version, 42)
+  expect_identical(permanent_recorder$closes, 2L)
+  gc()
+  expect_identical(permanent_recorder$closes, 3L)
+})
+
+test_that("an armed pull response close guard retries during finalization", {
+  recorder <- new.env(parent = emptyenv())
+  recorder$closes <- 0L
+
+  local({
+    response <- planned_pull_response(
+      planned_snapshot_bytes("snapshot-page-1.ndjson")
+    )
+    response$close <- function() {
+      recorder$closes <- recorder$closes + 1L
+      if (recorder$closes == 1L) {
+        stop("finalizer-close-private-secret")
+      }
+      invisible(NULL)
+    }
+    guard <- delta.sharing:::.new_snapshot_pull_close_guard(response)
+    expect_false(delta.sharing:::.close_snapshot_pull_guard(
+      guard,
+      attempts = 1L
+    ))
+    expect_false(guard$closed)
+  })
+
+  gc()
+  expect_identical(recorder$closes, 2L)
+})
+
 test_that("paginated preparation hands a private atomic log to the native lane", {
   requests <- list()
   recorders <- list()

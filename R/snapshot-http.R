@@ -28,6 +28,57 @@
   response
 }
 
+.new_snapshot_pull_close_guard <- function(response) {
+  response <- .normalize_snapshot_pull_response(response)
+  guard <- new.env(parent = emptyenv())
+  guard$close <- response$close
+  guard$closed <- FALSE
+  class(guard) <- "delta_sharing_snapshot_pull_close_guard"
+  reg.finalizer(
+    guard,
+    function(value) {
+      if (!isTRUE(value$closed)) {
+        .close_snapshot_pull_guard(value, attempts = 1L)
+      }
+      invisible(NULL)
+    },
+    onexit = TRUE
+  )
+  guard
+}
+
+.close_snapshot_pull_guard <- function(guard, attempts = 2L) {
+  if (!inherits(guard, "delta_sharing_snapshot_pull_close_guard") ||
+      !is.environment(guard) ||
+      !is.logical(guard$closed) ||
+      length(guard$closed) != 1L ||
+      is.na(guard$closed) ||
+      (!isTRUE(guard$closed) && !is.function(guard$close))) {
+    stop("The snapshot pull response close guard is invalid.", call. = FALSE)
+  }
+  attempts <- .snapshot_positive_integer(attempts, "attempts")
+  if (isTRUE(guard$closed)) {
+    return(invisible(TRUE))
+  }
+
+  for (attempt in seq_len(attempts)) {
+    succeeded <- tryCatch(
+      {
+        guard$close()
+        TRUE
+      },
+      error = function(condition) FALSE,
+      interrupt = function(condition) FALSE
+    )
+    if (isTRUE(succeeded)) {
+      guard$closed <- TRUE
+      guard$close <- NULL
+      return(invisible(TRUE))
+    }
+  }
+  invisible(FALSE)
+}
+
 #' @exportS3Method print delta_sharing_snapshot_pull_response
 print.delta_sharing_snapshot_pull_response <- function(x, ...) {
   cat("<delta_sharing_snapshot_pull_response> body not buffered; content redacted\n")
