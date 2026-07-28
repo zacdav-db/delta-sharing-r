@@ -212,8 +212,14 @@ and tested without row reading.
 - [x] Execute projection and scan semantics through Delta Kernel.
 - [x] Enforce exact limits across batch boundaries.
 - [x] Return a lazy, bounded, single-consumer Arrow C Stream.
-- [ ] Cover empty tables, partitions, nested types, timestamps, column mapping,
-  deletion vectors, time travel, malformed input, and mid-stream failure.
+- [x] Cover mapped and ordinary partitions, column mapping by name and ID,
+  inline deletion vectors, and timestamp-without-timezone through the
+  production Sharing-wrapper, R synthetic-log, Kernel, and Arrow stream path.
+- [ ] Prove the server-resolved absolute (`p`) deletion-vector path end to end
+  before restoring `deletionvectors` to the advertised capability allowlist.
+- [ ] Cover empty tables, multi-column partitions, nested types, full primitive
+  types, on-disk deletion vectors, time travel, malformed input, and mid-stream
+  failure as one conformance matrix.
 - [x] Assemble redacted public diagnostics from R-owned planning and selection
   facts without misattributing process-global native counters.
 

@@ -1,0 +1,3 @@
+{"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["timestampNtz"],"writerFeatures":["timestampNtz"]}}
+{"metaData":{"id":"8f9c4a6d-68be-466b-afdd-e98847d997c7","format":{"provider":"parquet","options":{}},"schemaString":"{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"long\",\"nullable\":false,\"metadata\":{}},{\"name\":\"observed_at\",\"type\":\"timestamp_ntz\",\"nullable\":false,\"metadata\":{}},{\"name\":\"region\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}}]}","partitionColumns":["region"],"configuration":{},"createdTime":0}}
+{"add":{"path":"region=emea/part-00000.parquet","partitionValues":{"region":"emea"},"size":843,"modificationTime":0,"dataChange":true}}

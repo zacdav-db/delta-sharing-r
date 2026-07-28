@@ -117,8 +117,14 @@ proven by this R-only slice and remains a G3 integration gate:
   URLs on macOS, Linux, and Windows without changing their encoded query;
 - object-store error paths redact those URLs;
 - expiry and refresh are coordinated before a stream outlives its URLs;
-- Kernel applies remove and deletion-vector semantics to the generated commit;
 - deletion-vector application against a presigned URL remains unproven.
+
+The committed feature-conformance fixture now proves that a
+Delta Sharing-wrapped inline (`i`) deletion vector passes the production R
+normalizer and synthetic-log writer unchanged, and that Kernel removes its
+selected rows before Arrow handoff. The hermetic test substitutes only the
+presigned data-file URL after normalization. It does not claim the remaining
+absolute (`p`) DV URL or TLS/cross-platform proof.
 
 The current native tests prove the Kernel 0.22 default engine's presigned-URL
 branch against a loopback HTTP server, including the signed query, and prove

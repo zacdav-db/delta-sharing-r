@@ -3,22 +3,19 @@ test_that("snapshot capabilities are deterministic and Kernel-gated", {
     delta.sharing:::.snapshot_capability_header(),
     paste0(
       "responseformat=delta,parquet;",
-      "readerfeatures=columnmapping,deletionvectors,timestampntz"
+      "readerfeatures=columnmapping,timestampntz"
     )
   )
   expect_identical(
     delta.sharing:::.snapshot_capability_header("delta"),
     paste0(
       "responseformat=delta;",
-      "readerfeatures=columnmapping,deletionvectors,timestampntz"
+      "readerfeatures=columnmapping,timestampntz"
     )
   )
   expect_identical(
     delta.sharing:::.snapshot_capability_header("parquet"),
-    paste0(
-      "responseformat=parquet;",
-      "readerfeatures=columnmapping,deletionvectors,timestampntz"
-    )
+    "responseformat=parquet"
   )
   expect_error(
     delta.sharing:::.snapshot_capability_header("unsupported"),

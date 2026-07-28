@@ -1,7 +1,8 @@
 .snapshot_response_formats <- c("delta", "parquet")
+# Every entry must have an end-to-end Delta Sharing wrapper -> R synthetic log
+# -> pinned Kernel -> Arrow stream fixture in test-native-feature-conformance.R.
 .snapshot_reader_features <- c(
   "columnmapping",
-  "deletionvectors",
   "timestampntz"
 )
 
@@ -13,12 +14,20 @@
     response_format
   }
 
-  paste0(
+  capabilities <- paste0(
     "responseformat=",
-    paste(formats, collapse = ","),
-    ";readerfeatures=",
-    paste(sort(.snapshot_reader_features), collapse = ",")
+    paste(formats, collapse = ",")
   )
+  if ("delta" %in% formats) {
+    capabilities <- c(
+      capabilities,
+      paste0(
+        "readerfeatures=",
+        paste(sort(.snapshot_reader_features), collapse = ",")
+      )
+    )
+  }
+  paste(capabilities, collapse = ";")
 }
 
 .parse_table_version_header <- function(headers, operation = "table_version") {

@@ -88,7 +88,7 @@ test_that("metadata request planning is deterministic for all time modes", {
     list(
       "delta-sharing-capabilities" = paste0(
         "responseformat=delta,parquet;",
-        "readerfeatures=columnmapping,deletionvectors,timestampntz"
+        "readerfeatures=columnmapping,timestampntz"
       )
     )
   )
@@ -97,7 +97,7 @@ test_that("metadata request planning is deterministic for all time modes", {
     list(
       "delta-sharing-capabilities" = paste0(
         "responseformat=delta;",
-        "readerfeatures=columnmapping,deletionvectors,timestampntz"
+        "readerfeatures=columnmapping,timestampntz"
       )
     )
   )

@@ -99,11 +99,22 @@ test_that("serialized descriptor copies are secret-free and inert", {
     changes = changes
   )
   encoded <- lapply(descriptors, serialize, connection = NULL)
-  expect_true(all(vapply(
-    encoded,
-    function(value) length(grepRaw(secret, value, fixed = TRUE)) == 0L,
-    logical(1)
-  )))
+  # covr replaces package functions with instrumented closures. S7 retains
+  # those class functions, so serializing an object under covr also serializes
+  # covr's test environment (including expected secret literals). Inert-copy
+  # behavior is still checked under covr; the ordinary installed-package suite
+  # remains the raw-byte serialization proof.
+  covr_instrumented <- identical(
+    tolower(Sys.getenv("R_COVR")),
+    "true"
+  )
+  if (!covr_instrumented) {
+    expect_true(all(vapply(
+      encoded,
+      function(value) length(grepRaw(secret, value, fixed = TRUE)) == 0L,
+      logical(1)
+    )))
+  }
 
   copies <- lapply(encoded, unserialize)
   expect_error(
@@ -141,46 +152,50 @@ test_that("serialized descriptor copies are secret-free and inert", {
   path <- tempfile("serialized-client-", fileext = ".rds")
   on.exit(unlink(path), add = TRUE)
   saveRDS(client, path, compress = FALSE)
-  expect_length(
-    grepRaw(
-      secret,
-      readBin(path, "raw", n = file.info(path)$size),
-      fixed = TRUE
-    ),
-    0L
-  )
+  if (!covr_instrumented) {
+    expect_length(
+      grepRaw(
+        secret,
+        readBin(path, "raw", n = file.info(path)$size),
+        fixed = TRUE
+      ),
+      0L
+    )
+  }
   expect_error(
     delta.sharing:::.client_context(readRDS(path)),
     "no longer available",
     class = "delta_sharing_validation_error"
   )
 
-  auth_profiles <- list(
-    sharing_profile(test_path("fixtures", "profiles", "basic-v2.json")),
-    sharing_profile(test_path("fixtures", "profiles", "oauth-client-v2.json")),
-    sharing_profile(test_path("fixtures", "profiles", "private-key-v2.json"))
-  )
-  auth_clients <- lapply(auth_profiles, sharing_client)
-  cached_secret <- "cached-access-token-must-not-appear"
-  for (auth_client in auth_clients) {
-    auth_context <- delta.sharing:::.client_context(auth_client)
-    auth_context$access_token <- cached_secret
-  }
-  auth_bytes <- lapply(auth_clients, serialize, connection = NULL)
-  auth_secrets <- c(
-    "fixture-password",
-    "fixture-client-secret",
-    "/test-only/private-key.pem",
-    cached_secret
-  )
-  for (value in auth_bytes) {
-    expect_true(all(vapply(
-      auth_secrets,
-      function(auth_secret) {
-        length(grepRaw(auth_secret, value, fixed = TRUE)) == 0L
-      },
-      logical(1)
-    )))
+  if (!covr_instrumented) {
+    auth_profiles <- list(
+      sharing_profile(test_path("fixtures", "profiles", "basic-v2.json")),
+      sharing_profile(test_path("fixtures", "profiles", "oauth-client-v2.json")),
+      sharing_profile(test_path("fixtures", "profiles", "private-key-v2.json"))
+    )
+    auth_clients <- lapply(auth_profiles, sharing_client)
+    cached_secret <- "cached-access-token-must-not-appear"
+    for (auth_client in auth_clients) {
+      auth_context <- delta.sharing:::.client_context(auth_client)
+      auth_context$access_token <- cached_secret
+    }
+    auth_bytes <- lapply(auth_clients, serialize, connection = NULL)
+    auth_secrets <- c(
+      "fixture-password",
+      "fixture-client-secret",
+      "/test-only/private-key.pem",
+      cached_secret
+    )
+    for (value in auth_bytes) {
+      expect_true(all(vapply(
+        auth_secrets,
+        function(auth_secret) {
+          length(grepRaw(auth_secret, value, fixed = TRUE)) == 0L
+        },
+        logical(1)
+      )))
+    }
   }
 })
 

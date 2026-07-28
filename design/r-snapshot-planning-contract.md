@@ -56,13 +56,51 @@ The capabilities header is built only from the pinned allowlist:
 
 ```text
 responseformat=delta,parquet;
-readerfeatures=columnmapping,deletionvectors,timestampntz;
+readerfeatures=columnmapping,timestampntz;
 includeendstreamaction=true
 ```
 
-`auto` advertises both supported formats. Explicit `delta` or `parquet`
-advertises exactly that single format. The response capability and normalized
-protocol/metadata/file actions must all agree on the selected format.
+The reader-feature allowlist is backed by committed end-to-end fixtures, not
+header-string tests. Each fixture enters as Delta Sharing
+`protocol`/`metaData`/`file` NDJSON, passes the production R normalizers and
+private synthetic-log writer, and is scanned by Delta Kernel 0.22 through the
+production Arrow C Stream:
+
+- `columnmapping` proves both name and ID modes restore physical Parquet fields
+  to logical names, including mapped partition columns and logical projection;
+- `timestampntz` proves the table feature and `timestamp_ntz` schema produce
+  Arrow `timestamp[us]` without a timezone while injecting a partition value.
+
+The tests substitute only the already-normalized presigned data-file URL with a
+local fixture URI so they remain hermetic. Feature protocol, metadata,
+and partition values are unchanged. The same tests assert normal
+exhaustion/materialization and early-release lifecycle balance. The allowlist
+must be reduced if one of these fixtures is removed or stops passing against a
+pinned Kernel update.
+
+`readerfeatures` does not claim support in the Parquet-response mapper. The
+[Delta Sharing protocol][sharing-capabilities] defines it as useful only when
+the selected response is `delta`. Therefore an `auto` metadata request may
+send `responseformat=delta,parquet;readerfeatures=...`: the server considers
+the features only if it selects Delta and ignores them if it selects Parquet.
+An explicit Parquet request sends only `responseformat=parquet`. The Parquet
+normalizer continues to reject Delta physical-reader metadata/configuration
+rather than silently reinterpret it.
+
+Deletion vectors are deliberately not advertised yet. A committed fixture
+proves that the exact inline (`i`) portable bitmap accepted by the R normalizer
+survives synthetic-log encoding and removes selected physical rows through
+Kernel. However, the Sharing server can also return a presigned absolute (`p`)
+DV URL; that exact descriptor-to-HTTPS-read path remains unproven end to end.
+The `deletionvectors` capability may be restored only after the absolute form
+has equivalent production-path and cross-platform evidence.
+
+`auto` advertises `delta,parquet`; if the server selects Delta, the retained
+reader-feature allowlist applies, while a selected Parquet response uses the
+separate R Parquet-action normalizer and the same Kernel stream without
+inheriting those feature claims. Explicit `delta` advertises its reader
+features. Explicit `parquet` advertises only `responseformat=parquet`.
+Metadata and Query Table use the same response-specific construction.
 
 The protocol-default fallback is asymmetric. A server that ignores an explicit
 Delta request may return Parquet; the planner accepts that response now that
@@ -82,6 +120,8 @@ are terminal and are never replayed. A definitive OAuth 401 response can be
 closed and replayed once after refreshing either supported client-credentials
 or private-key JWT OAuth credential; OAuth token-endpoint retries remain
 governed by the existing authentication policy.
+
+[sharing-capabilities]: https://github.com/delta-io/delta-sharing/blob/main/PROTOCOL.md#readerfeatures
 
 ## Pull response contract
 
