@@ -12,9 +12,11 @@ The design packet is read in this order:
    required implementation proof.
 6. `vnext-plan.md` — detailed requirements, architecture, tests, benchmarks,
    risks, and technical references.
-7. `r-execution-wiring-contract.md` — production R discovery/metadata
+7. `rust-dependency-policy.md` — enforced native advisory, license, and source
+   policy plus reviewed transitive exceptions.
+8. `r-execution-wiring-contract.md` — production R discovery/metadata
    execution, injection, and lifecycle boundary.
-8. `api-mock.R` — non-executable illustration of the canonical API.
+9. `api-mock.R` — non-executable illustration of the canonical API.
 
 Implemented R subsystems also carry focused contracts. Snapshot synthetic-log
 mapping, atomic publication, privacy, and lifetime are recorded in

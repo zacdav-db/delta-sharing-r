@@ -164,6 +164,37 @@ jobs:
           --all-features
           --locked
 
+  dependency-policy:
+    name: Rust dependency policy
+    needs: discover
+    if: needs.discover.outputs.present == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2.85.2
+        with:
+          tool: cargo-deny@0.19.4
+          fallback: none
+
+      - name: Check Rust advisories, dependency rules, licenses, and sources
+        run: >-
+          cargo deny
+          --manifest-path "$RUST_MANIFEST_PATH"
+          check
+          --config src/rust/deny.toml
+          advisories bans licenses sources
+
   platform:
     name: ${{ matrix.config.label }}
     needs: discover

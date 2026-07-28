@@ -148,8 +148,9 @@ work remains in any implementation phase.
 - [x] Add `R CMD check`, documentation, and source-package jobs; lint/format
   validation remains a hosted-CI evidence item.
 - [x] Add the macOS, Linux, Windows, and R-version matrix.
-- [ ] Add Rust audit and sanitizer jobs; MSRV, stable, platform, and coverage
-  jobs are already conditional on the native crate landing.
+- [x] Add a pinned Rust advisory, license, and source-policy job.
+- [ ] Add Rust sanitizer jobs; MSRV, stable, platform, and coverage jobs are
+  already conditional on the native crate landing.
 
 #### S7 API foundation
 
@@ -350,6 +351,7 @@ or main-line integration.
 | 5–7 | CDF, Parquet normalization, remaining hardening | Active or open | Exact CDF provider-version preservation is proven against Kernel 0.22; implementation and remaining completion gates stay active |
 | 7 | R coverage hardening (`d1598b8`) | Integrated | Exact combined-tree coverage is 90.79%; tooling and CI enforce the final 90% R gate |
 | 7 | Rust coverage evidence | Integrated-tree gate passing | Exact Rust line coverage is 88.69% with 28 tests passing; CI enforces the 85% gate |
+| 7 | Rust dependency policy | Integrated-tree gate passing | Pinned `cargo-deny` passes advisory, dependency-rule, license, and source checks with four reviewed transitive advisory exceptions |
 
 Current integration evidence: the R planning and native execution handoffs each
 pass built-source package checks on macOS arm64, and the integrated native tree
