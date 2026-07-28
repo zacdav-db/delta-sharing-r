@@ -20,8 +20,8 @@ Depends:
   R (>= 4.3.0)
 Encoding: UTF-8
 Imports:
-  S7,
-  jsonlite
+  jsonlite,
+  S7
 Suggests:
   covr,
   testthat (>= 3.0.0)
