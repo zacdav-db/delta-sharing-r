@@ -221,9 +221,10 @@ and tested without row reading.
   production Sharing-wrapper, R synthetic-log, Kernel, and Arrow stream path.
 - [x] Prove the server-resolved absolute (`p`) deletion-vector path end to end
   through trusted HTTPS, R planning, Kernel, Arrow, redaction, and cleanup.
+- [x] Preserve package-typed, fixed-message, redacted conditions for
+  mid-stream Kernel and Arrow pull failures while releasing the stream.
 - [ ] Restore `deletionvectors` to the advertised capability allowlist only
-  after mid-stream failures retain package condition types and the opt-in
-  proof passes on every hosted target platform.
+  after the opt-in proof passes on every hosted target platform.
 - [x] Cover empty tables, mapped multi-column partitions, representative
   primitive and nested Arrow values, time travel, malformed input, and
   mid-stream adapter failure as one production-path conformance matrix.
@@ -379,7 +380,7 @@ or main-line integration.
 | 6 | Parquet snapshots (`15c931a`, `70e7be0`) | Integrated | R normalizes Parquet actions into the same private log and Kernel stream; asymmetric protocol fallback, projection, limits, cancellation, diagnostics, and Delta/Parquet parity are tested |
 | 3, 6 | Kernel feature conformance (`1d5e0da`) | Integrated | Production Sharing wrappers prove column mapping by name and ID, partitions, `timestampNtz`, inline deletion vectors, Arrow output, and lifecycle; absolute-`p` deletion vectors remain unadvertised |
 | 3 | Snapshot conformance matrix (`16a18b0`) | Integrated | Production wrappers prove empty scans, representative primitive/nested Arrow values, mapped multi-column partitions, version/latest selection, malformed input, and real mid-stream cleanup; exhaustive logical types remain open |
-| 3 | Absolute deletion-vector HTTPS proof (`a35515d`) | Integrated as an opt-in local gate | An immutable official Kernel object proves exact absolute-`p` URL/query preservation, Kernel filtering, redaction, and cleanup; capability advertisement remains blocked on typed mid-stream failures and hosted Linux/Windows proof |
+| 3 | Absolute deletion-vector HTTPS proof (`a35515d`, `8342cfa`) | Integrated as an opt-in local gate | An immutable official Kernel object proves exact absolute-`p` URL/query preservation, Kernel filtering, typed/redacted failures, and cleanup; capability advertisement remains blocked on hosted Linux/Windows proof |
 | 7 | Serialization and diagnostics (`a4e22df`, `9214629`) | Integrated | Descriptors serialize without live handles or secrets and deserialize inert; per-stream immutable diagnostics remain available after release |
 | 7 | Interrupt cancellation (`b8e3f68`, `23673c1`) | Integrated locally | Real SIGINT subprocesses cancel and release synthetic, snapshot, CDF, direct-pull, Arrow, and data-frame paths exactly once on macOS; Windows hosted proof remains open |
 | 7 | Performance/lifecycle evidence (`72f8e8b`, `6096774`) | Integrated | Reproducible Kernel comparator and lifecycle harnesses record throughput/RSS/cancellation; current release thresholds are unresolved and do not justify expanding Rust |

@@ -587,12 +587,13 @@ test_that("absolute deletion vectors pass trusted HTTPS through Kernel", {
     },
     error = identity
   )
-  expect_s3_class(condition, "error")
-  expect_match(
+  expect_s3_class(condition, "delta_sharing_kernel_error")
+  expect_identical(
     conditionMessage(condition),
-    "Delta Kernel data scan failed",
-    fixed = TRUE
+    "Delta Kernel could not produce the requested Arrow data."
   )
+  expect_identical(condition$operation, "read_data_frame")
+  expect_identical(condition$kernel_category, "data_scan")
   failure_output <- c(
     conditionMessage(condition),
     capture.output(str(condition))
@@ -633,12 +634,13 @@ test_that("absolute deletion vectors pass trusted HTTPS through Kernel", {
     },
     error = identity
   )
-  expect_s3_class(download_condition, "error")
-  expect_match(
+  expect_s3_class(download_condition, "delta_sharing_kernel_error")
+  expect_identical(
     conditionMessage(download_condition),
-    "Delta Kernel data scan failed",
-    fixed = TRUE
+    "Delta Kernel could not produce the requested Arrow data."
   )
+  expect_identical(download_condition$operation, "read_data_frame")
+  expect_identical(download_condition$kernel_category, "data_scan")
   download_failure_output <- c(
     conditionMessage(download_condition),
     capture.output(str(download_condition))

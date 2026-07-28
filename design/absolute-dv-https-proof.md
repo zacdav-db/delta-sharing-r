@@ -1,8 +1,7 @@
 # Absolute deletion-vector HTTPS proof
 
-Status: implemented as an opt-in target-platform proof; capability remains
-withheld pending a typed download condition and hosted Linux and Windows
-results
+Status: implemented as an opt-in local target-platform proof; capability
+remains withheld pending hosted Linux and Windows results
 
 ## Gate
 
@@ -88,14 +87,12 @@ This proof necessarily needs network access to exercise public-certificate TLS
 and is skipped during ordinary offline package checks.
 
 The successful scan, invalid-content failure, and missing-object download
-failure are redacted. The latter two currently surface from the Arrow
-materializer as base R `simpleError` conditions rather than the package's
-`delta_sharing_kernel_error`. That is a release blocker: the package must wrap
-mid-stream native failures in a typed, fixed-message condition without copying
-their underlying text.
+failure are redacted. The latter two release their streams and surface as
+fixed-message `delta_sharing_kernel_error` conditions with a `data_scan`
+category. The R lifecycle/error boundary supplies this public condition
+without copying the underlying Kernel, object-store, URL, or query text.
 
 The package continues to omit `deletionvectors` from
-`.snapshot_reader_features` until that typed-failure gap is closed and this
-exact opt-in proof passes from installed source packages on hosted macOS,
-Linux, and Windows. A local pass is implementation evidence, not
-cross-platform release evidence.
+`.snapshot_reader_features` until this exact opt-in proof passes from installed
+source packages on hosted macOS, Linux, and Windows. A local pass is
+implementation evidence, not cross-platform release evidence.
