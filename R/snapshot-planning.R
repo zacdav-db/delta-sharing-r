@@ -399,10 +399,17 @@ print.delta_sharing_snapshot_request <- function(x, ...) {
 .consume_snapshot_page <- function(
   response,
   max_line_bytes = .ndjson_default_max_line_bytes,
-  max_chunks = .snapshot_max_chunks_per_page
+  max_chunks = .snapshot_max_chunks_per_page,
+  file_handler = NULL
 ) {
   response <- .normalize_snapshot_pull_response(response)
   max_chunks <- .snapshot_positive_integer(max_chunks, "max_chunks")
+  if (!is.null(file_handler) && !is.function(file_handler)) {
+    .snapshot_planning_abort(
+      "`file_handler` must be a function.",
+      type = "validation"
+    )
+  }
   closed <- FALSE
   close_response <- function() {
     if (!closed) {
@@ -441,6 +448,8 @@ print.delta_sharing_snapshot_request <- function(x, ...) {
   protocol <- NULL
   metadata <- NULL
   files <- list()
+  file_count <- 0L
+  file_size <- 0
   terminal <- NULL
   action_count <- 0L
 
@@ -472,12 +481,42 @@ print.delta_sharing_snapshot_request <- function(x, ...) {
         }
         metadata <<- action$value
       } else if (identical(action$type, "file")) {
-        if (length(files) >= .snapshot_log_max_files) {
+        if (file_count >= .snapshot_log_max_files) {
           .snapshot_planning_abort(
             "The snapshot response contains too many file actions."
           )
         }
-        files[[length(files) + 1L]] <<- action$value
+        file_state <- .snapshot_file_state(action$value)
+        if (!identical(
+          file_state$response_format,
+          protocol$response_format
+        )) {
+          .snapshot_planning_abort(
+            "The snapshot response mixes file response formats."
+          )
+        }
+        if (identical(protocol$response_format, "parquet")) {
+          version <- .snapshot_file_version(action$value)
+          if (!is.null(version) &&
+              !identical(version, header_state$table_version)) {
+            .snapshot_planning_abort(
+              "The Parquet snapshot response has inconsistent table versions."
+            )
+          }
+          file_size <<- file_size +
+            file_state$delta_action$add$size
+        }
+        file_count <<- file_count + 1L
+        if (is.null(file_handler)) {
+          files[[length(files) + 1L]] <<- action$value
+        } else {
+          file_handler(
+            action$value,
+            protocol,
+            metadata,
+            header_state$table_version
+          )
+        }
       } else if (identical(action$type, "end_stream")) {
         terminal <<- action$value
       } else {
@@ -523,17 +562,6 @@ print.delta_sharing_snapshot_request <- function(x, ...) {
       "The snapshot response format does not match the selected capability."
     )
   }
-  file_formats <- vapply(
-    files,
-    function(file) .snapshot_file_state(file)$response_format,
-    character(1)
-  )
-  if (length(file_formats) > 0L &&
-      any(file_formats != response_format)) {
-    .snapshot_planning_abort(
-      "The snapshot response mixes file response formats."
-    )
-  }
   if (identical(response_format, "parquet")) {
     .validate_parquet_response_versions(
       protocol,
@@ -570,7 +598,9 @@ print.delta_sharing_snapshot_request <- function(x, ...) {
     response_format = response_format,
     table_version = header_state$table_version,
     capabilities = header_state$capabilities,
-    chunk_count = chunk_count
+    chunk_count = chunk_count,
+    file_count = as.integer(file_count),
+    file_size = file_size
   )
 }
 
@@ -768,7 +798,8 @@ print.delta_sharing_prepared_snapshot <- function(x, ...) {
   max_line_bytes = .ndjson_default_max_line_bytes,
   max_chunks_per_page = .snapshot_max_chunks_per_page,
   clock = Sys.time,
-  write_commit = .write_snapshot_commit
+  write_commit = .write_snapshot_commit,
+  stage_run_files = .snapshot_stage_run_files
 ) {
   read <- .validate_snapshot_read(read)
   max_pages <- .snapshot_positive_integer(max_pages, "max_pages")
@@ -784,17 +815,57 @@ print.delta_sharing_prepared_snapshot <- function(x, ...) {
   if (!is.function(write_commit)) {
     stop("`write_commit` must be a function.", call. = FALSE)
   }
+  stage_run_files <- .snapshot_stage_positive_integer(
+    stage_run_files,
+    "stage_run_files"
+  )
 
   seen_tokens <- new.env(parent = emptyenv(), hash = TRUE)
   page_token <- NULL
   page_count <- 0L
-  file_pages <- list()
   file_count <- 0L
   protocol <- NULL
   metadata <- NULL
   table_version <- NULL
   refresh_token <- NULL
   min_expiration <- NULL
+  stage <- .new_snapshot_stage(
+    temp_parent = temp_parent,
+    run_files = stage_run_files
+  )
+  keep_stage <- FALSE
+  on.exit({
+    if (!keep_stage) {
+      try(.release_snapshot_stage(stage), silent = TRUE)
+    }
+  }, add = TRUE)
+  stage_file <- function(file,
+                         page_protocol,
+                         page_metadata,
+                         page_table_version) {
+    stage_state <- .snapshot_stage_state(stage)
+    if (!isTRUE(stage_state$initialized)) {
+      if (!identical(
+        page_protocol$response_format,
+        page_metadata$response_format
+      )) {
+        .snapshot_planning_abort(
+          "The snapshot response uses inconsistent response formats."
+        )
+      }
+      .initialize_snapshot_stage(stage, page_protocol, page_metadata)
+    }
+    .snapshot_stage_add_file(stage, file)
+    file_expiration <- .snapshot_expiration_time(
+      .snapshot_file_expiration_timestamp(file)
+    )
+    if (!is.null(file_expiration) &&
+        (is.null(min_expiration) ||
+          file_expiration < min_expiration)) {
+      min_expiration <<- file_expiration
+    }
+    invisible(page_table_version)
+  }
 
   repeat {
     if (page_count >= max_pages) {
@@ -812,9 +883,13 @@ print.delta_sharing_prepared_snapshot <- function(x, ...) {
     page <- .consume_snapshot_page(
       .safe_snapshot_fetch(fetch, request),
       max_line_bytes = max_line_bytes,
-      max_chunks = max_chunks_per_page
+      max_chunks = max_chunks_per_page,
+      file_handler = stage_file
     )
     page_count <- page_number
+    if (!isTRUE(.snapshot_stage_state(stage)$initialized)) {
+      .initialize_snapshot_stage(stage, page$protocol, page$metadata)
+    }
 
     if (page_count == 1L) {
       protocol <- page$protocol
@@ -847,24 +922,12 @@ print.delta_sharing_prepared_snapshot <- function(x, ...) {
       )
     }
 
-    if (file_count + length(page$files) > .snapshot_log_max_files) {
+    if (file_count + page$file_count > .snapshot_log_max_files) {
       .snapshot_planning_abort(
         "The snapshot response contains too many file actions."
       )
     }
-    file_count <- file_count + length(page$files)
-    file_pages[[page_count]] <- page$files
-
-    for (file in page$files) {
-      file_expiration <- .snapshot_expiration_time(
-        .snapshot_file_expiration_timestamp(file)
-      )
-      if (!is.null(file_expiration) &&
-          (is.null(min_expiration) ||
-            file_expiration < min_expiration)) {
-        min_expiration <- file_expiration
-      }
-    }
+    file_count <- file_count + page$file_count
     page_refresh_token <- page$terminal$refresh_token
     if (!is.null(page_refresh_token)) {
       if (!is.null(refresh_token) &&
@@ -898,25 +961,19 @@ print.delta_sharing_prepared_snapshot <- function(x, ...) {
   }
 
   .assert_snapshot_urls_live(min_expiration, clock)
-  files <- if (file_count == 0L) {
-    list()
-  } else {
-    unlist(
-      file_pages,
-      recursive = FALSE,
-      use.names = FALSE
+  if (identical(protocol$response_format, "parquet")) {
+    stage_state <- .snapshot_stage_state(stage)
+    .validate_parquet_response_total_values(
+      metadata,
+      file_count,
+      stage_state$total_size
     )
   }
-  if (identical(protocol$response_format, "parquet")) {
-    .validate_parquet_response_totals(metadata, files)
-  }
-  guard <- .prepare_snapshot_log(
-    protocol = protocol,
-    metadata = metadata,
-    files = files,
-    temp_parent = temp_parent,
+  guard <- .publish_snapshot_stage(
+    stage,
     write_commit = write_commit
   )
+  keep_stage <- TRUE
   keep_guard <- FALSE
   on.exit({
     if (!keep_guard) {

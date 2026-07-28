@@ -910,8 +910,18 @@
 .write_snapshot_commit <- function(path, lines) {
   connection <- file(path, open = "wb")
   on.exit(close(connection), add = TRUE)
-  for (line in lines) {
-    writeBin(charToRaw(paste0(line, "\n")), connection)
+  if (inherits(lines, "delta_sharing_snapshot_commit_source")) {
+    repeat {
+      line <- lines$next_line()
+      if (is.null(line)) {
+        break
+      }
+      writeBin(charToRaw(paste0(line, "\n")), connection)
+    }
+  } else {
+    for (line in lines) {
+      writeBin(charToRaw(paste0(line, "\n")), connection)
+    }
   }
   flush(connection)
   invisible(path)

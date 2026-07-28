@@ -581,21 +581,32 @@
 }
 
 .validate_parquet_response_totals <- function(metadata, files) {
+  .validate_parquet_response_total_values(
+    metadata,
+    length(files),
+    sum(vapply(
+      files,
+      function(file) .snapshot_file_state(file)$delta_action$add$size,
+      numeric(1)
+    ))
+  )
+}
+
+.validate_parquet_response_total_values <- function(
+  metadata,
+  file_count,
+  total_size
+) {
   if (
     !is.null(metadata$num_files) &&
-      !identical(metadata$num_files, as.double(length(files)))
+      !identical(metadata$num_files, as.double(file_count))
   ) {
     .snapshot_planning_abort(
       "The Parquet snapshot response has an inconsistent file count."
     )
   }
   if (!is.null(metadata$size)) {
-    total <- sum(vapply(
-      files,
-      function(file) .snapshot_file_state(file)$delta_action$add$size,
-      numeric(1)
-    ))
-    if (!identical(metadata$size, total)) {
+    if (!identical(metadata$size, total_size)) {
       .snapshot_planning_abort(
         "The Parquet snapshot response has an inconsistent total size."
       )
