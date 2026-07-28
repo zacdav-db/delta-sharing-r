@@ -75,7 +75,7 @@ This test does not establish signature validation, expiry, authentication, or
 provider-specific semantics.
 
 The Parquet object is the package-owned
-`feature-deletion-vectors/part-00000.parquet` fixture. The test transport
+`deletion-vectors/part-00000.parquet` fixture. The test transport
 returns real Delta Sharing protocol, metadata, and file wrappers. Only the
 already-normalized data-file URL is substituted with the local fixture URI;
 the absolute HTTPS deletion-vector descriptor remains unchanged.

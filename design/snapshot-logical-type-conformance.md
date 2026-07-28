@@ -13,7 +13,7 @@ the production boundary:
 The executable evidence is isolated in
 `tests/testthat/test-snapshot-logical-types.R`. The package-owned fixture,
 generator, provenance, and checksums live in
-`tests/testthat/fixtures/delta/snapshot-logical-types/`.
+`tests/testthat/fixtures/delta/logical-types/`.
 
 ## Decision matrix
 

@@ -1,6 +1,6 @@
 logical_type_fixture <- function() {
   normalizePath(
-    test_path("fixtures", "delta", "snapshot-logical-types"),
+    test_path("fixtures", "delta", "logical-types"),
     winslash = "/",
     mustWork = TRUE
   )

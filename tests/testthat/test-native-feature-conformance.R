@@ -1,6 +1,6 @@
 native_feature_fixture <- function(feature) {
   normalizePath(
-    test_path("fixtures", "delta", paste0("feature-", feature)),
+    test_path("fixtures", "delta", feature),
     winslash = "/",
     mustWork = TRUE
   )

@@ -20,7 +20,7 @@ snapshot_matrix_actions <- function(name) {
 }
 
 snapshot_matrix_mapped_actions <- function() {
-  actions <- snapshot_matrix_actions("feature-column-mapping")
+  actions <- snapshot_matrix_actions("column-mapping")
   metadata <- actions[[2L]]$metaData
   schema <- jsonlite::fromJSON(
     metadata$schemaString,
@@ -228,7 +228,7 @@ absolute_dv_raw_location <- function(
 }
 
 absolute_dv_actions <- function(url, size_in_bytes = 38L) {
-  actions <- snapshot_matrix_actions("feature-deletion-vectors")
+  actions <- snapshot_matrix_actions("deletion-vectors")
   actions[[3L]]$add$deletionVector <- list(
     storageType = "p",
     pathOrInlineDv = url,
@@ -496,7 +496,7 @@ test_that("mapped multi-column partitions are restored by Delta Kernel", {
   actions <- snapshot_matrix_mapped_actions()
   opened <- snapshot_matrix_open(
     snapshot_matrix_wire(actions, version = 11),
-    snapshot_matrix_fixture("feature-column-mapping"),
+    snapshot_matrix_fixture("column-mapping"),
     sharing_read(
       test_table(),
       columns = c("bucket", "region", "id", "value")
@@ -593,7 +593,7 @@ test_that("absolute deletion vectors pass trusted HTTPS through Kernel", {
       absolute_dv_actions(url),
       version = 12
     ),
-    snapshot_matrix_fixture("feature-deletion-vectors"),
+    snapshot_matrix_fixture("deletion-vectors"),
     sharing_read(test_table()),
     batch_size = 2L
   )
@@ -649,7 +649,7 @@ test_that("absolute deletion vectors pass trusted HTTPS through Kernel", {
       absolute_dv_actions(url, size_in_bytes = 37L),
       version = 13
     ),
-    snapshot_matrix_fixture("feature-deletion-vectors"),
+    snapshot_matrix_fixture("deletion-vectors"),
     sharing_read(test_table()),
     batch_size = 2L
   )
@@ -696,7 +696,7 @@ test_that("absolute deletion vectors pass trusted HTTPS through Kernel", {
       absolute_dv_actions(altered_query_url),
       version = 14
     ),
-    snapshot_matrix_fixture("feature-deletion-vectors"),
+    snapshot_matrix_fixture("deletion-vectors"),
     sharing_read(test_table()),
     batch_size = 2L
   )
@@ -750,7 +750,7 @@ test_that("absolute deletion vectors pass trusted HTTPS through Kernel", {
       absolute_dv_actions(missing_url),
       version = 15
     ),
-    snapshot_matrix_fixture("feature-deletion-vectors"),
+    snapshot_matrix_fixture("deletion-vectors"),
     sharing_read(test_table()),
     batch_size = 2L
   )

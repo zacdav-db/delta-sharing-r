@@ -16,7 +16,7 @@ fixture_dir <- file.path(
   "testthat",
   "fixtures",
   "delta",
-  "snapshot-logical-types"
+  "logical-types"
 )
 log_dir <- file.path(fixture_dir, "_delta_log")
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)

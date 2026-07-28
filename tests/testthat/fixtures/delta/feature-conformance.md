@@ -1,16 +1,16 @@
 # Delta Kernel feature-conformance fixtures
 
-These three minimal Delta tables exercise the exact snapshot features advertised
+These four minimal Delta tables exercise the exact snapshot features advertised
 in the Delta Sharing capabilities header:
 
-- `feature-column-mapping` stores physical Parquet names that differ from all
+- `column-mapping` stores physical Parquet names that differ from all
   logical names, including the partition column;
-- `feature-column-mapping-id` stores Parquet field IDs and exercises the `id`
+- `column-mapping-id` stores Parquet field IDs and exercises the `id`
   mapping mode with a mapped partition column;
-- `feature-deletion-vectors` has an inline deletion vector created by Delta
+- `deletion-vectors` has an inline deletion vector created by Delta
   Kernel 0.22's `StreamingDeletionVectorWriter`, deleting physical row indexes
   1 and 3;
-- `feature-timestamp-ntz` stores an Arrow `timestamp[us]` without a timezone and
+- `timestamp-ntz` stores an Arrow `timestamp[us]` without a timezone and
   a log schema using `timestamp_ntz`.
 
 The Parquet payloads were written with Arrow 22.0.0. The inline Z85 payload is

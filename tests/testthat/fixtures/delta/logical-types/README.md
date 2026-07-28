@@ -10,7 +10,7 @@ response, prepares the private synthetic log, and invokes Delta Kernel.
 Regenerate it from the package root with Arrow R 22.0.0:
 
 ```sh
-Rscript tests/testthat/fixtures/delta/snapshot-logical-types/generate.R
+Rscript tests/testthat/fixtures/delta/logical-types/generate.R
 ```
 
 The generator writes uncompressed Parquet without dictionaries or statistics
