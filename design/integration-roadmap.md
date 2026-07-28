@@ -162,15 +162,15 @@ work remains in any implementation phase.
 
 #### Minimal Kernel/Arrow foundation
 
-- [ ] Add the native package skeleton, pinned Rust toolchain policy, and lockfile.
-- [ ] Isolate Delta Kernel concrete APIs behind one internal adapter.
+- [x] Add the native package skeleton, pinned Rust toolchain policy, and lockfile.
+- [x] Isolate Delta Kernel concrete APIs behind one internal adapter.
 - [ ] Define one compact R-to-Kernel invocation contract.
-- [ ] Prove zero-, one-, and multi-batch Arrow C Streams.
-- [ ] Prove early release, garbage-collection release, cancellation, errors
+- [x] Prove zero-, one-, and multi-batch Arrow C Streams.
+- [x] Prove early release, garbage-collection release, cancellation, errors
   before/after a batch, and panic containment.
-- [ ] Prove `{arrow}` import through the C Stream without IPC.
+- [x] Prove `{arrow}` import through the C Stream without IPC.
 - [ ] Prove temporary resources and buffers are not leaked.
-- [ ] Verify that the native crate contains no client, auth, HTTP, protocol,
+- [x] Verify that the native crate contains no client, auth, HTTP, protocol,
   retry, discovery, synthetic-log, or standalone Parquet implementation.
 
 Integration order: land the test/package foundation, refresh and land the S7
@@ -183,7 +183,7 @@ accepted, and Arrow stream lifecycle proof passes on macOS, Linux, and Windows.
 
 ### Phase 2 — profile, client, discovery, and metadata
 
-- [ ] Parse all supported profile sources and versions in R.
+- [x] Parse all supported profile sources and versions in R.
 - [ ] Implement bearer, OAuth client credentials, JWT assertion, and basic auth
   in R.
 - [ ] Implement expiry checks and single-flight refresh in R.
@@ -202,7 +202,7 @@ and tested without row reading.
 - [ ] Validate `SharingRead` in R before native invocation.
 - [ ] Negotiate capabilities and response format in R from a tested allowlist.
 - [ ] Parse response headers and NDJSON incrementally in R.
-- [ ] Build an atomic synthetic Delta log in R.
+- [x] Build an atomic synthetic Delta log in R.
 - [ ] Pass only a compact validated scan invocation and prepared log to Rust.
 - [ ] Execute projection and scan semantics through Delta Kernel.
 - [ ] Enforce exact limits across batch boundaries.
@@ -333,14 +333,16 @@ or main-line integration.
 | 0 | Integration governance | Complete | Roadmap, interface matrix, and ADR 003 |
 | 1 | Test/package/CI foundation (`b5734a4`, `aa89e47`, `d4f7836`) | Integrated | `testthat`, 80% interim coverage gate, R/platform matrices, package checks |
 | 1 | S7 and R foundation (`fe0d522`, `936f5cf`) | Integrated | Immutable clean-break descriptors, dispatch, validation, documentation, lifecycle guards |
-| 1 | Minimal Kernel/Arrow foundation | Slim handoff in progress | Registered C shim, pinned Kernel, Arrow C Stream, and lifecycle proof under review; platform proof remains open |
+| 1 | Minimal Kernel/Arrow foundation (`2279ee6`) | Local foundation integrated | Registered C shim, pinned Kernel, Arrow C Stream, 15 Rust tests, installed R lifecycle proof; real scan and platform proof remain open |
 | 2 | R profiles/auth/control plane (`7379493` through `aa0f8a6`) | Foundations integrated | Profile v1/v2 parsing, bearer/basic/OAuth client auth, retry, pagination, bounded authenticated HTTP |
 | 2 | Discovery/metadata planning (`94c4b8f`, `776bd16`, `01cef8b`) | Planning integrated | Safe route planning, incremental NDJSON, metadata projections, current `GET .../version` contract |
-| 2 | Public discovery/metadata execution | Handoff in progress | Planner/transport segment alignment and R callback wiring |
-| 3 | R snapshot synthetic log | Handoff in progress | Atomic private log preparation and lifetime/redaction proof |
-| 3–7 | Kernel snapshot execution, materializers, CDF, Parquet normalization, hardening | Not started or not yet integrated | Completion gates remain mandatory |
+| 2 | Public discovery/metadata execution (`e149544`) | Integrated | Raw-segment transport alignment, authenticated callbacks, pagination, bounded parsing, unload reset |
+| 3 | R snapshot synthetic log (`497a4f9`) | Integrated | Atomic 0700/0600 preparation, private signed-URL state, deterministic release/finalizer, Kernel URI |
+| 3 | Snapshot request and Kernel execution | Handoffs in progress | Non-buffered R query planning and first real Kernel scan |
+| 4–7 | Materializers, CDF, Parquet normalization, hardening | Not started or not yet integrated | Completion gates remain mandatory |
 
-Current integration evidence after `aa0f8a6`: 1,583 passing expectations,
-86.69% R line coverage, and a clean local `R CMD check --no-manual` before the
-native foundation lands. The final 90% R coverage, 85% Rust coverage,
-cross-platform, performance, packaging, and lifecycle gates remain open.
+Current integration evidence after `497a4f9`: 1,700 passing expectations,
+87.55% measured package coverage, 15 passing Rust tests with strict clippy, and
+a clean combined native source install plus installed R test suite on macOS
+arm64. The final 90% R coverage, 85% Rust coverage, cross-platform,
+performance, offline packaging, and lifecycle gates remain open.
