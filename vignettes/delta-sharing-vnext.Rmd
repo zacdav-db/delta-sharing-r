@@ -198,12 +198,15 @@ diagnostics, and eager adapters. Rust is limited to Delta Kernel scan
 execution, Arrow C Stream export, panic containment, cancellation, and the
 native resources whose lifetime is coupled to the stream.
 
-Two public limitations are intentional:
+Current public limitations and release gates are explicit:
 
 - `read_schema()` does not yet return a projected read schema. Use
   `table_schema()` for the table's logical schema.
 - `batch_size` is supported, but any non-`NULL` `concurrency` argument is
   rejected before materialization.
+- Large-manifest planning is count-bounded but currently retains several
+  whole-manifest R representations. An R-side bounded staging sink remains a
+  release requirement.
 - Comparable local performance and lifecycle evidence exists and keeps this
   native boundary narrow, but release and target-platform performance gates
   remain unresolved.

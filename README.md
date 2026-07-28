@@ -133,6 +133,10 @@ The following work remains before release readiness:
 - `batch_size` is supported; any non-`NULL` `concurrency` value is explicitly
   unsupported.
 - Projected `read_schema()` is not implemented.
+- Large-manifest planning is hard-count-bounded but still retains several
+  whole-manifest R representations. The recorded 100,000-file workload used
+  about 450 MiB above baseline; an R-side bounded staging sink is required
+  before release.
 - Comparable local performance and lifecycle evidence exists and supports
   keeping the native boundary narrow. Release and target-platform performance
   gates remain unresolved, alongside hosted cross-platform build and check

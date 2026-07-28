@@ -253,7 +253,9 @@ schemas agree, with no IPC or full-table R-vector conversion in the stream path.
 - [x] Expose only pinned-kernel CDF capabilities. Execution currently requires
   explicit inclusive version bounds; timestamp and open-ended descriptors fail
   with typed unsupported conditions before HTTP.
-- [ ] Cover insert/update/delete metadata and unsupported schema ranges.
+- [x] Cover insert, delete, update-preimage, and update-postimage metadata,
+  column mapping by name and ID, inclusive bounds, and incompatible schema
+  ranges through the production CDF path.
 - [x] Reuse the materializer and lifecycle interfaces without sharing planners.
 
 Exit gate G5: supported CDF fixtures pass across stream, Arrow, and data-frame
@@ -367,7 +369,7 @@ or main-line integration.
 | 3 | R snapshot request/planning (`0b1a709`) | Integrated | Pull-only Query Table transport, bounded incremental NDJSON, pagination consistency, expiry enforcement, and prepared-log invocation |
 | 3 | Kernel snapshot execution (`cc71c58`, `941fd46`) | Integrated publicly | Real Kernel Snapshot/Scan, projection, exact limits, bounded Arrow batches, public stream dispatch, and prepared-log lifecycle; platform proof remains open |
 | 4 | Eager materializers (`a42e189`) | Integrated | Arrow and data-frame outputs consume one lazy Arrow stream without IPC or a second scan |
-| 5 | Explicit-version CDF (`4913f19`, `a2c5196`) | Integrated | Separate R planner/log, exact inclusive provider versions, Kernel `TableChanges`, shared materializers, typed pre-I/O rejection for timestamp/open-ended ranges |
+| 5 | Explicit-version CDF (`4913f19`, `a2c5196`, `5100d32`) | Integrated and conformance-tested | Separate R planner/log, exact inclusive provider versions, Kernel `TableChanges`, all four change types, name/ID column mapping, schema-range rejection, shared materializers, and typed pre-I/O rejection for timestamp/open-ended ranges |
 | 6 | Parquet snapshots (`15c931a`, `70e7be0`) | Integrated | R normalizes Parquet actions into the same private log and Kernel stream; asymmetric protocol fallback, projection, limits, cancellation, diagnostics, and Delta/Parquet parity are tested |
 | 3, 6 | Kernel feature conformance (`1d5e0da`) | Integrated | Production Sharing wrappers prove column mapping by name and ID, partitions, `timestampNtz`, inline deletion vectors, Arrow output, and lifecycle; absolute-`p` deletion vectors remain unadvertised |
 | 7 | Serialization and diagnostics (`a4e22df`, `9214629`) | Integrated | Descriptors serialize without live handles or secrets and deserialize inert; per-stream immutable diagnostics remain available after release |
@@ -376,14 +378,14 @@ or main-line integration.
 | 3, 7 | Manifest memory evidence (`ebad8dc`, `5fbc522`) | Integrated evidence; mitigation active | Reproducible production-path measurements find material multi-representation R retention at 100,000 files while proving exact close/root cleanup; an R-only bounded staging sink remains required |
 | 7 | Offline source portability (`2494378`) | Integrated locally | Frozen source-package install/check succeeds without network from the deterministic vendored Rust archive; hosted Linux/other target evidence remains open |
 | 7 | vNext documentation (`f43a744`) | Integrated | Canonical vignette, README, and all public Rd topics document only the clean S7 API, R/native boundary, supported formats/CDF, cancellation, diagnostics, serialization, and explicit limitations |
-| 7 | R coverage hardening (`d1598b8`, `4913f19`, `23673c1`) | Integrated-tree gate passing | Exact whole-tree R coverage is 91.81%; tooling and CI enforce the 90% gate |
+| 7 | R coverage hardening (`d1598b8`, `4913f19`, `23673c1`, `5100d32`) | Integrated-tree gate passing | Exact whole-tree R coverage is 91.87%; tooling and CI enforce the 90% gate |
 | 7 | Rust coverage evidence | Integrated-tree gate passing | Exact snapshot/CDF Rust line coverage is 85.76%; 54 Rust library/example tests plus strict clippy and formatting pass locally |
 | 7 | Rust dependency policy | Policy integrated, hosted evidence open | The pinned `cargo-deny` advisory, dependency-rule, license, and source-policy job is committed; `cargo-deny` is unavailable locally |
 | 7 | Dependency notices (`a150899`, `0c88b9e`) | Integrated | All 326 locked Rust packages and all DESCRIPTION dependency roles are inventoried; 214 unique legal texts ship in a deterministic bundle with 14 fail-closed missing-file overrides |
 
 Current integration evidence: the integrated source tree passes its complete R
 suite on macOS arm64 with only the two optional `{duckdb}` tests skipped when
-that package is absent. Whole-tree R line coverage is 91.81%. Strict clippy,
+that package is absent. Whole-tree R line coverage is 91.87%. Strict clippy,
 formatting, and all 54 Rust library/example tests pass. A manual
 `rustc`/LLVM-instrumented run over the locked workspace measures 1,764 of 2,057
 Rust lines (85.76%). The deterministic vendor and dependency-license checks

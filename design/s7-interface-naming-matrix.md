@@ -88,8 +88,8 @@ state, Kernel-coupled cancellation/resources, and Arrow buffers stay in Rust.
 | Version | `table_version(table)` | Returns a stable scalar/version record without reading rows | Table-qualified and explicit |
 | Protocol | `table_protocol(table)` | Returns parsed protocol capabilities | Metadata-only |
 | Metadata | `table_metadata(table)` | Returns safe structured table metadata | Metadata-only |
-| Schema | `table_schema(table)` and `read_schema(read)` | Logical table schema versus projected read schema | Avoids overloading one ambiguous schema call |
-| Stream | `read_arrow_stream(read, batch_size = NULL, concurrency = NULL)` | Primary lazy, bounded `nanoarrow_array_stream` materializer | Makes laziness and Arrow boundary explicit |
+| Schema | `table_schema(table)` and `read_schema(read)` | `table_schema()` returns the logical table schema; projected `read_schema()` is reserved and currently fails with a typed unsupported condition | Avoids overloading one ambiguous schema call without guessing projected Kernel semantics |
+| Stream | `read_arrow_stream(read, batch_size = NULL, concurrency = NULL)` | Primary lazy, bounded `nanoarrow_array_stream` materializer; `concurrency` is reserved and every non-`NULL` value currently fails before I/O | Makes laziness and Arrow boundary explicit |
 | Arrow table | `read_arrow(read, ...)` | Optional eager `{arrow}` adapter over the same stream | Short familiar output name; eager behavior documented |
 | Data frame | `read_data_frame(read, ...)` | Eager base data frame adapter over the same stream | States the memory-bearing output directly |
 | Base conversion | `as.data.frame(read, ...)` | S3 interoperability method with the same semantics as `read_data_frame()` | Standard external generic, not a transition alias |
@@ -112,7 +112,7 @@ Raw SQL mutation methods are not part of vNext.
 | Limit | Non-negative whole-number scalar; server hint plus exact client enforcement |
 | Response format | One of `"auto"`, `"delta"`, or `"parquet"`; selected format is diagnostic data |
 | Batch size | Positive whole-number scalar or `NULL` for a safe automatic default |
-| Concurrency | Positive whole-number scalar or `NULL` for a safe automatic default |
+| Concurrency | Reserved for a future reviewed implementation; only `NULL` is accepted in this version |
 | Timestamps | `POSIXct`; normalized and validated with explicit UTC semantics |
 | Discovery output | Compact base data frames with stable documented columns |
 | Errors | All public errors inherit from `delta_sharing_error` and a narrower typed class |
