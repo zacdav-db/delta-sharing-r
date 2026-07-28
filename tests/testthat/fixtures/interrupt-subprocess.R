@@ -7,7 +7,22 @@ kind <- args[[1L]]
 ready <- args[[2L]]
 result_path <- args[[3L]]
 fixtures <- args[[4L]]
-suppressPackageStartupMessages(library(delta.sharing))
+package_path <- Sys.getenv("DELTA_SHARING_TEST_PACKAGE_PATH", unset = "")
+installed_marker <- file.path(package_path, "Meta", "package.rds")
+if (nzchar(package_path) && !file.exists(installed_marker)) {
+  if (!requireNamespace("pkgload", quietly = TRUE)) {
+    stop("Source-tree interrupt tests require pkgload.", call. = FALSE)
+  }
+  suppressPackageStartupMessages(
+    pkgload::load_all(package_path, helpers = FALSE, quiet = TRUE)
+  )
+} else if (nzchar(package_path)) {
+  suppressPackageStartupMessages(
+    library(delta.sharing, lib.loc = dirname(package_path))
+  )
+} else {
+  suppressPackageStartupMessages(library(delta.sharing))
+}
 
 fixture_uri <- function(path) {
   paste0(

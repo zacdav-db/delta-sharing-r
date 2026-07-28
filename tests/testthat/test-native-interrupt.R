@@ -17,12 +17,20 @@ run_interrupt_subprocess <- function(kind) {
   result <- file.path(directory, "result.rds")
   log <- file.path(directory, "child.log")
   libraries <- paste(.libPaths(), collapse = .Platform$path.sep)
+  package_path <- normalizePath(
+    getNamespaceInfo(asNamespace("delta.sharing"), "path"),
+    winslash = "/",
+    mustWork = TRUE
+  )
   process <- processx::process$new(
     file.path(R.home("bin"), "Rscript"),
     args = c(script, kind, ready, result, fixtures),
     stdout = log,
     stderr = log,
-    env = c(R_LIBS = libraries),
+    env = c(
+      R_LIBS = libraries,
+      DELTA_SHARING_TEST_PACKAGE_PATH = package_path
+    ),
     cleanup = TRUE,
     cleanup_tree = TRUE
   )
