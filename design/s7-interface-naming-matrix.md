@@ -60,17 +60,18 @@ Calling `sharing_read(table)` is the concise latest-snapshot form.
 | Concept | Canonical S7 class | Role and state | Decision |
 |---|---|---|---|
 | Parsed profile | `SharingProfile` | Validated profile description and opaque credential-source reference; secrets are never printable properties | Public only if explicitly constructed; otherwise created internally |
-| Client | `SharingClient` | Immutable descriptor containing safe endpoint metadata and an opaque Rust-owned client handle | Locked |
+| Client | `SharingClient` | Immutable descriptor referring to safe endpoint metadata and an internal R-owned authenticated client context | Locked |
 | Table | `SharingTable` | Immutable client reference plus structured share/schema/table identifier | Locked |
 | Snapshot read | `SharingRead` | Immutable projection, time travel, predicate hint, limit, and response-format specification | Locked |
 | Change read | `SharingChanges` | Immutable CDF bounds, projection, and response-format specification | Locked |
 | Diagnostics | `SharingReadDiagnostics` | Safe snapshot of read counters and selected capabilities; never owns execution | Locked |
 | Stream | `nanoarrow_array_stream` | Stateful, single-consumer native stream | Use the standard nanoarrow class; do not wrap it in S7 |
 
-`SharingClient` may refer to Rust-owned state but does not expose or mutate it.
-`SharingTable`, `SharingRead`, and `SharingChanges` are cheap descriptors.
-Mutable scan state, HTTP clients, credentials, cancellation, Kernel objects,
-temporary logs, buffers, and metrics accumulation stay in Rust.
+`SharingClient` refers to internal R-owned authenticated client state but does
+not expose or mutate it through public properties. `SharingTable`,
+`SharingRead`, and `SharingChanges` are cheap descriptors. Profiles, HTTP,
+protocol parsing, planning, and public diagnostics stay in R. Only Kernel scan
+state, Kernel-coupled cancellation/resources, and Arrow buffers stay in Rust.
 
 ## Constructor and operation decisions
 

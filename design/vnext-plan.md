@@ -17,21 +17,22 @@ tests.
 
 ## 1. Executive recommendation
 
-Rebuild the package around an Arrow-native, Rust-owned streaming core:
+Rebuild the package around an R-first client and a narrow Delta Kernel bridge:
 
 1. A small functional R API creates immutable client, table, read, and
    change-feed specifications.
 2. S7 is the representation for those specifications because it
    provides formal classes, validation, generics, and S3 interoperability.
-3. Rust owns HTTP, authentication, Delta Sharing protocol parsing, temporary
-   Delta log construction, Delta Kernel execution, concurrency, cancellation,
-   and resource lifetimes.
-4. The primary materialization is an Arrow C Stream exposed as a
+3. R owns profiles, authentication, HTTP, Delta Sharing protocol parsing,
+   temporary Delta-log preparation, planning, diagnostics, and adapters.
+4. Rust owns only Delta Kernel invocation and the Arrow/lifecycle state that
+   must remain native while a Kernel stream is active.
+5. The primary materialization is an Arrow C Stream exposed as a
    `nanoarrow_array_stream`.
-5. `{arrow}` tables, DuckDB relations, and R data frames are adapters over that
+6. `{arrow}` tables, DuckDB relations, and R data frames are adapters over that
    stream. The core package must never require a full-table data frame or a
    directory of downloaded Parquet files.
-6. Delta-format reads use `delta-kernel-rs` and its default Arrow/Tokio engine.
+7. Delta-format reads use `delta-kernel-rs` and its default Arrow/Tokio engine.
    A deliberately narrow internal adapter isolates the package from the
    kernel's pre-1.0 Rust API changes.
 
@@ -43,6 +44,11 @@ serialization.
 S7 adoption still requires a packaging/lifetime proof on every target platform,
 but the proof is an implementation gate rather than an object-system selection
 exercise.
+
+The R-first boundary is fixed by `adr-003-rust-scope.md`. A responsibility may
+move from R to Rust only after an optimized R implementation shows a dramatic
+representative end-to-end performance or memory impact, followed by a separate
+ADR and maintainer approval.
 
 ## 2. What informs this design
 
@@ -313,7 +319,8 @@ The complete annotated mock is in `design/api-mock.R`.
 
 - `SharingProfile`: validated non-secret profile metadata and an internal
   credential source.
-- `SharingClient`: endpoint plus an authenticated Rust client handle.
+- `SharingClient`: endpoint plus an internal R-owned authenticated client
+  context.
 - `SharingTable`: client reference plus structured table identifier.
 - `SharingRead`: projection, predicates, limit, time travel, response format.
 - `SharingChanges`: CDF range, projection, response format.
@@ -342,7 +349,7 @@ Use S7 for immutable high-level descriptors and external generics, with S3
 methods for base interoperability such as `print()` and `as.data.frame()`.
 Do not use an S7 environment base type or S7 property mutation for execution
 state. S7's environment base is experimental, and mutable scan state belongs in
-Rust/nanoarrow.
+the narrow Kernel/nanoarrow boundary.
 
 Do not continue with R6 as the primary public API. R6 fits a mutable client but
 encourages query options and materialization state to accumulate on one object,
@@ -357,11 +364,13 @@ for established external generics such as `print()` and `as.data.frame()`.
 Before production implementation:
 
 1. Define the public classes and generics in S7.
-2. Wrap a dummy Rust external pointer in `SharingClient`.
+2. Prove the R-owned client context does not leak mutable state through public
+   properties.
 3. Verify package load/unload, documentation generation, `R CMD check`,
    garbage collection, and S3 `print()`/`as.data.frame()` registration on the
    minimum supported R.
-4. Verify the same lifecycle cases on macOS, Linux, and Windows.
+4. Separately verify the native Kernel stream lifecycle cases on macOS, Linux,
+   and Windows.
 
 This proof is a Phase 1 gate. It is not permission to begin the full reader
 before lifecycle failures are resolved.
@@ -370,12 +379,12 @@ before lifecycle failures are resolved.
 
 ```mermaid
 flowchart LR
-    R["R functional API + S7 descriptors"]
-    FFI["extendr control FFI"]
-    CLIENT["Rust auth + pooled HTTP client"]
-    PLAN["Snapshot/CDF planner"]
-    PROTOCOL["Streaming Delta Sharing NDJSON"]
-    LOG["Temporary synthetic Delta log"]
+    API["R functional API + S7 descriptors"]
+    CLIENT["R profiles, auth + HTTP"]
+    PLAN["R snapshot/CDF planner"]
+    PROTOCOL["R Delta Sharing NDJSON parser"]
+    LOG["R-prepared synthetic Delta log"]
+    FFI["narrow Kernel FFI"]
     KERNEL["delta-kernel-rs adapter"]
     ENGINE["Default Arrow/Tokio engine"]
     STREAM["Rust RecordBatchReader"]
@@ -383,12 +392,12 @@ flowchart LR
     NANO["nanoarrow_array_stream"]
     CONSUMERS["arrow / DuckDB / data.frame / other consumers"]
 
-    R --> FFI
-    FFI --> CLIENT
+    API --> CLIENT
     CLIENT --> PLAN
     PLAN --> PROTOCOL
     PROTOCOL --> LOG
-    LOG --> KERNEL
+    LOG --> FFI
+    FFI --> KERNEL
     KERNEL --> ENGINE
     ENGINE --> STREAM
     STREAM --> CABI
@@ -399,15 +408,21 @@ flowchart LR
 ### R layer responsibilities
 
 - constructors, validation, printing, and discoverable help;
-- translating R arguments into compact Rust request specifications;
+- profile parsing, credentials, refresh, authenticated HTTP, retry, and
+  pagination;
+- capability negotiation and incremental Delta Sharing response parsing;
+- snapshot/CDF planning and atomic synthetic-log preparation;
+- translating a prepared log and validated options into a compact Kernel
+  invocation;
 - allocating a nanoarrow stream destination;
 - optional adapters to `{arrow}` and base data frames;
-- structured R conditions.
+- structured R conditions, redaction, and public diagnostics.
 
-R must not parse large NDJSON responses, enumerate Parquet files into tibbles,
-download data files, or transform record batches column by column.
+R parses large NDJSON responses incrementally rather than collecting them as
+one string or data frame. R must not download complete data files before
+scanning or transform record batches column by column.
 
-### Rust modules
+### Minimal Rust modules
 
 Proposed internal layout:
 
@@ -421,20 +436,8 @@ src/
     Cargo.lock
     src/
       lib.rs
-      api.rs
-      auth.rs
-      client.rs
       errors.rs
       metrics.rs
-      protocol/
-        mod.rs
-        profile.rs
-        responses.rs
-      sharing/
-        discovery.rs
-        snapshot.rs
-        changes.rs
-        synthetic_log.rs
       kernel/
         mod.rs
         adapter.rs
@@ -442,7 +445,6 @@ src/
       ffi/
         mod.rs
         arrow_stream.rs
-        handles.rs
 ```
 
 The `kernel/adapter.rs` module is the only module allowed to depend directly on
@@ -453,6 +455,10 @@ internal trait such as:
 KernelReader::snapshot(spec) -> RecordBatchReader
 KernelReader::changes(spec)  -> RecordBatchReader
 ```
+
+There are no Rust auth, client, HTTP, protocol, discovery, retry,
+synthetic-log, or standalone Parquet modules. Adding one requires the
+performance exception process in ADR 003.
 
 ## 9. Delta Sharing and Delta Kernel integration
 
@@ -473,18 +479,21 @@ pinned kernel release.
 
 ### Snapshot flow
 
-1. Validate the read specification in R and Rust.
-2. Query metadata/capabilities if `response_format = "auto"` needs resolution.
-3. POST the table query with projection-independent server hints.
-4. Parse response headers and NDJSON incrementally.
-5. For a delta response, create a private temporary table root and write a
+1. Validate the read specification in R.
+2. Query metadata/capabilities from R if `response_format = "auto"` needs
+   resolution.
+3. POST the table query from R with projection-independent server hints.
+4. Parse response headers and NDJSON incrementally in R.
+5. In R, create a private temporary table root and write a
    minimal `_delta_log` whose protocol, metadata, and actions preserve the
    signed data/DV URLs.
-6. Open a Delta Kernel snapshot and build a projected scan.
-7. Execute through the default engine and expose its Arrow batches through one
+6. Pass the prepared log and compact validated scan options to Rust.
+7. Open a Delta Kernel snapshot and build a projected scan in the narrow
+   adapter.
+8. Execute through the default engine and expose its Arrow batches through one
    reader.
-8. Enforce the residual limit while streaming.
-9. Keep the temporary log alive until the stream is released.
+9. Enforce the residual limit at the Kernel/Arrow reader boundary.
+10. Keep the R-prepared temporary log alive until the stream is released.
 
 The synthetic log is a pragmatic first implementation and follows the protocol
 design and current Python connector. A custom in-memory kernel engine is not
@@ -492,27 +501,32 @@ justified until measurement shows temporary log I/O is material.
 
 ### Protocol Parquet response flow
 
-Servers can return Parquet-format actions. That path still belongs in Rust and
-still returns the same Arrow stream:
+Servers can return Parquet-format actions. R normalizes those actions into the
+same Kernel-readable preparation and returns the same Arrow stream:
 
-1. Parse metadata and file actions incrementally.
-2. Open signed URLs directly through the Rust object-store/Parquet stack.
-3. Reconstruct partition columns and normalize field order/types.
-4. Apply projection, exact limit, and any exact residual filter.
-5. Emit record batches through the same C Stream boundary.
+1. Parse metadata and file actions incrementally in R.
+2. Prepare a minimal synthetic log that preserves signed object URLs and
+   logical metadata.
+3. Pass that prepared log through the same narrow Kernel invocation.
+4. Let Delta Kernel reconstruct partition columns and logical field
+   order/types.
+5. Apply projection and exact limit at the Kernel/Arrow reader boundary.
+6. Emit record batches through the same C Stream boundary.
 
 This is a supported Delta Sharing response format, not a second public reader
-architecture and not a prior-package compatibility path.
+architecture, a standalone Rust Parquet reader, or a prior-package
+compatibility path.
 
 ### Change Data Feed flow
 
 CDF reconstruction is separate:
 
-1. Stream protocol, historical metadata, and per-version actions.
+1. Stream protocol, historical metadata, and per-version actions in R.
 2. Write the minimal versioned log required by
-   `TableChanges`/`TableChangesScanBuilder`.
-3. Validate the entire requested range against pinned-kernel limitations.
-4. Execute into the same Arrow stream abstraction.
+   `TableChanges`/`TableChangesScanBuilder` in R.
+3. Validate the entire requested range in R against pinned-kernel limitations.
+4. Pass the prepared log and CDF scan options through the narrow Kernel bridge.
+5. Execute into the same Arrow stream abstraction.
 
 Known kernel limitations must be tested and surfaced. For example, current
 Delta Kernel documentation disallows column-mapped CDF and requires compatible
@@ -532,8 +546,8 @@ The Arrow C Stream interface is the critical performance contract.
 
 ### Lifetime rules
 
-- The stream private data owns the kernel scan, client request state, temporary
-  log guard, cancellation token, and metrics.
+- The stream private data owns the Kernel scan, an optional guard for the
+  R-prepared temporary log, Kernel cancellation token, and native metrics.
 - Each emitted array owns or retains the buffers it references until the
   consumer calls its release callback.
 - Stream release cancels the producer and drops unconsumed batches.
@@ -550,17 +564,17 @@ Delta Kernel from the version of the optional R `{arrow}` package.
 ## 11. Concurrency and memory model
 
 - Use one lazily initialized Tokio runtime per R process, guarded by process ID
-  so a forked child cannot reuse parent threads.
-- Use pooled `reqwest` clients and rustls by default.
-- Stream NDJSON and record batches; never collect an entire table response
-  solely for convenience.
+  so a forked child cannot reuse parent Kernel threads.
+- Use R HTTP tooling with connection reuse for authenticated protocol calls.
+- Stream NDJSON incrementally in R and record batches in Rust; never collect an
+  entire table response solely for convenience.
 - Feed a bounded synchronous Arrow reader from a bounded async producer queue.
 - Default queue capacity: two record batches; configurable for benchmarks.
 - Default file-read concurrency: derived from CPU count and a conservative
   upper bound, with an explicit option for constrained environments.
 - Apply backpressure when R or a downstream engine stops pulling.
-- Use a cancellation token shared by HTTP, kernel execution, and the batch
-  producer.
+- R owns control-plane interruption; the native cancellation token covers
+  Kernel execution and the batch producer.
 - Make batch size and concurrency observable in diagnostics.
 - Reuse buffers where Arrow/Kernel permits; do not concatenate batches unless
   the caller requests an eager table/data frame.
@@ -584,22 +598,18 @@ host, retry count, table identifier, and kernel error category. Bodies,
 authorization headers, signed URLs, tokens, secrets, and private-key paths are
 redacted.
 
-Rust errors remain typed until the FFI boundary. Avoid converting every failure
-to an opaque string early.
+Only Kernel/native errors cross the FFI boundary, and they remain typed until
+R maps them to public conditions. Auth, HTTP, protocol, and planning errors are
+created directly in R.
 
 ## 13. Test strategy
 
 ### Rust unit tests
 
-- profile parsing and every auth type;
-- expiry and single-flight token refresh;
-- pagination;
-- retry/backoff classification;
-- NDJSON split at every possible buffer boundary;
-- capability negotiation and response-format detection;
-- synthetic snapshot/CDF log generation;
+- compact Kernel invocation validation;
+- Kernel snapshot and CDF adapter behavior;
 - exact limit behavior across batch boundaries;
-- error redaction;
+- Kernel error payload safety;
 - cancellation and early drop;
 - Arrow C Stream release after zero, one, and many batches.
 
@@ -608,6 +618,12 @@ to an opaque string early.
 - S7 constructors, validators, print methods, and generic dispatch;
 - mutually exclusive snapshot/CDF options;
 - profile-source forms;
+- every auth type, expiry, and single-flight token refresh;
+- pagination and retry/backoff classification;
+- NDJSON split at every possible buffer boundary;
+- capability negotiation and response-format detection;
+- synthetic snapshot/CDF log generation;
+- public error redaction;
 - optional `{arrow}` behavior;
 - `as.data.frame()` behavior and memory warning documentation;
 - structured condition classes;
@@ -694,6 +710,15 @@ Controlled microbenchmarks should gate regressions. Noisy cloud/object-store
 benchmarks should publish trend artifacts and require review rather than fail
 every pull request.
 
+### Rust-scope exception benchmark
+
+An isolated Rust implementation beating R is not sufficient to expand the
+native boundary. The optimized R implementation and Rust prototype must run in
+the same representative end-to-end workflow. Expansion is eligible for review
+only at a measured 25% end-to-end wall-clock improvement or 50% peak-memory
+reduction, followed by the separate ADR and maintainer approval required by
+ADR 003.
+
 ## 15. Implementation phases
 
 ### Phase 0: decisions and build skeleton
@@ -710,8 +735,8 @@ platforms; the accepted S7 interface passes its package proof.
 
 ### Phase 1: profile, client, and discovery
 
-- Implement Rust profile/auth/client core.
-- Implement S7 descriptors and discovery functions.
+- Implement the R profile/auth/client core.
+- Implement S7 descriptors and R discovery functions.
 - Add pagination, retry, redaction, and metadata tests.
 - No row reading yet.
 
@@ -719,8 +744,8 @@ Exit: authenticated discovery and table metadata/version are production tested.
 
 ### Phase 2: snapshot delta-format stream
 
-- Implement capability negotiation and streaming NDJSON.
-- Build the synthetic snapshot log.
+- Implement capability negotiation and incremental NDJSON parsing in R.
+- Build the synthetic snapshot log in R.
 - Integrate pinned Delta Kernel through the adapter.
 - Return a lazy nanoarrow stream.
 - Cover projection, limits, empty tables, column mapping, deletion vectors, and
@@ -746,8 +771,10 @@ Exit: supported CDF fixtures pass across all materializers and platforms.
 
 ### Phase 5: protocol Parquet response
 
-- Add the direct Rust Parquet response-format reader.
-- Reconstruct partition values and schema normalization.
+- Normalize Parquet actions into an R-prepared Kernel-readable log.
+- Reuse the narrow Kernel/Arrow bridge; do not add a standalone Rust reader.
+- Reconstruct partition values and schema normalization through the prepared
+  log and Kernel semantics.
 - Prove parity with the delta-format path where both are available.
 
 Exit: supported servers that select Parquet work without restoring the old
@@ -766,14 +793,14 @@ download-to-directory design.
 Keep reviews small and preserve the lesson from the Python PR:
 
 1. Package metadata, test/CI skeleton, and ADRs.
-2. S7 public descriptors and discovery API.
-3. Rust auth/protocol client.
-4. Arrow C Stream bridge and lifecycle tests.
+2. S7 public descriptors and R client/discovery API.
+3. R auth, protocol, and synthetic-log preparation.
+4. Minimal Arrow C Stream bridge and lifecycle tests.
 5. Delta Kernel snapshot adapter.
 6. Snapshot materializers and parity tests.
-7. Diagnostics and benchmarks.
-8. CDF planner and stream.
-9. Protocol Parquet response path.
+7. R diagnostics and benchmarks.
+8. R CDF planner/log plus Kernel scan.
+9. R Parquet-action preparation plus Kernel scan.
 10. Docs and release packaging.
 
 Do not mix snapshot and CDF implementations in one review.
@@ -790,6 +817,7 @@ Do not mix snapshot and CDF implementations in one review.
 | Signed URL expiry during long scan | Mid-stream failure | expiry-aware planning, bounded retries, refresh-token support |
 | CDF kernel limitations | Incomplete feature promise | advertise only tested features; fail fast with typed condition |
 | Rust source build burden | Installation failures | vendoring, MSRV, CI matrix, release binaries |
+| R control-plane performance | User-visible latency or memory cost | optimize/profile R first; expand Rust only through ADR 003's end-to-end threshold |
 | Exact filter semantics confused with hints | Incorrect rows | name hints explicitly; exact API must apply residual predicate |
 | Large eager conversion | R out-of-memory | stream is primary; eager adapters documented and measured |
 
@@ -801,11 +829,13 @@ Recommended defaults are in parentheses:
 2. Functional API versus R6 method chaining (**functional**).
 3. Rust bridge: extendr/rextendr versus savvy/direct C (**extendr plus a narrow
    Arrow C ABI function**).
-4. Minimum R version (**R 4.3**, unless a target Databricks Runtime requires
+4. Rust scope (**Delta Kernel and Kernel-coupled Arrow/lifecycle glue only,
+   accepted**).
+5. Minimum R version (**R 4.3**, unless a target Databricks Runtime requires
    4.2; the functional API can support either).
-5. Distribution: GitHub/R-universe binaries first, then CRAN (**staged**).
-6. Prior package compatibility (**none, accepted**).
-7. Automatic format preference (**negotiate delta,parquet and let the server
+6. Distribution: GitHub/R-universe binaries first, then CRAN (**staged**).
+7. Prior package compatibility (**none, accepted**).
+8. Automatic format preference (**negotiate delta,parquet and let the server
    choose, with advanced features forcing delta**).
 
 ## 19. Primary technical references

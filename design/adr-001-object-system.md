@@ -69,9 +69,9 @@ Costs:
 ## Decision
 
 Use S7 for high-level value-like descriptors and functional generics. Keep
-mutable execution state in Rust external pointers and nanoarrow streams. Add S3
-methods only for established external generics such as `print()` and
-`as.data.frame()`.
+package and protocol behavior in R. Only Delta Kernel execution and the
+Kernel-coupled Arrow stream lifecycle live in Rust. Add S3 methods only for
+established external generics such as `print()` and `as.data.frame()`.
 
 The exported functions—not direct property access—are the public contract.
 There is no S3 fallback and no requirement to preserve the prior R6 surface.
@@ -82,8 +82,9 @@ The canonical names are recorded in `s7-interface-naming-matrix.md`.
 - Users never need `@` for normal work.
 - Query configuration returns a new object; it does not mutate table/client
   state.
-- `SharingClient` may contain a validated external pointer, but scan state never
-  lives in an S7 property.
+- `SharingClient` refers to R-owned authenticated client state; it does not own
+  a Rust client.
+- Kernel scan state never lives in an S7 property.
 - The stateful stream is the standard nanoarrow external-pointer class.
 - Serialization of clients/streams is unsupported and fails clearly.
 - S7's experimental environment base class is not used.

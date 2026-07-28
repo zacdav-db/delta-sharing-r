@@ -6,11 +6,13 @@ The design packet is read in this order:
    integration rules, phase order, and completion gates.
 2. `s7-interface-naming-matrix.md` — canonical public S7 concepts and names.
 3. `adr-001-object-system.md` — accepted S7 descriptor decision.
-4. `adr-002-rust-arrow-boundary.md` — accepted Rust/Kernel/Arrow architecture
-   and required implementation proof.
-5. `vnext-plan.md` — detailed requirements, architecture, tests, benchmarks,
+4. `adr-003-rust-scope.md` — accepted R-first implementation boundary and the
+   performance gate for any additional Rust.
+5. `adr-002-rust-arrow-boundary.md` — minimal Kernel/Arrow native boundary and
+   required implementation proof.
+6. `vnext-plan.md` — detailed requirements, architecture, tests, benchmarks,
    risks, and technical references.
-6. `api-mock.R` — non-executable illustration of the canonical API.
+7. `api-mock.R` — non-executable illustration of the canonical API.
 
 When documents differ, the maintainer decisions and clean-break policy in the
 roadmap and interface matrix take precedence.

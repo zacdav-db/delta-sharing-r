@@ -15,8 +15,15 @@ against `main` during the overhaul.
 - S7 is the public object system. The implementation will not carry an S3
   fallback.
 - Public objects are immutable, value-like descriptors.
-- Mutable client, scan, cancellation, and lifecycle state is owned by Rust.
-- Delta-format reads are implemented with Delta Kernel.
+- Profiles, authentication, HTTP, protocol parsing, planning, synthetic-log
+  preparation, diagnostics, and adapters are implemented in R.
+- Rust is limited to Delta Kernel invocation and the minimum Arrow/lifecycle
+  glue required to expose Kernel output safely.
+- Kernel scan state, Kernel-coupled cancellation/resources, and Arrow buffers
+  are owned by Rust while a stream is active.
+- Expanding Rust beyond that boundary requires the benchmark and ADR gate in
+  `adr-003-rust-scope.md`.
+- Delta-format reads use Delta Kernel through the narrow Rust bridge.
 - Arrow C Stream is the primary materialization boundary.
 - The public model is `client -> table -> read -> materializer`.
 - Naming follows the client/table/read terminology described in
@@ -40,9 +47,9 @@ an earlier R package release.
 - `DESCRIPTION` has unresolved metadata, an undeclared R6 dependency, and an
   eager `{arrow}` dependency.
 - `NAMESPACE` and generated help describe only the current R6 implementation.
-- The design packet selects the correct Rust/Kernel/Arrow architecture but
-  originally contained prior-version transition requirements that are now
-  explicitly removed.
+- The design packet originally assigned most client/protocol work to Rust and
+  contained prior-version transition requirements. Both decisions are
+  superseded by the current R-first, clean-break architecture.
 - Three specialist worktrees exist from the same design commit:
   `codex/testing-ci-foundation`, `codex/s7-public-api-r-layer`, and
   `codex/rust-kernel-arrow-stream-foundation`.
@@ -52,9 +59,9 @@ an earlier R package release.
 | Lane | Branch | Initial scope | Out of scope for the lane |
 |---|---|---|---|
 | Integration | `codex/delta-kernel-s7-overhaul` | Design authority, sequencing, cross-lane review, conflict resolution, final gates | Reimplementing specialist work before handoff |
-| Test and CI | `codex/testing-ci-foundation` | Package metadata, test harness, coverage tooling, CI matrices, package-check automation | Public S7 API design and Rust reader implementation |
-| S7 R API | `codex/s7-public-api-r-layer` | S7 descriptors, constructors, validation, generics, R conditions, R-level tests/docs | Rust bridge, Kernel adapter, CI ownership |
-| Rust/Kernel/Arrow | `codex/rust-kernel-arrow-stream-foundation` | Rust package skeleton, FFI ownership, Arrow C Stream, Kernel isolation, native lifecycle tests | Public API naming and CI ownership |
+| Test and CI | `codex/testing-ci-foundation` | Package metadata, test harness, coverage tooling, CI matrices, package-check automation | Public S7/API implementation and Kernel bridge |
+| S7 and R implementation | `codex/s7-public-api-r-layer` | S7 descriptors, profiles/auth, HTTP, protocol, planning, synthetic logs, discovery, R conditions, adapters, R tests/docs | Delta Kernel internals, Arrow C Stream implementation, CI ownership |
+| Kernel/Arrow bridge | `codex/rust-kernel-arrow-stream-foundation` | Minimal Rust package skeleton, Kernel adapter, Arrow C Stream, Kernel-coupled lifecycle tests | Auth, HTTP, discovery, protocol parsing, retry, synthetic-log semantics, public API, standalone Parquet reader, CI ownership |
 
 Later phases may get narrower specialist lanes. Every new lane must have a
 written file boundary and an integration dependency before work begins.
@@ -79,9 +86,10 @@ written file boundary and an integration dependency before work begins.
 6. Specialists do not resolve overlap by silently changing another lane's
    public contract. Contract changes return to the integration owner and the
    interface matrix is updated first.
-7. Public names, S7 class layouts, Rust FFI symbols, error payloads, and
-   generated registration files are integration-sensitive boundaries.
-   Cross-boundary changes require paired R and Rust tests.
+7. Public names, S7 class layouts, the compact Kernel invocation, Rust FFI
+   symbols, error payloads, and generated registration files are
+   integration-sensitive boundaries. Cross-boundary changes require paired R
+   and Rust tests.
 8. No merge commit from `main`, no compatibility-only code, and no drive-by
    cleanup is accepted.
 9. Every landed production-code commit includes focused tests. A commit may
@@ -92,6 +100,8 @@ written file boundary and an integration dependency before work begins.
     integration branch. A specialist branch passing alone is insufficient.
 12. Failed or partial experiments remain outside the integration history
     unless the experiment itself is an agreed, documented proof artifact.
+13. An R responsibility moves into Rust only after the controlled performance
+    evidence, separate ADR, and maintainer approval required by ADR 003.
 
 ## Handoff template
 
@@ -113,7 +123,8 @@ Recommended application order:
 
 - [x] Confirm S7.
 - [x] Confirm the clean vNext break.
-- [x] Confirm Rust-owned mutable state.
+- [x] Confirm the R-first implementation and minimal Rust/Kernel boundary.
+- [x] Establish the benchmark and ADR gate for any additional Rust.
 - [x] Confirm Delta Kernel and Arrow-native reader architecture.
 - [x] Establish the canonical interface/naming matrix.
 - [x] Establish lane ownership and commit handoff rules.
@@ -121,8 +132,8 @@ Recommended application order:
 - [x] Land this roadmap on the integration branch.
 
 Exit gate G0: the committed design packet is internally consistent, public
-names are recorded, and no compatibility work remains in any implementation
-phase.
+names are recorded, the Rust scope is limited by ADR 003, and no compatibility
+work remains in any implementation phase.
 
 ### Phase 1 — independent foundations
 
@@ -145,31 +156,36 @@ phase.
 - [ ] Implement structured condition classes and secret-safe formatting.
 - [ ] Generate and check documentation and namespace registration.
 
-#### Rust/Arrow foundation
+#### Minimal Kernel/Arrow foundation
 
 - [ ] Add the native package skeleton, pinned Rust toolchain policy, and lockfile.
 - [ ] Isolate Delta Kernel concrete APIs behind one internal adapter.
+- [ ] Define one compact R-to-Kernel invocation contract.
 - [ ] Prove zero-, one-, and multi-batch Arrow C Streams.
 - [ ] Prove early release, garbage-collection release, cancellation, errors
   before/after a batch, and panic containment.
 - [ ] Prove `{arrow}` import through the C Stream without IPC.
 - [ ] Prove temporary resources and buffers are not leaked.
+- [ ] Verify that the native crate contains no client, auth, HTTP, protocol,
+  retry, discovery, synthetic-log, or standalone Parquet implementation.
 
 Integration order: land the test/package foundation, refresh and land the S7
-foundation, then refresh and land the Rust/Arrow foundation. If the Rust proof
-needs a minimal R callable before the full S7 layer lands, keep it internal and
-replace it at integration.
+foundation, then refresh and land the minimal Kernel/Arrow foundation. If the
+native proof needs a minimal R callable before the full S7 layer lands, keep it
+internal and replace it at integration.
 
 Exit gate G1: package checks pass locally, the public S7 descriptor spike is
 accepted, and Arrow stream lifecycle proof passes on macOS, Linux, and Windows.
 
 ### Phase 2 — profile, client, discovery, and metadata
 
-- [ ] Parse all supported profile sources and versions in Rust.
-- [ ] Implement bearer, OAuth client credentials, JWT assertion, and basic auth.
-- [ ] Implement expiry checks and single-flight refresh.
-- [ ] Implement pooled HTTP, retry/backoff, pagination, and cancellation.
-- [ ] Connect `SharingClient` and `SharingTable` descriptors to Rust handles.
+- [ ] Parse all supported profile sources and versions in R.
+- [ ] Implement bearer, OAuth client credentials, JWT assertion, and basic auth
+  in R.
+- [ ] Implement expiry checks and single-flight refresh in R.
+- [ ] Implement authenticated HTTP, retry/backoff, pagination, and cancellation
+  in R.
+- [ ] Connect `SharingClient` and `SharingTable` to R-owned client state.
 - [ ] Implement `list_shares()`, `list_schemas()`, and `list_tables()`.
 - [ ] Implement table version, protocol, metadata, and schema calls.
 - [ ] Add protocol fixtures, typed errors, and secret-redaction tests.
@@ -179,16 +195,17 @@ and tested without row reading.
 
 ### Phase 3 — Delta Kernel snapshot stream
 
-- [ ] Validate `SharingRead` in R and Rust.
-- [ ] Negotiate capabilities and response format from a tested allowlist.
-- [ ] Parse response headers and NDJSON incrementally.
-- [ ] Build and guard an atomic synthetic Delta log.
+- [ ] Validate `SharingRead` in R before native invocation.
+- [ ] Negotiate capabilities and response format in R from a tested allowlist.
+- [ ] Parse response headers and NDJSON incrementally in R.
+- [ ] Build an atomic synthetic Delta log in R.
+- [ ] Pass only a compact validated scan invocation and prepared log to Rust.
 - [ ] Execute projection and scan semantics through Delta Kernel.
 - [ ] Enforce exact limits across batch boundaries.
 - [ ] Return a lazy, bounded, single-consumer Arrow C Stream.
 - [ ] Cover empty tables, partitions, nested types, timestamps, column mapping,
   deletion vectors, time travel, malformed input, and mid-stream failure.
-- [ ] Record diagnostic counts without credentials or signed URLs.
+- [ ] Assemble redacted public diagnostics in R from R and Kernel metrics.
 
 Exit gate G3: snapshot correctness/conformance fixtures pass on every
 materialization-neutral stream case, lifecycle cases pass, and performance
@@ -210,7 +227,8 @@ schemas agree, with no IPC or full-table R-vector conversion in the stream path.
 
 - [ ] Implement a separate immutable `SharingChanges` descriptor and planner.
 - [ ] Validate homogeneous version or timestamp bounds before I/O.
-- [ ] Build the versioned synthetic log required by the Kernel CDF API.
+- [ ] Build the versioned synthetic log required by the Kernel CDF API in R.
+- [ ] Invoke the narrow Rust bridge only for the Kernel CDF scan.
 - [ ] Expose only pinned-kernel CDF capabilities.
 - [ ] Cover insert/update/delete metadata and unsupported schema ranges.
 - [ ] Reuse the materializer and lifecycle interfaces without sharing planners.
@@ -220,9 +238,12 @@ outputs on all target platforms; unsupported cases fail before materialization.
 
 ### Phase 6 — protocol Parquet response format
 
-- [ ] Implement the Parquet action path in Rust.
-- [ ] Stream signed objects directly; do not restore package-managed downloads.
-- [ ] Reconstruct partition values, logical field order, and Arrow types.
+- [ ] Parse and normalize Parquet response actions in R.
+- [ ] Represent those actions as an R-prepared Kernel-readable synthetic log.
+- [ ] Let Delta Kernel stream the referenced objects through the same narrow
+  Rust bridge; do not add a standalone Rust Parquet reader.
+- [ ] Reconstruct partition values, logical field order, and Arrow types through
+  R planning plus Kernel semantics.
 - [ ] Apply projection, exact limit, cancellation, and diagnostics consistently.
 - [ ] Prove parity with the Delta-format path where both are valid.
 
@@ -288,6 +309,9 @@ or main-line integration.
   mid-stream error, and process-unload behavior are measured and pass.
 - No credential, signed URL, buffer, thread, or temporary-directory leak is
   accepted.
+- Moving any client/protocol responsibility from R to Rust additionally
+  requires at least a 25% representative end-to-end wall-clock improvement or
+  50% peak-memory reduction, plus a separately approved ADR.
 
 ### Documentation and release readiness
 
@@ -302,8 +326,8 @@ or main-line integration.
 
 | Phase | Lane/commit | Integration status | Evidence |
 |---|---|---|---|
-| 0 | Integration governance | Complete | This roadmap and interface matrix |
+| 0 | Integration governance | Complete | Roadmap, interface matrix, and ADR 003 |
 | 1 | Test/package/CI foundation | Pending handoff | — |
-| 1 | S7 API foundation | Pending handoff | — |
-| 1 | Rust/Arrow foundation | Pending handoff | — |
+| 1 | S7 and R foundation | Pending handoff | — |
+| 1 | Minimal Kernel/Arrow foundation | Pending handoff | — |
 | 2–7 | Feature and hardening lanes | Not started | — |

@@ -6,10 +6,10 @@ Decision date: 2026-07-28
 
 ## Context
 
-The package must execute Delta Kernel correctly, remain highly performant, and
-compose with R Arrow consumers. Converting every batch to R vectors, linking
-against the Arrow R C++ ABI, or writing Arrow IPC between Rust and R would add
-copies and version coupling.
+The package uses R for its client and protocol implementation but must execute
+Delta Kernel correctly and compose with R Arrow consumers. Converting every
+batch to R vectors, linking against the Arrow R C++ ABI, or writing Arrow IPC
+between Rust and R would add copies and version coupling.
 
 Delta Kernel currently has a pre-1.0 Rust API and selects a specific Arrow Rust
 version. The R `{arrow}` package can have a different release cadence.
@@ -26,9 +26,15 @@ version. The R `{arrow}` package can have a different release cadence.
 - Import into `{arrow}` or other engines only through the Arrow C Stream ABI.
 
 Rust-owned mutable state, Delta Kernel isolation, and the Arrow C Stream
-boundary are accepted. The specialist foundation must still prove that
-extendr/rextendr satisfies packaging and lifecycle requirements before the
-binding choice is treated as complete.
+boundary are accepted only for Kernel execution. R owns the client, HTTP,
+protocol, and planning responsibilities described in `adr-003-rust-scope.md`.
+The specialist foundation must still prove that extendr/rextendr satisfies
+packaging and lifecycle requirements before the binding choice is treated as
+complete.
+
+The native library exports Kernel invocation and Arrow stream operations only.
+It must not grow authentication, discovery, Delta Sharing HTTP, NDJSON parsing,
+retry policy, or a separate Parquet reader.
 
 ## Why extendr
 
@@ -48,9 +54,9 @@ understand Arrow objects.
 nanoarrow external pointer
   owns FFI_ArrowArrayStream
     owns Rust RecordBatchReader
-      owns kernel scan + engine/client references
-      owns temporary synthetic log guard
-      owns cancellation token + safe diagnostics
+      owns kernel scan + engine references
+      may retain an R-prepared temporary log guard
+      owns Kernel cancellation + native metrics
 ```
 
 The stream release callback drops this ownership chain. Each batch/array release
