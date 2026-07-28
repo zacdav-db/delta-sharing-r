@@ -110,21 +110,32 @@ deleted.
 
 ## Remaining integration proof
 
-The JSON mapping is specified upstream. The following runtime behavior is not
-proven by this R-only slice and remains a G3 integration gate:
+The JSON mapping is specified upstream. The following runtime behavior remains
+a G3 integration gate:
 
-- the pinned Delta Kernel default engine reads presigned HTTPS data and DV
-  URLs on macOS, Linux, and Windows without changing their encoded query;
-- object-store error paths redact those URLs;
+- the pinned Delta Kernel default engine reads genuine provider-signed HTTPS
+  data and DV URLs on macOS, Linux, and Windows without changing their encoded
+  query;
+- provider-specific object-store error paths redact those URLs;
 - expiry and refresh are coordinated before a stream outlives its URLs;
-- deletion-vector application against a presigned URL remains unproven.
+- deletion-vector application against a genuine provider-signed URL remains
+  unproven.
 
 The committed feature-conformance fixture now proves that a
 Delta Sharing-wrapped inline (`i`) deletion vector passes the production R
 normalizer and synthetic-log writer unchanged, and that Kernel removes its
 selected rows before Arrow handoff. The hermetic test substitutes only the
-presigned data-file URL after normalization. It does not claim the remaining
-absolute (`p`) DV URL or TLS/cross-platform proof.
+absolute data-file URL after normalization.
+
+The opt-in absolute-DV test now proves a separate local slice: an absolute
+(`p`) descriptor whose `raw=1` query is required to obtain an immutable,
+hash-pinned bitmap over trusted HTTPS passes through R unchanged, is fetched
+by Kernel, filters the exact rows, redacts fixed failures, and cleans up. The
+test directly proves that omitting or changing the query key returns HTML, so
+successful filtering demonstrates Kernel query propagation. GitHub's query is
+not signed. A fixed, intentionally invalid signature-key marker only selects
+Kernel's per-object HTTP branch; it does not claim provider-signature or
+expiry semantics.
 
 The current native tests prove the Kernel 0.22 default engine's presigned-URL
 branch against a loopback HTTP server, including the signed query, and prove

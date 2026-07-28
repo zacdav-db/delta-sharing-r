@@ -90,10 +90,14 @@ rather than silently reinterpret it.
 Deletion vectors are deliberately not advertised yet. A committed fixture
 proves that the exact inline (`i`) portable bitmap accepted by the R normalizer
 survives synthetic-log encoding and removes selected physical rows through
-Kernel. However, the Sharing server can also return a presigned absolute (`p`)
-DV URL; that exact descriptor-to-HTTPS-read path remains unproven end to end.
-The `deletionvectors` capability may be restored only after the absolute form
-has equivalent production-path and cross-platform evidence.
+Kernel. The opt-in absolute-DV proof additionally demonstrates that Kernel
+preserves a query required to reach an immutable bitmap over trusted HTTPS and
+applies that bitmap through the same production path. A fixed, intentionally
+invalid signature-key marker selects Kernel's per-object HTTP branch; neither
+that marker nor GitHub's `raw=1` query is a provider signature. The
+`deletionvectors` capability may be restored only after a genuine
+provider-signed absolute (`p`) URL has equivalent
+production-path and hosted cross-platform evidence.
 
 `auto` advertises `delta,parquet`; if the server selects Delta, the retained
 reader-feature allowlist applies, while a selected Parquet response uses the

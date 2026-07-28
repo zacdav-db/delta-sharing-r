@@ -185,15 +185,45 @@ snapshot_matrix_file_uri <- function(path) {
   "deletion_vector_ae7177f2-6d17-4ea8-819b-8d62fa2c5469.bin"
 .absolute_dv_sha256 <-
   "a4e7e6964f4d5271a10b9caae795508bfb293c1be8f74ad0f0aa1a200419a233"
+.absolute_dv_kernel_query_marker <-
+  "X-Amz-Signature=delta-kernel-query-proof"
+.absolute_dv_required_query <- paste0(
+  "raw=1&",
+  .absolute_dv_kernel_query_marker
+)
+.absolute_dv_altered_query <- paste0(
+  "not_raw=1&",
+  .absolute_dv_kernel_query_marker
+)
 
-absolute_dv_https_url <- function(secret) {
+absolute_dv_https_base_url <- function(object_name = .absolute_dv_object_name) {
   paste0(
-    "https://raw.githubusercontent.com/delta-io/delta-kernel-rs/",
+    "https://github.com/delta-io/delta-kernel-rs/blob/",
     .absolute_dv_kernel_commit,
     "/kernel/tests/data/with-short-dv/",
-    .absolute_dv_object_name,
-    "?X-Amz-Signature=",
-    secret
+    object_name
+  )
+}
+
+absolute_dv_https_url <- function(
+  query = .absolute_dv_required_query,
+  object_name = .absolute_dv_object_name
+) {
+  paste0(
+    absolute_dv_https_base_url(object_name),
+    "?",
+    query
+  )
+}
+
+absolute_dv_raw_location <- function(
+  object_name = .absolute_dv_object_name
+) {
+  paste0(
+    "https://github.com/delta-io/delta-kernel-rs/raw/",
+    .absolute_dv_kernel_commit,
+    "/kernel/tests/data/with-short-dv/",
+    object_name
   )
 }
 
@@ -209,11 +239,13 @@ absolute_dv_actions <- function(url, size_in_bytes = 38L) {
   actions
 }
 
-absolute_dv_response_bytes <- function(url) {
+absolute_dv_response <- function(url, follow_redirects = TRUE) {
   response <- httr2::request(url) |>
     httr2::req_timeout(30) |>
+    httr2::req_options(followlocation = follow_redirects) |>
+    httr2::req_error(is_error = function(response) FALSE) |>
     httr2::req_perform()
-  httr2::resp_body_raw(response)
+  response
 }
 
 test_that("absolute deletion vectors remain outside production capabilities", {
@@ -508,13 +540,51 @@ test_that("absolute deletion vectors pass trusted HTTPS through Kernel", {
     ),
     .package = "delta.sharing"
   )
-  secret <- "absolute-dv-proof-query-sentinel"
-  url <- absolute_dv_https_url(secret)
-  object <- absolute_dv_response_bytes(url)
+  url <- absolute_dv_https_url()
+  redirect <- absolute_dv_response(url, follow_redirects = FALSE)
+  expect_identical(httr2::resp_status(redirect), 302L)
+  expect_identical(
+    httr2::resp_header(redirect, "location"),
+    absolute_dv_raw_location()
+  )
+
+  object_response <- absolute_dv_response(url)
+  expect_identical(httr2::resp_status(object_response), 200L)
+  object <- httr2::resp_body_raw(object_response)
   expect_identical(
     unclass(as.character(openssl::sha256(object))),
     .absolute_dv_sha256
   )
+
+  no_query_url <- absolute_dv_https_base_url()
+  no_query_response <- absolute_dv_response(no_query_url)
+  expect_identical(httr2::resp_status(no_query_response), 200L)
+  expect_match(
+    httr2::resp_header(no_query_response, "content-type"),
+    "text/html",
+    fixed = TRUE
+  )
+  expect_false(identical(
+    unclass(as.character(openssl::sha256(
+      httr2::resp_body_raw(no_query_response)
+    ))),
+    .absolute_dv_sha256
+  ))
+
+  altered_query_url <- absolute_dv_https_url(.absolute_dv_altered_query)
+  altered_query_response <- absolute_dv_response(altered_query_url)
+  expect_identical(httr2::resp_status(altered_query_response), 200L)
+  expect_match(
+    httr2::resp_header(altered_query_response, "content-type"),
+    "text/html",
+    fixed = TRUE
+  )
+  expect_false(identical(
+    unclass(as.character(openssl::sha256(
+      httr2::resp_body_raw(altered_query_response)
+    ))),
+    .absolute_dv_sha256
+  ))
 
   gc()
   before <- delta.sharing:::.native_diagnostics()
@@ -556,7 +626,16 @@ test_that("absolute deletion vectors pass trusted HTTPS through Kernel", {
     capture.output(print(diagnostics))
   )
   expect_false(any(grepl(url, safe_output, fixed = TRUE)))
-  expect_false(any(grepl(secret, safe_output, fixed = TRUE)))
+  expect_false(any(grepl(
+    .absolute_dv_required_query,
+    safe_output,
+    fixed = TRUE
+  )))
+  expect_false(any(grepl(
+    .absolute_dv_kernel_query_marker,
+    safe_output,
+    fixed = TRUE
+  )))
 
   data <- delta.sharing:::.materialize_data_frame_stream(opened$stream)
   expect_equal(data$id, c(3, 4))
@@ -599,21 +678,77 @@ test_that("absolute deletion vectors pass trusted HTTPS through Kernel", {
     capture.output(str(condition))
   )
   expect_false(any(grepl(url, failure_output, fixed = TRUE)))
-  expect_false(any(grepl(secret, failure_output, fixed = TRUE)))
+  expect_false(any(grepl(
+    .absolute_dv_required_query,
+    failure_output,
+    fixed = TRUE
+  )))
+  expect_false(any(grepl(
+    .absolute_dv_kernel_query_marker,
+    failure_output,
+    fixed = TRUE
+  )))
   expect_false(file.exists(failed$native$root))
   snapshot_matrix_expect_balanced(before)
 
-  missing_secret <- "absolute-dv-download-failure-sentinel"
-  missing_url <- sub(
-    .absolute_dv_object_name,
-    "missing-deletion-vector.bin",
-    absolute_dv_https_url(missing_secret),
+  altered <- snapshot_matrix_open(
+    snapshot_matrix_wire(
+      absolute_dv_actions(altered_query_url),
+      version = 14
+    ),
+    snapshot_matrix_fixture("feature-deletion-vectors"),
+    sharing_read(test_table()),
+    batch_size = 2L
+  )
+  on.exit(
+    unlink(altered$parent, recursive = TRUE, force = TRUE),
+    add = TRUE
+  )
+  on.exit(altered$stream$release(), add = TRUE)
+
+  altered_condition <- tryCatch(
+    {
+      delta.sharing:::.materialize_data_frame_stream(altered$stream)
+      NULL
+    },
+    error = identity
+  )
+  expect_s3_class(altered_condition, "delta_sharing_kernel_error")
+  expect_identical(
+    conditionMessage(altered_condition),
+    "Delta Kernel could not produce the requested Arrow data."
+  )
+  expect_identical(altered_condition$operation, "read_data_frame")
+  expect_identical(altered_condition$kernel_category, "data_scan")
+  altered_failure_output <- c(
+    conditionMessage(altered_condition),
+    capture.output(str(altered_condition))
+  )
+  expect_false(any(grepl(
+    altered_query_url,
+    altered_failure_output,
     fixed = TRUE
+  )))
+  expect_false(any(grepl(
+    .absolute_dv_altered_query,
+    altered_failure_output,
+    fixed = TRUE
+  )))
+  expect_false(any(grepl(
+    .absolute_dv_kernel_query_marker,
+    altered_failure_output,
+    fixed = TRUE
+  )))
+  expect_false(file.exists(altered$native$root))
+  snapshot_matrix_expect_balanced(before)
+
+  missing_url <- absolute_dv_https_url(
+    object_name = "missing-deletion-vector.bin"
   )
   download_failed <- snapshot_matrix_open(
     snapshot_matrix_wire(
       absolute_dv_actions(missing_url),
-      version = 14
+      version = 15
     ),
     snapshot_matrix_fixture("feature-deletion-vectors"),
     sharing_read(test_table()),
@@ -651,7 +786,12 @@ test_that("absolute deletion vectors pass trusted HTTPS through Kernel", {
     fixed = TRUE
   )))
   expect_false(any(grepl(
-    missing_secret,
+    .absolute_dv_required_query,
+    download_failure_output,
+    fixed = TRUE
+  )))
+  expect_false(any(grepl(
+    .absolute_dv_kernel_query_marker,
     download_failure_output,
     fixed = TRUE
   )))

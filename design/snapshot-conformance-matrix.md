@@ -31,8 +31,9 @@ the same production path. It also records Delta Kernel 0.22.0's typed,
 redacted rejection of unsupported Delta interval metadata. Existing focused
 fixtures separately cover column mapping by ID and deletion-vector filtering.
 
-The matrix also does not replace target-platform evidence for signed HTTPS
-object storage, Windows cancellation, sanitizers, or hosted cross-platform
-package checks. Absolute-path deletion-vector (`storageType = "p"`) access
-remains outside the advertised reader-feature set until a real presigned HTTPS
-proof exists.
+The matrix also does not replace target-platform evidence for provider-signed
+HTTPS object storage, Windows cancellation, sanitizers, or hosted
+cross-platform package checks. The opt-in absolute-DV proof covers a
+query-required trusted-HTTPS redirect, but not genuine provider signature or
+expiry semantics. Absolute-path deletion-vector (`storageType = "p"`) access
+therefore remains outside the advertised reader-feature set.

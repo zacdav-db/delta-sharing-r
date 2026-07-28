@@ -23,7 +23,8 @@ The design packet is read in this order:
 11. `r-read-diagnostics-contract.md` — stream-local, immutable, redacted
     diagnostics and lifecycle boundaries.
 12. `absolute-dv-https-proof.md` — opt-in production-path proof for
-    server-resolved absolute deletion vectors over trusted HTTPS.
+    query-required absolute deletion vectors over trusted HTTPS, plus the
+    remaining provider-signed and hosted release gate.
 13. `api-mock.R` — non-executable illustration of the canonical API.
 
 Implemented R subsystems also carry focused contracts. Snapshot synthetic-log
