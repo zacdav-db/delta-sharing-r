@@ -174,18 +174,23 @@ also normalized as protocol tolerance, not as package-version compatibility.
 
 ## Memory gate
 
-Response bytes are streamed, but the first implementation retains validated
-private file-action objects until the atomic synthetic commit is ready. This is
-bounded at 1,000,000 actions and deliberately remains in R.
+Response bytes and file actions are processed incrementally. Production keeps
+at most one 1,024-record encoded run buffer in R, writes
+permission-restricted action, ID, and path runs, and performs shell-free
+bounded 16-way merges. Separate ID/path merges enforce global duplicate
+rejection; the action merge preserves deterministic type/ID order. The final
+commit is streamed from the merged action run, and run work is removed before
+atomic publication. The one-million-action hard limit remains.
 
-Before the Phase 3 gate closes, benchmark representative manifests at increasing
-file counts (including the largest supported fixture/workload), record peak R
-memory and preparation time, and compare retained decoded-action memory with
-the input manifest and final commit sizes. If retained actions are a material
-peak-memory bottleneck or violate the agreed workload envelope, replace the
-list with a validated, permission-restricted R staging action sink. This
-optimization does not justify moving protocol parsing or log construction to
-Rust.
+The production-path benchmark records both the original material-list baseline
+and the staged implementation. On the Darwin arm64 100,000-file workload,
+staging reduced peak memory above the zero-file baseline from 450.109 MiB to
+153.000 MiB (66.0%) while increasing median preparation time from 45.227 to
+76.753 seconds (69.7%). This is an explicit memory-for-time trade-off, and no
+release RSS/time envelope is agreed. Lifecycle probes for success, write
+failure, and finalization close the response exactly once and leave no
+temporary roots. This R-owned optimization does not justify moving protocol
+parsing or log construction to Rust.
 
 ## Lifetime and redaction
 

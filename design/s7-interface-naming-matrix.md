@@ -61,6 +61,7 @@ Calling `sharing_read(table)` is the concise latest-snapshot form.
 |---|---|---|---|
 | Parsed profile | `SharingProfile` | Validated profile description and opaque credential-source reference; secrets are never printable properties | Public only if explicitly constructed; otherwise created internally |
 | Client | `SharingClient` | Immutable descriptor referring to safe endpoint metadata and an internal R-owned authenticated client context | Locked |
+| Table identifier | `SharingTableIdentifier` | Immutable structured share/schema/table identity that preserves each component exactly | Locked |
 | Table | `SharingTable` | Immutable client reference plus structured share/schema/table identifier | Locked |
 | Snapshot read | `SharingRead` | Immutable projection, time travel, predicate hint, limit, and response-format specification | Locked |
 | Change read | `SharingChanges` | Immutable CDF bounds, projection, and response-format specification | Locked |
@@ -79,6 +80,7 @@ state, Kernel-coupled cancellation/resources, and Arrow buffers stay in Rust.
 |---|---|---|---|
 | Profile | `sharing_profile(source)` | File path, raw JSON, connection, or explicit fields; validates without leaking secrets | Gives explicit construction when needed without making it mandatory |
 | Client | `sharing_client(profile)` | Accepts any supported profile source or a `SharingProfile`; returns `SharingClient` | Keeps the clear package/client terminology |
+| Table identifier | `table_identifier(x, schema = NULL, table = NULL)` | Accepts one three-part string, three structured components, an existing `SharingTableIdentifier`, or a `SharingTable`; returns `SharingTableIdentifier` | Makes exact structured identity reusable without parsing dotted component names |
 | Table | `sharing_table(client, name = NULL, share = NULL, schema = NULL, table = NULL)` | Exactly one three-part `name` or one complete structured triplet; returns `SharingTable` | Supports concise names and identifiers containing dots without URL concatenation |
 | Snapshot read | `sharing_read(table, version = NULL, timestamp = NULL, columns = NULL, limit = NULL, predicate = NULL, response_format = "auto")` | Latest when both time-travel fields are absent; version/timestamp are exclusive | Separates reusable table identity from immutable query configuration |
 | Change read | `sharing_changes(table, starting_version = NULL, ending_version = NULL, starting_timestamp = NULL, ending_timestamp = NULL, columns = NULL, response_format = "auto")` | Requires one start bound; version and timestamp modes cannot mix | Keeps CDF planning distinct while sharing materializers |

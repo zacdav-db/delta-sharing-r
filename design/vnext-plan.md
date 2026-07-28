@@ -52,9 +52,9 @@ ADR and maintainer approval.
 
 ## 2. What informs this design
 
-### Current R package
+### Pre-overhaul repository baseline
 
-The current package:
+The pre-overhaul package:
 
 - is an R6 client and mutable R6 table reader;
 - parses requests and newline-delimited JSON in R;

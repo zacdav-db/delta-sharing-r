@@ -133,10 +133,11 @@ The following work remains before release readiness:
 - `batch_size` is supported; any non-`NULL` `concurrency` value is explicitly
   unsupported.
 - Projected `read_schema()` is not implemented.
-- Large-manifest planning is hard-count-bounded but still retains several
-  whole-manifest R representations. The recorded 100,000-file workload used
-  about 450 MiB above baseline; an R-side bounded staging sink is required
-  before release.
+- Large-manifest planning uses permission-restricted, disk-backed R staging
+  runs instead of retaining whole-manifest action lists. On the recorded
+  100,000-file Darwin arm64 workload this reduced peak memory above baseline
+  by 66.0%, from 450.1 MiB to 153.0 MiB, while increasing preparation time by
+  69.7%, from 45.2 to 76.8 seconds. The release RSS/time envelope remains open.
 - Comparable local performance and lifecycle evidence exists and supports
   keeping the native boundary narrow. Release and target-platform performance
   gates remain unresolved, alongside hosted cross-platform build and check
