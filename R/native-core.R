@@ -37,17 +37,41 @@
   )
 }
 
-.with_native_stream_interrupt <- function(code, operation, stream = NULL) {
+.abort_native_stream_failure <- function(operation) {
+  .abort_delta_sharing(
+    "Delta Kernel could not produce the requested Arrow data.",
+    type = "kernel",
+    operation = operation,
+    kernel_category = "data_scan"
+  )
+}
+
+.with_native_stream_conditions <- function(code, operation, stream = NULL) {
   tryCatch(
     code,
     error = function(condition) {
-      if (!.native_stream_was_interrupted(condition)) {
+      if (inherits(condition, "delta_sharing_error")) {
+        if (!is.null(stream)) {
+          .release_materializer_stream(stream)
+        }
         stop(condition)
       }
-      if (!is.null(stream)) {
-        .release_materializer_stream(stream)
+      if (.native_stream_was_interrupted(condition)) {
+        if (!is.null(stream)) {
+          .release_materializer_stream(stream)
+        }
+        .abort_native_stream_interrupt(operation)
       }
-      .abort_native_stream_interrupt(operation)
+      if (is.null(stream)) {
+        stop(condition)
+      }
+      # At this point a live stream has entered its consumer. Hook-shape
+      # validation and Arrow reader construction happen before this guard;
+      # production code inside it only performs schema and data pulls.
+      # Injected internal consumer hooks intentionally share this public
+      # redaction boundary so their implementation detail cannot escape.
+      .release_materializer_stream(stream)
+      .abort_native_stream_failure(operation)
     },
     interrupt = function(condition) {
       if (!is.null(stream)) {
@@ -74,7 +98,7 @@
   }
 
   function(...) {
-    .with_native_stream_interrupt(
+    .with_native_stream_conditions(
       method(...),
       operation = "read_arrow_stream",
       stream = x

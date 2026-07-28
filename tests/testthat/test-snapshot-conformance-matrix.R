@@ -807,7 +807,7 @@ test_that("mid-stream adapter failure releases the real Kernel stream", {
     before$active_streams + 1
   )
 
-  expect_error(
+  condition <- expect_error(
     delta.sharing:::.materialize_data_frame_stream(
       opened$stream,
       converter = function(stream) {
@@ -815,9 +815,13 @@ test_that("mid-stream adapter failure releases the real Kernel stream", {
         stop("deterministic adapter failure", call. = FALSE)
       }
     ),
-    "deterministic adapter failure",
-    fixed = TRUE
+    class = "delta_sharing_kernel_error"
   )
+  expect_false(grepl(
+    "deterministic adapter failure",
+    conditionMessage(condition),
+    fixed = TRUE
+  ))
   expect_identical(rows_seen, 1L)
   expect_false(nanoarrow::nanoarrow_pointer_is_valid(opened$stream))
   expect_false(file.exists(opened$native$root))

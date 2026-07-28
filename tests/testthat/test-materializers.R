@@ -171,14 +171,14 @@ test_that("adapter failures deterministically release stream ownership", {
   start <- delta.sharing:::.native_diagnostics()$active_streams
 
   data_stream <- delta.sharing:::.native_test_stream(batches = 3L)
-  expect_error(
+  condition <- expect_error(
     delta.sharing:::.materialize_data_frame_stream(
       data_stream,
       converter = function(stream) stop("data adapter failed")
     ),
-    "data adapter failed",
-    fixed = TRUE
+    class = "delta_sharing_kernel_error"
   )
+  expect_false(grepl("data adapter failed", conditionMessage(condition)))
   expect_false(nanoarrow::nanoarrow_pointer_is_valid(data_stream))
 
   arrow_stream <- delta.sharing:::.native_test_stream(batches = 3L)
@@ -203,7 +203,10 @@ test_that("adapter failures deterministically release stream ownership", {
     data_frame_from_stream = function(stream) {
       delta.sharing:::.materialize_data_frame_stream(
         stream,
-        converter = function(stream) stop(secret)
+        converter = function(stream) {
+          stream$get_next()
+          stop(secret)
+        }
       )
     }
   ))
@@ -211,10 +214,82 @@ test_that("adapter failures deterministically release stream ownership", {
     delta.sharing:::.with_execution_interface(interface, {
       read_data_frame(materializer_read())
     }),
-    class = "delta_sharing_protocol_error"
+    class = "delta_sharing_kernel_error"
   )
   expect_false(grepl(secret, conditionMessage(condition), fixed = TRUE))
   expect_false(nanoarrow::nanoarrow_pointer_is_valid(public_stream))
+  expect_identical(
+    delta.sharing:::.native_diagnostics()$active_streams,
+    start
+  )
+})
+
+test_that("public stream and data-frame pulls type and redact mid-stream failures", {
+  gc()
+  start <- delta.sharing:::.native_diagnostics()$active_streams
+  direct_stream <- NULL
+  eager_stream <- NULL
+
+  direct_interface <- delta.sharing:::.new_execution_interface(list(
+    read_arrow_stream = function(specification, ...) {
+      direct_stream <<- delta.sharing:::.native_test_stream(
+        batches = 3L,
+        error_after = 1L
+      )
+      direct_stream
+    }
+  ))
+  direct_condition <- delta.sharing:::.with_execution_interface(
+    direct_interface,
+    {
+      stream <- read_arrow_stream(materializer_read())
+      expect_s3_class(stream$get_next(), "nanoarrow_array")
+      expect_error(
+        stream$get_next(),
+        class = "delta_sharing_kernel_error"
+      )
+    }
+  )
+
+  expect_identical(
+    conditionMessage(direct_condition),
+    "Delta Kernel could not produce the requested Arrow data."
+  )
+  expect_identical(direct_condition$operation, "read_arrow_stream")
+  expect_identical(direct_condition$kernel_category, "data_scan")
+  expect_false(grepl(
+    "synthetic reader error",
+    conditionMessage(direct_condition),
+    fixed = TRUE
+  ))
+  expect_false(nanoarrow::nanoarrow_pointer_is_valid(direct_stream))
+
+  eager_interface <- delta.sharing:::.new_execution_interface(list(
+    read_arrow_stream = function(specification, ...) {
+      eager_stream <<- delta.sharing:::.native_test_stream(
+        batches = 3L,
+        error_after = 1L
+      )
+      eager_stream
+    },
+    data_frame_from_stream =
+      delta.sharing:::.materialize_data_frame_stream
+  ))
+  eager_condition <- expect_error(
+    delta.sharing:::.with_execution_interface(eager_interface, {
+      read_data_frame(materializer_read())
+    }),
+    class = "delta_sharing_kernel_error"
+  )
+
+  expect_identical(eager_condition$operation, "read_data_frame")
+  expect_identical(eager_condition$kernel_category, "data_scan")
+  expect_false(grepl(
+    "synthetic reader error",
+    conditionMessage(eager_condition),
+    fixed = TRUE
+  ))
+  expect_false(nanoarrow::nanoarrow_pointer_is_valid(eager_stream))
   expect_identical(
     delta.sharing:::.native_diagnostics()$active_streams,
     start
@@ -232,8 +307,7 @@ test_that("Arrow reader failures close transferred stream ownership", {
 
   expect_error(
     delta.sharing:::.materialize_arrow_stream(stream),
-    "synthetic reader error after 1 batches",
-    fixed = TRUE
+    class = "delta_sharing_kernel_error"
   )
   expect_false(nanoarrow::nanoarrow_pointer_is_valid(stream))
   expect_identical(

@@ -67,52 +67,57 @@ test_that("release and garbage collection drop native ownership", {
   expect_equal(collected$cancelled_streams, start$cancelled_streams + 2)
 })
 
-test_that("reader errors and panics are contained as R errors", {
+test_that("reader errors and panics are typed, redacted, and release streams", {
   error_before_first <- delta.sharing:::.native_test_stream(
     batches = 3L,
     error_after = 0L
   )
-  expect_error(
+  condition <- expect_error(
     error_before_first$get_next(),
-    "synthetic reader error after 0 batches",
-    fixed = TRUE
+    class = "delta_sharing_kernel_error"
   )
-  error_before_first$release()
+  expect_identical(
+    conditionMessage(condition),
+    "Delta Kernel could not produce the requested Arrow data."
+  )
+  expect_identical(condition$operation, "read_arrow_stream")
+  expect_identical(condition$kernel_category, "data_scan")
+  expect_false(nanoarrow::nanoarrow_pointer_is_valid(error_before_first))
 
   panic_before_first <- delta.sharing:::.native_test_stream(
     batches = 3L,
     panic_after = 0L
   )
-  expect_error(
+  condition <- expect_error(
     panic_before_first$get_next(),
-    "panic contained at Arrow stream boundary",
-    fixed = TRUE
+    class = "delta_sharing_kernel_error"
   )
-  panic_before_first$release()
+  expect_false(grepl("panic", conditionMessage(condition), fixed = TRUE))
+  expect_false(nanoarrow::nanoarrow_pointer_is_valid(panic_before_first))
 
   error_stream <- delta.sharing:::.native_test_stream(
     batches = 3L,
     error_after = 1L
   )
   expect_s3_class(error_stream$get_next(), "nanoarrow_array")
-  expect_error(
+  condition <- expect_error(
     error_stream$get_next(),
-    "synthetic reader error after 1 batches",
-    fixed = TRUE
+    class = "delta_sharing_kernel_error"
   )
-  error_stream$release()
+  expect_false(grepl("synthetic reader error", conditionMessage(condition)))
+  expect_false(nanoarrow::nanoarrow_pointer_is_valid(error_stream))
 
   panic_stream <- delta.sharing:::.native_test_stream(
     batches = 3L,
     panic_after = 1L
   )
   expect_s3_class(panic_stream$get_next(), "nanoarrow_array")
-  expect_error(
+  condition <- expect_error(
     panic_stream$get_next(),
-    "panic contained at Arrow stream boundary",
-    fixed = TRUE
+    class = "delta_sharing_kernel_error"
   )
-  panic_stream$release()
+  expect_false(grepl("panic", conditionMessage(condition), fixed = TRUE))
+  expect_false(nanoarrow::nanoarrow_pointer_is_valid(panic_stream))
 })
 
 test_that("the C control boundary rejects invalid or reused pointers", {

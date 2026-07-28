@@ -26,6 +26,8 @@ finalization release the native scan and private temporary state. Explicit
 release is recommended when consumption stops early.
 An R interrupt during a pull cancels and releases the native stream, then
 raises a typed \code{delta_sharing_cancelled} condition on the owning R thread.
+A Kernel or Arrow pull failure also releases the stream and raises a fixed,
+redacted \code{delta_sharing_kernel_error}.
 
 \code{SharingRead} supports Delta- and Parquet-format snapshot responses through
 the same Kernel stream. \code{SharingChanges} supports Delta-format explicit

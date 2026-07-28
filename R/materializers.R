@@ -68,7 +68,7 @@
     )
   }
   on.exit(try(reader$Close(), silent = TRUE), add = TRUE)
-  .with_native_stream_interrupt(
+  .with_native_stream_conditions(
     reader$read_table(),
     operation = "read_arrow",
     stream = stream
@@ -85,7 +85,7 @@
     stop("`converter` must be a function.", call. = FALSE)
   }
 
-  result <- .with_native_stream_interrupt(
+  result <- .with_native_stream_conditions(
     converter(stream),
     operation = "read_data_frame",
     stream = stream

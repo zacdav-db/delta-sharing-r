@@ -161,11 +161,20 @@ test_that("Kernel and object-store errors are fixed and secret-free", {
   )
 
   stream <- delta.sharing:::.native_snapshot_stream(signed)
-  condition <- expect_error(stream$get_next(), "Delta Kernel data scan failed")
+  condition <- expect_error(
+    stream$get_next(),
+    class = "delta_sharing_kernel_error"
+  )
   message <- conditionMessage(condition)
+  expect_identical(
+    message,
+    "Delta Kernel could not produce the requested Arrow data."
+  )
+  expect_identical(condition$operation, "read_arrow_stream")
+  expect_identical(condition$kernel_category, "data_scan")
   expect_false(grepl(secret, message, fixed = TRUE))
   expect_false(grepl("127.0.0.1", message, fixed = TRUE))
-  stream$release()
+  expect_false(nanoarrow::nanoarrow_pointer_is_valid(stream))
 })
 
 test_that("prepared-log cleanup follows explicit release, exhaustion, and GC", {

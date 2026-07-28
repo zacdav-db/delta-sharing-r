@@ -146,7 +146,7 @@ test_that("R interrupt mapping releases once and preserves other errors", {
     )
   )
   condition <- expect_error(
-    delta.sharing:::.with_native_stream_interrupt(
+    delta.sharing:::.with_native_stream_conditions(
       stop(sentinel),
       operation = "read_arrow_stream",
       stream = sentinel_stream
@@ -162,7 +162,7 @@ test_that("R interrupt mapping releases once and preserves other errors", {
     class = c("interrupt", "condition")
   )
   condition <- expect_error(
-    delta.sharing:::.with_native_stream_interrupt(
+    delta.sharing:::.with_native_stream_conditions(
       signalCondition(r_interrupt),
       operation = "read_arrow",
       stream = r_interrupt_stream
@@ -176,7 +176,7 @@ test_that("R interrupt mapping releases once and preserves other errors", {
   expect_equal(after$active_streams, start$active_streams)
   expect_equal(after$cancelled_streams, start$cancelled_streams + 2)
   expect_error(
-    delta.sharing:::.with_native_stream_interrupt(
+    delta.sharing:::.with_native_stream_conditions(
       stop("ordinary adapter failure"),
       operation = "read_data_frame"
     ),
@@ -185,23 +185,48 @@ test_that("R interrupt mapping releases once and preserves other errors", {
   )
 })
 
-test_that("interruptible streams preserve normal errors and returned arrays", {
+test_that("typed stream failures retain their class and release ownership", {
+  start <- delta.sharing:::.native_diagnostics()
+  stream <- delta.sharing:::.native_test_stream(batches = 10L)
+
+  condition <- expect_error(
+    delta.sharing:::.with_native_stream_conditions(
+      delta.sharing:::.abort_delta_sharing(
+        "Typed stream failure.",
+        type = "protocol",
+        operation = "read_data_frame"
+      ),
+      operation = "read_data_frame",
+      stream = stream
+    ),
+    class = "delta_sharing_protocol_error"
+  )
+
+  expect_identical(conditionMessage(condition), "Typed stream failure.")
+  expect_identical(condition$operation, "read_data_frame")
+  expect_false(nanoarrow::nanoarrow_pointer_is_valid(stream))
+  after <- delta.sharing:::.native_diagnostics()
+  expect_equal(after$active_streams, start$active_streams)
+  expect_equal(after$cancelled_streams, start$cancelled_streams + 1)
+})
+
+test_that("interruptible streams type normal errors and preserve arrays", {
   stream <- delta.sharing:::.native_test_stream(
     batches = 2L,
     error_after = 1L
   )
+  prototype <- nanoarrow::infer_nanoarrow_ptype(stream$get_schema())
   first <- stream$get_next()
   expect_equal(first$length, 3L)
   condition <- expect_error(
     stream$get_next(),
-    "synthetic reader error after 1 batches",
-    fixed = TRUE
+    class = "delta_sharing_kernel_error"
   )
   expect_false(inherits(condition, "delta_sharing_cancelled"))
   first_data <- nanoarrow::convert_array(
     first,
-    to = nanoarrow::infer_nanoarrow_ptype(stream$get_schema())
+    to = prototype
   )
   expect_equal(nrow(first_data), 3L)
-  stream$release()
+  expect_false(nanoarrow::nanoarrow_pointer_is_valid(stream))
 })

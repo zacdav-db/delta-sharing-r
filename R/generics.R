@@ -296,6 +296,8 @@ read_schema <- S7::new_generic(
 #' release is recommended when consumption stops early.
 #' An R interrupt during a pull cancels and releases the native stream, then
 #' raises a typed `delta_sharing_cancelled` condition on the owning R thread.
+#' A Kernel or Arrow pull failure also releases the stream and raises a fixed,
+#' redacted `delta_sharing_kernel_error`.
 #'
 #' `SharingRead` supports Delta- and Parquet-format snapshot responses through
 #' the same Kernel stream. `SharingChanges` supports Delta-format explicit
