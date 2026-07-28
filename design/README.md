@@ -16,6 +16,10 @@ The design packet is read in this order:
    execution, injection, and lifecycle boundary.
 8. `api-mock.R` — non-executable illustration of the canonical API.
 
+Implemented R subsystems also carry focused contracts. Snapshot synthetic-log
+mapping, atomic publication, privacy, and lifetime are recorded in
+`r-synthetic-log-contract.md`.
+
 When documents differ, the maintainer decisions and clean-break policy in the
 roadmap and interface matrix take precedence.
 

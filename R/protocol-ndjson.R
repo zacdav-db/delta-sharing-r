@@ -293,6 +293,7 @@
         protocol,
         "minWriterVersion",
         operation,
+        required = identical(response_format, "delta"),
         maximum = 2^32 - 1
       ),
       reader_features = .wire_character_array(
@@ -386,14 +387,14 @@
         operation,
         nonnegative = FALSE
       ),
-      location = .wire_character(metadata, "location", operation),
+      location = .wire_character(envelope, "location", operation),
       auxiliary_locations = .wire_character_array(
-        metadata,
+        envelope,
         "auxiliaryLocations",
         operation
       ),
       access_modes = .wire_character_array(
-        metadata,
+        envelope,
         "accessModes",
         operation
       )
@@ -458,7 +459,7 @@
   if (identical(known, "file")) {
     return(.new_ndjson_action(
       "file",
-      .new_opaque_json(value$file),
+      .normalize_snapshot_file_action(value$file, operation),
       line_number
     ))
   }
