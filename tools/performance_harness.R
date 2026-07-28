@@ -158,6 +158,12 @@ ph_profile_r <- function(callback) {
   profile_available <- isTRUE(unname(capabilities("profmem")))
   baseline <- gc(reset = TRUE)
   profiling <- FALSE
+  on.exit({
+    if (profiling) {
+      Rprofmem(NULL)
+      profiling <- FALSE
+    }
+  }, add = TRUE)
   error <- NULL
   value <- NULL
   started <- as.numeric(Sys.time())

@@ -76,6 +76,32 @@ stopifnot(identical(
   4 * 1024^2
 ))
 
+if (isTRUE(unname(capabilities("profmem")))) {
+  interrupted <- structure(
+    list(message = "performance harness test interrupt"),
+    class = c("interrupt", "condition")
+  )
+  caught <- tryCatch(
+    ph_profile_r(function() {
+      signalCondition(interrupted)
+    }),
+    interrupt = identity
+  )
+  stopifnot(inherits(caught, "interrupt"))
+
+  # A fresh profile must be usable immediately after the non-error condition
+  # exits ph_profile_r(). This exercises the on.exit Rprofmem(NULL) cleanup.
+  followup_profile <- tempfile(
+    "delta-sharing-r-rprofmem-followup-",
+    fileext = ".out"
+  )
+  on.exit(unlink(followup_profile, force = TRUE), add = TRUE)
+  Rprofmem(followup_profile, threshold = 0L)
+  invisible(raw(4096L))
+  Rprofmem(NULL)
+  stopifnot(file.exists(followup_profile))
+}
+
 minimal_measurements <- list(
   action_staging = list(),
   manifest = list(),

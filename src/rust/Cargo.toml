@@ -20,6 +20,9 @@ delta_kernel = { version = "=0.22.0", default-features = false, features = [
 same-file = "=1.0.6"
 url = "=2.5.8"
 
+[dev-dependencies]
+parquet = { version = "=57.3.0", default-features = false, features = ["arrow", "snap"] }
+
 [profile.release]
 lto = "thin"
 panic = "unwind"
