@@ -445,15 +445,66 @@
   action
 }
 
+.normalize_cdf_file <- function(value) {
+  label <- "CDF file action"
+  if (!.snapshot_has_valid_names(value)) {
+    .snapshot_log_abort("CDF file action must be a JSON object.")
+  }
+  .snapshot_reject_unknown_fields(
+    value,
+    c("path", "partitionValues", "size", "dataChange", "tags"),
+    label
+  )
+
+  data_change <- if ("dataChange" %in% names(value)) {
+    .snapshot_logical(value, "dataChange", label)
+  } else {
+    FALSE
+  }
+  if (isTRUE(data_change)) {
+    .snapshot_log_abort("CDF file actions must not set `dataChange` to true.")
+  }
+
+  action <- list(
+    path = .snapshot_https_url(
+      .snapshot_required_string(value, "path", label),
+      "CDF file path"
+    ),
+    partitionValues = .snapshot_string_map(
+      value,
+      "partitionValues",
+      label
+    ),
+    size = .snapshot_whole_number(value, "size", label),
+    dataChange = FALSE
+  )
+  if ("tags" %in% names(value)) {
+    action["tags"] <- list(
+      .snapshot_string_map(
+        value,
+        "tags",
+        label,
+        required = FALSE,
+        nullable = TRUE
+      )
+    )
+  }
+  action
+}
+
 .new_private_snapshot_file <- function(id,
                                        action_type,
                                        delta_action,
-                                       expiration_timestamp = NULL) {
+                                       expiration_timestamp = NULL,
+                                       version = NULL,
+                                       timestamp = NULL) {
   state <- new.env(parent = emptyenv())
   state$id <- id
   state$action_type <- action_type
   state$delta_action <- delta_action
   state$expiration_timestamp <- expiration_timestamp
+  state$version <- version
+  state$timestamp <- timestamp
   lockEnvironment(state, bindings = TRUE)
 
   file <- new.env(parent = emptyenv())
@@ -497,7 +548,7 @@
           "Snapshot file wrapper"
         )
       }
-      for (field in c("version", "timestamp", "size")) {
+      wire_numbers <- lapply(c("version", "timestamp", "size"), function(field) {
         .snapshot_whole_number(
           value,
           field,
@@ -505,7 +556,8 @@
           required = FALSE,
           nonnegative = !identical(field, "timestamp")
         )
-      }
+      })
+      names(wire_numbers) <- c("version", "timestamp", "size")
       expiration_timestamp <- .snapshot_whole_number(
         value,
         "expirationTimestamp",
@@ -527,23 +579,29 @@
         )
       }
       if (identical(action_type, "cdc")) {
-        .abort_delta_sharing(
-          "Snapshot preparation does not accept change-data actions.",
-          type = "unsupported",
-          operation = .snapshot_log_operation,
-          feature = "cdf"
-        )
+        if (!identical(operation, "query_table_changes")) {
+          .abort_delta_sharing(
+            "Snapshot preparation does not accept change-data actions.",
+            type = "unsupported",
+            operation = .snapshot_log_operation,
+            feature = "cdf"
+          )
+        }
       }
       action <- if (identical(action_type, "add")) {
         .normalize_snapshot_add(single$add)
-      } else {
+      } else if (identical(action_type, "remove")) {
         .normalize_snapshot_remove(single$remove)
+      } else {
+        .normalize_cdf_file(single$cdc)
       }
       .new_private_snapshot_file(
         id,
         action_type,
         stats::setNames(list(action), action_type),
-        expiration_timestamp = expiration_timestamp
+        expiration_timestamp = expiration_timestamp,
+        version = wire_numbers$version,
+        timestamp = wire_numbers$timestamp
       )
     },
     delta_sharing_error = function(cnd) {
@@ -579,6 +637,14 @@
 
 .snapshot_file_expiration_timestamp <- function(file) {
   .snapshot_file_state(file)$expiration_timestamp
+}
+
+.snapshot_file_version <- function(file) {
+  .snapshot_file_state(file)$version
+}
+
+.snapshot_file_timestamp <- function(file) {
+  .snapshot_file_state(file)$timestamp
 }
 
 .validate_snapshot_protocol <- function(protocol) {

@@ -103,6 +103,106 @@
   stream
 }
 
+.native_cdf_stream <- function(table_location,
+                               start_version,
+                               end_version,
+                               columns = NULL,
+                               batch_size = 65536L) {
+  guard <- NULL
+  cleanup_root <- NULL
+  if (inherits(table_location, "delta_sharing_snapshot_log")) {
+    guard <- table_location
+    state <- .validate_snapshot_log_guard(guard)
+    if (!identical(state$read_kind, "cdf") ||
+        !identical(state$start_version, start_version) ||
+        !identical(state$end_version, end_version)) {
+      .abort_delta_sharing(
+        "The prepared CDF log does not match the native provider bounds.",
+        type = "validation",
+        operation = "read_arrow_stream"
+      )
+    }
+    table_location <- .snapshot_log_path(guard)
+    cleanup_root <- state$root
+  } else {
+    if (!.is_scalar_character(table_location)) {
+      .abort_delta_sharing(
+        "`table_location` must be one non-empty local path, `file://` URI, or prepared CDF log.",
+        type = "validation",
+        operation = "read_arrow_stream"
+      )
+    }
+    if (!startsWith(table_location, "file://")) {
+      if (grepl("^[A-Za-z][A-Za-z0-9+.-]*://", table_location)) {
+        .abort_delta_sharing(
+          "The native CDF scan accepts only a local path or `file://` URI.",
+          type = "validation",
+          operation = "read_arrow_stream"
+        )
+      }
+      if (!dir.exists(table_location)) {
+        .abort_delta_sharing(
+          "The prepared local CDF table does not exist.",
+          type = "validation",
+          operation = "read_arrow_stream"
+        )
+      }
+      table_location <- normalizePath(
+        table_location,
+        winslash = "/",
+        mustWork = FALSE
+      )
+    }
+  }
+
+  start_version <- .cdf_whole_version(start_version, "`start_version`")
+  end_version <- .cdf_whole_version(end_version, "`end_version`")
+  if (end_version < start_version) {
+    .abort_delta_sharing(
+      "`end_version` must be greater than or equal to `start_version`.",
+      type = "validation",
+      operation = "read_arrow_stream"
+    )
+  }
+  columns <- .normalize_columns(columns)
+  if (!is.null(columns) && anyDuplicated(tolower(columns))) {
+    .abort_delta_sharing(
+      "`columns` must not contain duplicate Delta names ignoring case.",
+      type = "validation",
+      operation = "read_arrow_stream"
+    )
+  }
+  if (!is.numeric(batch_size) ||
+      length(batch_size) != 1L ||
+      is.na(batch_size) ||
+      !is.finite(batch_size) ||
+      batch_size < 1 ||
+      batch_size > 1000000 ||
+      batch_size != floor(batch_size)) {
+    .abort_delta_sharing(
+      "`batch_size` must be one whole number between 1 and 1000000.",
+      type = "validation",
+      operation = "read_arrow_stream"
+    )
+  }
+
+  stream <- nanoarrow::nanoarrow_allocate_array_stream()
+  .Call(
+    C_delta_sharing_stream_from_cdf,
+    stream,
+    table_location,
+    cleanup_root,
+    columns,
+    start_version,
+    end_version,
+    as.integer(batch_size)
+  )
+  if (!is.null(guard)) {
+    state$released <- TRUE
+  }
+  stream
+}
+
 .native_diagnostics <- function() {
   .Call(C_delta_sharing_native_diagnostics)
 }

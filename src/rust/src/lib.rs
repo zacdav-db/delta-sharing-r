@@ -12,10 +12,10 @@ use std::ptr::NonNull;
 
 use arrow_array::ffi_stream::FFI_ArrowArrayStream;
 
-use crate::kernel::adapter::SnapshotReadOptions;
+use crate::kernel::adapter::{CdfReadOptions, SnapshotReadOptions};
 use crate::stream::{fixture_stream, FixtureStreamConfig};
 
-const ABI_VERSION: u32 = 2;
+const ABI_VERSION: u32 = 3;
 const STATUS_OK: c_int = 0;
 const STATUS_ERROR: c_int = 1;
 const STATUS_PANIC: c_int = 2;
@@ -211,6 +211,101 @@ pub unsafe extern "C" fn delta_sharing_native_populate_snapshot_stream(
                 Some(root) => {
                     let cleanup =
                         stream::PreparedLogCleanup::try_new(&root, &cleanup_table_location)?;
+                    Ok(stream::record_batch_stream_with_resource(reader, cleanup))
+                }
+                None => Ok(stream::record_batch_stream(reader)),
+            }
+        })
+    })
+}
+
+/// Populate a nanoarrow-owned ArrowArrayStream from a prepared versioned CDF log.
+///
+/// R has already resolved and validated the inclusive provider bounds and
+/// constructed the private local log. This boundary owns only Kernel
+/// `TableChanges`, Arrow streaming, and prepared-root cleanup.
+///
+/// # Safety
+///
+/// The pointer and string requirements match
+/// `delta_sharing_native_populate_snapshot_stream`.
+#[no_mangle]
+pub unsafe extern "C" fn delta_sharing_native_populate_cdf_stream(
+    destination: *mut FFI_ArrowArrayStream,
+    table_location: *const c_char,
+    cleanup_root: *const c_char,
+    columns: *const *const c_char,
+    column_count: usize,
+    start_version: u64,
+    end_version: u64,
+    batch_size: u32,
+    error_buffer: *mut c_char,
+    error_capacity: usize,
+) -> c_int {
+    ffi_boundary(error_buffer, error_capacity, || {
+        let destination = NonNull::new(destination)
+            .ok_or_else(|| "nanoarrow stream pointer is NULL".to_string())?;
+        if table_location.is_null() {
+            return Err("`table_location` pointer is NULL".to_string());
+        }
+        if column_count > 10_000 {
+            return Err("`column_count` must be at most 10000".to_string());
+        }
+        if column_count > 0 && columns.is_null() {
+            return Err("`columns` pointer is NULL for a non-empty projection".to_string());
+        }
+
+        // SAFETY: the C shim retains all strings for this synchronous call.
+        let table_location = unsafe { CStr::from_ptr(table_location) }
+            .to_str()
+            .map_err(|_| "`table_location` must be valid UTF-8".to_string())?
+            .to_string();
+        let cleanup_root = if cleanup_root.is_null() {
+            None
+        } else {
+            Some(
+                unsafe { CStr::from_ptr(cleanup_root) }
+                    .to_str()
+                    .map_err(|_| "`cleanup_root` must be valid UTF-8".to_string())?
+                    .to_string(),
+            )
+        };
+        let projected_columns = if column_count == 0 {
+            None
+        } else {
+            // SAFETY: the pointer-array bounds were validated above.
+            let raw_columns = unsafe { std::slice::from_raw_parts(columns, column_count) };
+            let mut projected = Vec::with_capacity(column_count);
+            for (index, column) in raw_columns.iter().copied().enumerate() {
+                if column.is_null() {
+                    return Err(format!("`columns[[{}]]` pointer is NULL", index + 1));
+                }
+                let column = unsafe { CStr::from_ptr(column) }
+                    .to_str()
+                    .map_err(|_| format!("`columns[[{}]]` must be valid UTF-8", index + 1))?;
+                projected.push(column.to_string());
+            }
+            Some(projected)
+        };
+
+        let cleanup_table_location = table_location.clone();
+        let options = CdfReadOptions::try_new(
+            table_location,
+            projected_columns,
+            start_version,
+            end_version,
+            batch_size as usize,
+        )?;
+        stream::populate_stream(destination, || {
+            let reader = kernel::adapter::cdf_reader(options)?;
+            match cleanup_root {
+                Some(root) => {
+                    let cleanup = stream::PreparedLogCleanup::try_new_cdf(
+                        &root,
+                        &cleanup_table_location,
+                        start_version,
+                        end_version,
+                    )?;
                     Ok(stream::record_batch_stream_with_resource(reader, cleanup))
                 }
                 None => Ok(stream::record_batch_stream(reader)),

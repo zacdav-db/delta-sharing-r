@@ -1,0 +1,4 @@
+{"protocol":{"version":1,"deltaProtocol":{"minReaderVersion":1,"minWriterVersion":7,"writerFeatures":["changeDataFeed"]}}}
+{"metaData":{"version":1,"deltaMetadata":{"id":"cdf-table","format":{"provider":"parquet","options":{}},"schemaString":"{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}}]}","partitionColumns":[],"configuration":{"delta.enableChangeDataFeed":"true"}}}}
+{"file":{"id":"removed-one","version":1,"timestamp":1734480105872,"expirationTimestamp":1790000000000,"deltaSingleAction":{"remove":{"path":"https://storage.example.test/removed-one.parquet?sig=redacted","deletionTimestamp":1734480105000,"dataChange":true,"extendedFileMetadata":true,"partitionValues":{},"size":500}}}}
+{"endStreamAction":{"nextPageToken":"cdf-page-two","minUrlExpirationTimestamp":1790000000000}}

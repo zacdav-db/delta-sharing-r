@@ -1,8 +1,8 @@
 # R control-plane execution wiring contract
 
-Status: implemented Phase 2 control plane, Phase 3 snapshot stream, and Phase 4
-eager materializers
-Branch owner: `codex/r-materializers-vnext`
+Status: implemented Phase 2 control plane, Phase 3 snapshot stream, Phase 4
+eager materializers, and Phase 5 explicit-version CDF path
+Branch owner: `codex/cdf-planning-vnext`
 
 This contract connects the immutable S7 client/table descriptors to the
 R-owned authenticated HTTP, pagination, JSON/NDJSON, and safe-projection
@@ -34,6 +34,17 @@ invocation. R cleanup stays armed through native construction and the prepared
 state is marked released only after native code confirms cleanup ownership.
 The returned Arrow C Stream owns the temporary root through exhaustion,
 explicit release, or finalization.
+
+The CDF callback uses a separate GET planner and the same pull-only transport.
+R requires explicit inclusive starting and ending versions for executable CDF,
+requests historical metadata and protocol actions, validates every provider
+version and timestamp, and publishes true-version commit files plus the
+start-minus-one checkpoint bootstrap. The native callback receives only the
+prepared guard, exact inclusive versions, projection, and batch size. It calls
+Kernel `TableChanges` and transfers the same cleanup ownership as snapshots.
+Timestamp-bound and open-ended descriptors remain valid immutable
+specifications but raise typed unsupported conditions before HTTP until their
+resolved end version can be proven exactly.
 
 ## Eager materializer boundary
 
@@ -94,10 +105,11 @@ are converted to fixed protocol conditions. URLs, paths, page tokens, request
 bodies, authorization values, server bodies, and provider record contents are
 never attached to conditions.
 
-`SharingChanges` is rejected with a typed CDF-unsupported condition before
-I/O. `batch_size` is bounded before planning. Every non-NULL `concurrency` is
+`batch_size` is bounded before planning. Every non-NULL `concurrency` is
 explicitly rejected until that option reaches the compact native invocation;
-it is never silently ignored.
+it is never silently ignored. CDF rejects Parquet responses, absent or
+conflicting provider versions/timestamps, invalid or out-of-range actions, and
+timestamp/open-ended execution without a fallback reader. Versions without
+actions are represented by intentional empty commits inside the proven bounds.
 
-The callback set still excludes `read_schema`, CDF planning, and public
-diagnostics.
+The callback set still excludes `read_schema` and public diagnostics.

@@ -238,23 +238,67 @@ pub(crate) fn record_batch_stream_with_resource<T: Any + Send>(
 pub(crate) struct PreparedLogCleanup {
     root: PathBuf,
     identity: FileIdentity,
+    log_entries: Vec<String>,
+    #[cfg(test)]
+    full_log_shape_checks: Arc<std::sync::atomic::AtomicUsize>,
     #[cfg(test)]
     injected_failures: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl PreparedLogCleanup {
     pub(crate) fn try_new(root: &str, table_location: &str) -> Result<Self, String> {
+        Self::try_new_with_log_entries(
+            root,
+            table_location,
+            vec!["00000000000000000000.json".to_string()],
+        )
+    }
+
+    pub(crate) fn try_new_cdf(
+        root: &str,
+        table_location: &str,
+        start_version: u64,
+        end_version: u64,
+    ) -> Result<Self, String> {
+        const MAX_CDF_VERSIONS: u64 = 1_000_000;
+
+        let version_count = end_version
+            .checked_sub(start_version)
+            .and_then(|difference| difference.checked_add(1))
+            .filter(|count| *count <= MAX_CDF_VERSIONS)
+            .ok_or_else(|| "prepared CDF cleanup range is invalid".to_string())?;
+        let bootstrap_entries = if start_version > 0 { 2 } else { 0 };
+        let mut log_entries = Vec::with_capacity(version_count as usize + bootstrap_entries);
+        if let Some(checkpoint_version) = start_version.checked_sub(1) {
+            log_entries.push(format!("{checkpoint_version:020}.checkpoint.parquet"));
+            log_entries.push("_last_checkpoint".to_string());
+        }
+        for version in start_version..=end_version {
+            log_entries.push(format!("{version:020}.json"));
+        }
+        Self::try_new_with_log_entries(root, table_location, log_entries)
+    }
+
+    fn try_new_with_log_entries(
+        root: &str,
+        table_location: &str,
+        mut log_entries: Vec<String>,
+    ) -> Result<Self, String> {
         let root_path = Path::new(root);
         let table_path = Path::new(table_location);
         if !root_path.is_absolute() || !table_path.is_absolute() {
             return Err("prepared-log cleanup paths must be absolute".to_string());
         }
 
-        let canonical_root = validate_prepared_root(root_path, table_path)?;
+        log_entries.sort();
+        let canonical_root = validate_prepared_root(root_path, table_path, &log_entries)?;
         let identity = file_identity(&canonical_root)?;
         Ok(Self {
             root: canonical_root,
             identity,
+            log_entries,
+            #[cfg(test)]
+            full_log_shape_checks: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             #[cfg(test)]
             injected_failures: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         })
@@ -264,7 +308,11 @@ impl PreparedLogCleanup {
         PendingCleanup {
             root: self.root.clone(),
             identity: self.identity.clone(),
-            stage: CleanupStage::Commit,
+            log_entries: self.log_entries.clone(),
+            next_log_entry: 0,
+            stage: CleanupStage::LogEntries,
+            #[cfg(test)]
+            full_log_shape_checks: self.full_log_shape_checks.clone(),
             #[cfg(test)]
             injected_failures: self.injected_failures.clone(),
         }
@@ -279,6 +327,11 @@ impl PreparedLogCleanup {
     #[cfg(test)]
     fn injected_failure_controller(&self) -> Arc<std::sync::atomic::AtomicUsize> {
         self.injected_failures.clone()
+    }
+
+    #[cfg(test)]
+    fn full_log_shape_checks_controller(&self) -> Arc<std::sync::atomic::AtomicUsize> {
+        self.full_log_shape_checks.clone()
     }
 }
 
@@ -310,7 +363,11 @@ fn file_identity(path: &Path) -> Result<FileIdentity, String> {
     Ok(FileIdentity(collector.bytes))
 }
 
-fn validate_prepared_root(root_path: &Path, table_path: &Path) -> Result<PathBuf, String> {
+fn validate_prepared_root(
+    root_path: &Path,
+    table_path: &Path,
+    expected_log_entries: &[String],
+) -> Result<PathBuf, String> {
     let root_metadata = require_plain_directory(
         root_path,
         "prepared-log cleanup root is not a private directory",
@@ -348,11 +405,13 @@ fn validate_prepared_root(root_path: &Path, table_path: &Path) -> Result<PathBuf
     require_exact_entries(&owned_table, &["_delta_log"])?;
     let log_directory = owned_table.join("_delta_log");
     require_plain_directory(&log_directory, "prepared local table log is invalid")?;
-    require_exact_entries(&log_directory, &["00000000000000000000.json"])?;
-    require_plain_file(
-        &log_directory.join("00000000000000000000.json"),
-        "prepared local table commit is invalid",
-    )?;
+    require_exact_entry_names(&log_directory, expected_log_entries)?;
+    for entry in expected_log_entries {
+        require_plain_file(
+            &log_directory.join(entry),
+            "prepared local table log entry is invalid",
+        )?;
+    }
 
     let canonical_table = std::fs::canonicalize(table_path)
         .map_err(|_| "prepared local table is unavailable".to_string())?;
@@ -397,6 +456,14 @@ fn metadata_is_link_like(metadata: &std::fs::Metadata) -> bool {
 }
 
 fn require_exact_entries(path: &Path, expected: &[&str]) -> Result<(), String> {
+    let expected = expected
+        .iter()
+        .map(|name| (*name).to_string())
+        .collect::<Vec<_>>();
+    require_exact_entry_names(path, &expected)
+}
+
+fn require_exact_entry_names(path: &Path, expected: &[String]) -> Result<(), String> {
     let mut actual = std::fs::read_dir(path)
         .map_err(|_| "prepared-log directory shape is invalid".to_string())?
         .map(|entry| {
@@ -408,10 +475,7 @@ fn require_exact_entries(path: &Path, expected: &[&str]) -> Result<(), String> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     actual.sort();
-    let mut expected = expected
-        .iter()
-        .map(|name| (*name).to_string())
-        .collect::<Vec<_>>();
+    let mut expected = expected.to_vec();
     expected.sort();
     if actual != expected {
         return Err("prepared-log directory shape is invalid".to_string());
@@ -421,7 +485,7 @@ fn require_exact_entries(path: &Path, expected: &[&str]) -> Result<(), String> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CleanupStage {
-    Commit,
+    LogEntries,
     LogDirectory,
     Table,
     Marker,
@@ -431,7 +495,7 @@ enum CleanupStage {
 impl CleanupStage {
     fn next(self) -> Option<Self> {
         match self {
-            Self::Commit => Some(Self::LogDirectory),
+            Self::LogEntries => Some(Self::LogDirectory),
             Self::LogDirectory => Some(Self::Table),
             Self::Table => Some(Self::Marker),
             Self::Marker => Some(Self::Root),
@@ -443,7 +507,11 @@ impl CleanupStage {
 struct PendingCleanup {
     root: PathBuf,
     identity: FileIdentity,
+    log_entries: Vec<String>,
+    next_log_entry: usize,
     stage: CleanupStage,
+    #[cfg(test)]
+    full_log_shape_checks: Arc<std::sync::atomic::AtomicUsize>,
     #[cfg(test)]
     injected_failures: Arc<std::sync::atomic::AtomicUsize>,
 }
@@ -471,6 +539,12 @@ impl PendingCleanup {
                 return CleanupOutcome::Retry(self);
             }
 
+            if self.stage == CleanupStage::LogEntries {
+                self.next_log_entry += 1;
+                if self.next_log_entry < self.log_entries.len() {
+                    continue;
+                }
+            }
             match self.stage.next() {
                 Some(next) => self.stage = next,
                 None => return CleanupOutcome::Complete,
@@ -505,8 +579,6 @@ impl PendingCleanup {
         let marker = self.root.join(".delta-sharing-r-prepared-log");
         let table = self.root.join("table");
         let log = table.join("_delta_log");
-        let commit = log.join("00000000000000000000.json");
-
         let marker_is_valid = || {
             require_plain_file(&marker, "invalid").is_ok()
                 && std::fs::read_to_string(&marker).ok().as_deref()
@@ -514,17 +586,22 @@ impl PendingCleanup {
         };
 
         match self.stage {
-            CleanupStage::Commit => {
+            CleanupStage::LogEntries => {
+                let Some(current) = self.log_entries.get(self.next_log_entry) else {
+                    return false;
+                };
                 require_exact_entries(&self.root, &[".delta-sharing-r-prepared-log", "table"])
                     .is_ok()
                     && marker_is_valid()
                     && require_plain_directory(&table, "invalid").is_ok()
                     && require_exact_entries(&table, &["_delta_log"]).is_ok()
                     && require_plain_directory(&log, "invalid").is_ok()
-                    && require_exact_entries(&log, &["00000000000000000000.json"]).is_ok()
-                    && require_plain_file(&commit, "invalid").is_ok()
+                    && require_plain_file(&log.join(current), "invalid").is_ok()
             }
             CleanupStage::LogDirectory => {
+                #[cfg(test)]
+                self.full_log_shape_checks
+                    .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
                 require_exact_entries(&self.root, &[".delta-sharing-r-prepared-log", "table"])
                     .is_ok()
                     && marker_is_valid()
@@ -568,7 +645,9 @@ impl PendingCleanup {
         let table = self.root.join("table");
         let log = table.join("_delta_log");
         match self.stage {
-            CleanupStage::Commit => std::fs::remove_file(log.join("00000000000000000000.json")),
+            CleanupStage::LogEntries => {
+                std::fs::remove_file(log.join(&self.log_entries[self.next_log_entry]))
+            }
             CleanupStage::LogDirectory => std::fs::remove_dir(log),
             CleanupStage::Table => std::fs::remove_dir(table),
             CleanupStage::Marker => {
@@ -851,6 +930,24 @@ mod tests {
         }
     }
 
+    fn prepared_cdf_root(label: &str, start_version: u64, end_version: u64) -> (PathBuf, PathBuf) {
+        let (root, table) = prepared_root(label);
+        let log = table.join("_delta_log");
+        fs::remove_file(log.join("00000000000000000000.json")).unwrap();
+        if let Some(checkpoint_version) = start_version.checked_sub(1) {
+            fs::write(
+                log.join(format!("{checkpoint_version:020}.checkpoint.parquet")),
+                "checkpoint",
+            )
+            .unwrap();
+            fs::write(log.join("_last_checkpoint"), "{}\n").unwrap();
+        }
+        for version in start_version..=end_version {
+            fs::write(log.join(format!("{version:020}.json")), "{}\n").unwrap();
+        }
+        (root, table)
+    }
+
     #[test]
     fn empty_one_and_many_batches_round_trip() {
         for expected_batches in [0, 1, 4] {
@@ -1037,6 +1134,65 @@ mod tests {
         assert!(root.exists());
         fs::remove_dir_all(root).unwrap();
         fs::remove_dir_all(unrelated).unwrap();
+    }
+
+    #[test]
+    fn prepared_cdf_cleanup_requires_the_exact_bounded_log_shape() {
+        let (root, table) = prepared_cdf_root("cdf-valid", 1, 2);
+        let cleanup =
+            PreparedLogCleanup::try_new_cdf(root.to_str().unwrap(), table.to_str().unwrap(), 1, 2)
+                .unwrap();
+        drop(cleanup);
+        assert!(!root.exists());
+
+        let (root, table) = prepared_cdf_root("cdf-extra", 1, 2);
+        fs::write(
+            table.join("_delta_log").join("00000000000000000003.json"),
+            "{}\n",
+        )
+        .unwrap();
+        assert!(PreparedLogCleanup::try_new_cdf(
+            root.to_str().unwrap(),
+            table.to_str().unwrap(),
+            1,
+            2,
+        )
+        .is_err());
+        assert!(root.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn prepared_cdf_cleanup_accepts_start_zero_without_a_bootstrap_checkpoint() {
+        let (root, table) = prepared_cdf_root("cdf-zero", 0, 2);
+        let cleanup =
+            PreparedLogCleanup::try_new_cdf(root.to_str().unwrap(), table.to_str().unwrap(), 0, 2)
+                .unwrap();
+        drop(cleanup);
+        assert!(!root.exists());
+    }
+
+    #[test]
+    fn prepared_cdf_cleanup_does_not_rescan_the_remaining_range_per_file() {
+        const END_VERSION: u64 = 2_047;
+
+        let (root, table) = prepared_cdf_root("cdf-linear", 0, END_VERSION);
+        let cleanup = PreparedLogCleanup::try_new_cdf(
+            root.to_str().unwrap(),
+            table.to_str().unwrap(),
+            0,
+            END_VERSION,
+        )
+        .unwrap();
+        let full_log_shape_checks = cleanup.full_log_shape_checks_controller();
+        drop(cleanup);
+
+        assert!(!root.exists());
+        assert_eq!(
+            full_log_shape_checks.load(std::sync::atomic::Ordering::Acquire),
+            1,
+            "cleanup must enumerate the whole log only once after deleting owned entries"
+        );
     }
 
     #[test]

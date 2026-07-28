@@ -14,7 +14,9 @@ use delta_kernel::engine::arrow_conversion::TryIntoArrow;
 use delta_kernel::engine::arrow_data::EngineDataArrowExt;
 use delta_kernel::engine::default::DefaultEngineBuilder;
 use delta_kernel::object_store::local::LocalFileSystem;
+use delta_kernel::table_changes::TableChanges;
 use delta_kernel::{DeltaResult, Engine, EngineData, Snapshot, SnapshotRef};
+use url::Url;
 
 const MAX_BATCH_SIZE: usize = 1_000_000;
 const MAX_PROJECTION_COLUMNS: usize = 10_000;
@@ -25,6 +27,15 @@ pub(crate) struct SnapshotReadOptions {
     table_location: String,
     columns: Option<Vec<String>>,
     limit: Option<u64>,
+    batch_size: usize,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CdfReadOptions {
+    table_location: String,
+    columns: Option<Vec<String>>,
+    start_version: u64,
+    end_version: u64,
     batch_size: usize,
 }
 
@@ -76,6 +87,71 @@ impl SnapshotReadOptions {
             batch_size,
         })
     }
+}
+
+impl CdfReadOptions {
+    pub(crate) fn try_new(
+        table_location: String,
+        columns: Option<Vec<String>>,
+        start_version: u64,
+        end_version: u64,
+        batch_size: usize,
+    ) -> Result<Self, String> {
+        validate_table_location(&table_location)?;
+        validate_batch_size(batch_size)?;
+        validate_projection(columns.as_ref())?;
+        if end_version < start_version {
+            return Err(
+                "`end_version` must be greater than or equal to `start_version`".to_string(),
+            );
+        }
+        Ok(Self {
+            table_location,
+            columns,
+            start_version,
+            end_version,
+            batch_size,
+        })
+    }
+}
+
+fn validate_batch_size(batch_size: usize) -> Result<(), String> {
+    if !(1..=MAX_BATCH_SIZE).contains(&batch_size) {
+        return Err(format!(
+            "`batch_size` must be between 1 and {MAX_BATCH_SIZE}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_projection(columns: Option<&Vec<String>>) -> Result<(), String> {
+    let Some(columns) = columns else {
+        return Ok(());
+    };
+    if columns.is_empty() {
+        return Err("`columns` must be NULL or contain at least one name".to_string());
+    }
+    if columns.len() > MAX_PROJECTION_COLUMNS {
+        return Err(format!(
+            "`columns` must contain at most {MAX_PROJECTION_COLUMNS} names"
+        ));
+    }
+
+    let mut seen = HashSet::with_capacity(columns.len());
+    for column in columns {
+        if column.is_empty() {
+            return Err("`columns` must not contain empty names".to_string());
+        }
+        if column.as_bytes().contains(&0) {
+            return Err("`columns` must not contain NUL bytes".to_string());
+        }
+        if !seen.insert(column.to_lowercase()) {
+            return Err(format!(
+                "`columns` contains the duplicate Delta column name `{column}`"
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_table_location(table_location: &str) -> Result<(), String> {
@@ -142,11 +218,15 @@ pub(crate) fn snapshot_reader(
 
     Ok(Box::new(KernelRecordBatchReader {
         schema: Arc::new(arrow_schema),
+        physical_schema: None,
+        output_projection: None,
         source,
         // These fields intentionally retain the engine and snapshot until the
         // Arrow stream is exhausted or released early.
         _engine: engine,
-        _snapshot: snapshot,
+        _owner: KernelReadOwner::Snapshot {
+            _snapshot: snapshot,
+        },
         pending: None,
         pending_offset: 0,
         remaining: options.limit,
@@ -155,13 +235,129 @@ pub(crate) fn snapshot_reader(
     }))
 }
 
+fn local_table_url(table_location: &str) -> Result<Url, String> {
+    if table_location.starts_with("file://") {
+        let url = Url::parse(table_location)
+            .map_err(|_| "`table_location` is not a valid local file URI".to_string())?;
+        if url.scheme() != "file" {
+            return Err("`table_location` must use the local file scheme".to_string());
+        }
+        Ok(url)
+    } else {
+        Url::from_directory_path(table_location)
+            .map_err(|_| "`table_location` is not a valid absolute local path".to_string())
+    }
+}
+
+pub(crate) fn cdf_reader(
+    options: CdfReadOptions,
+) -> Result<Box<dyn RecordBatchReader + Send>, String> {
+    const CDF_COLUMNS: [&str; 3] = ["_change_type", "_commit_version", "_commit_timestamp"];
+
+    let engine: Arc<dyn Engine> =
+        Arc::new(DefaultEngineBuilder::new(Arc::new(LocalFileSystem::new())).build());
+    let table_root = local_table_url(&options.table_location)?;
+    let changes = Arc::new(
+        TableChanges::try_new(
+            table_root,
+            engine.as_ref(),
+            options.start_version,
+            Some(options.end_version),
+        )
+        .map_err(|_| "Delta Kernel CDF preparation failed".to_string())?,
+    );
+
+    let output_logical_schema = match options.columns.as_ref() {
+        Some(columns) => changes
+            .schema()
+            .project(columns)
+            .map_err(|_| "Delta Kernel CDF projection validation failed".to_string())?,
+        None => Arc::new(changes.schema().clone()),
+    };
+    let mut physical_logical_schema = output_logical_schema.clone();
+    let mut output_projection = None;
+    if let Some(columns) = options.columns.as_ref() {
+        let mut physical_columns = columns.clone();
+        for cdf_column in CDF_COLUMNS {
+            if !physical_columns
+                .iter()
+                .any(|column| column.eq_ignore_ascii_case(cdf_column))
+            {
+                physical_columns.push(cdf_column.to_string());
+            }
+        }
+        let metadata_only = columns
+            .iter()
+            .all(|column| CDF_COLUMNS.contains(&column.to_lowercase().as_str()));
+        if metadata_only {
+            let hidden = changes
+                .schema()
+                .fields()
+                .find(|field| !CDF_COLUMNS.contains(&field.name().to_lowercase().as_str()))
+                .ok_or_else(|| {
+                    "Delta Kernel CDF metadata-only projection requires one data column".to_string()
+                })?;
+            physical_columns.push(hidden.name().to_string());
+        }
+        physical_logical_schema = changes
+            .schema()
+            .project(&physical_columns)
+            .map_err(|_| "Delta Kernel CDF projection validation failed".to_string())?;
+        output_projection = (physical_columns.len() != columns.len())
+            .then(|| (0..columns.len()).collect::<Vec<_>>());
+    }
+
+    let scan = changes
+        .clone()
+        .scan_builder()
+        .with_schema(physical_logical_schema)
+        .build()
+        .map_err(|_| "Delta Kernel CDF scan planning failed".to_string())?;
+    let physical_arrow_schema: Schema = scan
+        .logical_schema()
+        .as_ref()
+        .try_into_arrow()
+        .map_err(|_| "Delta Kernel CDF physical schema conversion failed".to_string())?;
+    let output_arrow_schema: Schema = output_logical_schema
+        .as_ref()
+        .try_into_arrow()
+        .map_err(|_| "Delta Kernel CDF logical schema conversion failed".to_string())?;
+    let source = scan
+        .execute(engine.clone())
+        .map_err(|_| "Delta Kernel CDF scan initialization failed".to_string())?;
+    let source: KernelDataIterator = Box::new(source);
+
+    Ok(Box::new(KernelRecordBatchReader {
+        schema: Arc::new(output_arrow_schema),
+        physical_schema: output_projection
+            .as_ref()
+            .map(|_| Arc::new(physical_arrow_schema)),
+        output_projection,
+        source,
+        _engine: engine,
+        _owner: KernelReadOwner::TableChanges { _changes: changes },
+        pending: None,
+        pending_offset: 0,
+        remaining: None,
+        batch_size: options.batch_size,
+        terminal: false,
+    }))
+}
+
 type KernelDataIterator = Box<dyn Iterator<Item = DeltaResult<Box<dyn EngineData>>> + Send>;
+
+enum KernelReadOwner {
+    Snapshot { _snapshot: SnapshotRef },
+    TableChanges { _changes: Arc<TableChanges> },
+}
 
 struct KernelRecordBatchReader {
     schema: ArrowSchemaRef,
+    physical_schema: Option<ArrowSchemaRef>,
+    output_projection: Option<Vec<usize>>,
     source: KernelDataIterator,
     _engine: Arc<dyn Engine>,
-    _snapshot: SnapshotRef,
+    _owner: KernelReadOwner,
     pending: Option<RecordBatch>,
     pending_offset: usize,
     remaining: Option<u64>,
@@ -191,13 +387,36 @@ impl KernelRecordBatchReader {
             if batch.num_rows() == 0 {
                 continue;
             }
-            let batch = match batch.with_schema(self.schema.clone()) {
+            let batch_schema = self
+                .physical_schema
+                .clone()
+                .unwrap_or_else(|| self.schema.clone());
+            let batch = match batch.with_schema(batch_schema) {
                 Ok(batch) => batch,
                 Err(_) => {
                     return Some(Err(ArrowError::SchemaError(
                         "Delta Kernel returned a batch outside its logical schema".to_string(),
                     )));
                 }
+            };
+            let batch = match self.output_projection.as_ref() {
+                Some(projection) => match batch.project(projection) {
+                    Ok(batch) => match batch.with_schema(self.schema.clone()) {
+                        Ok(batch) => batch,
+                        Err(_) => {
+                            return Some(Err(ArrowError::SchemaError(
+                                "Delta Kernel returned a batch outside its projected schema"
+                                    .to_string(),
+                            )));
+                        }
+                    },
+                    Err(_) => {
+                        return Some(Err(ArrowError::SchemaError(
+                            "Delta Kernel CDF output projection failed".to_string(),
+                        )));
+                    }
+                },
+                None => batch,
             };
 
             self.pending = Some(batch);
@@ -271,12 +490,16 @@ pub(crate) fn smoke() -> Result<&'static str, String> {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::fs::FileTimes;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::thread;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    use arrow_array::{Int64Array, StringArray, TimestampMicrosecondArray};
+    use delta_kernel::table_changes::TableChanges;
 
     use super::*;
 
@@ -324,6 +547,44 @@ mod tests {
         include_bytes!("../../../../tests/testthat/fixtures/delta/local-table/part-00000.parquet")
     }
 
+    fn bounded_cdf_fixture() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/testthat/fixtures/delta/cdf")
+    }
+
+    fn copy_fixture_directory(source: &Path, target: &Path) {
+        fs::create_dir_all(target).unwrap();
+        for entry in fs::read_dir(source).unwrap() {
+            let entry = entry.unwrap();
+            let source_path = entry.path();
+            let target_path = target.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                copy_fixture_directory(&source_path, &target_path);
+            } else {
+                fs::copy(source_path, target_path).unwrap();
+            }
+        }
+    }
+
+    fn set_modified_millis(path: &Path, millis: u64) {
+        let file = fs::OpenOptions::new().write(true).open(path).unwrap();
+        file.set_times(FileTimes::new().set_modified(UNIX_EPOCH + Duration::from_millis(millis)))
+            .unwrap();
+    }
+
+    fn prepared_bounded_cdf_table() -> TestDirectory {
+        let table = TestDirectory::new("bounded-cdf");
+        copy_fixture_directory(&bounded_cdf_fixture(), table.path());
+        set_modified_millis(
+            &table.path().join("_delta_log/00000000000000000001.json"),
+            1_734_480_105_872,
+        );
+        set_modified_millis(
+            &table.path().join("_delta_log/00000000000000000002.json"),
+            1_734_480_106_177,
+        );
+        table
+    }
+
     fn write_commit(table: &Path, action_path: Option<&str>, protocol_version: u32) {
         let schema = r#"{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"long\",\"nullable\":false,\"metadata\":{}},{\"name\":\"group\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}},{\"name\":\"value\",\"type\":\"double\",\"nullable\":true,\"metadata\":{}},{\"name\":\"active\",\"type\":\"boolean\",\"nullable\":false,\"metadata\":{}}]}"#;
         let mut lines = vec![
@@ -351,6 +612,234 @@ mod tests {
     fn pinned_kernel_default_engine_constructs() {
         let message = smoke().expect("kernel/default-engine smoke path must construct");
         assert!(message.contains("Delta Kernel"));
+    }
+
+    #[test]
+    fn bounded_true_version_log_preserves_cdf_metadata() {
+        const VERSION_1_MILLIS: u64 = 1_734_480_105_872;
+        const VERSION_2_MILLIS: u64 = 1_734_480_106_177;
+
+        let table = prepared_bounded_cdf_table();
+
+        let engine: Arc<dyn Engine> =
+            Arc::new(DefaultEngineBuilder::new(Arc::new(LocalFileSystem::new())).build());
+        let table_root = url::Url::from_directory_path(table.path()).unwrap();
+        let changes = TableChanges::try_new(table_root, engine.as_ref(), 1, Some(2)).unwrap();
+        let logical_schema = changes
+            .schema()
+            .project(&["id", "_change_type", "_commit_version", "_commit_timestamp"])
+            .unwrap();
+        let scan = changes
+            .into_scan_builder()
+            .with_schema(logical_schema)
+            .build()
+            .unwrap();
+        let source = scan.execute(engine).unwrap();
+
+        let mut observed = Vec::new();
+        for data in source {
+            let batch = data.unwrap().try_into_record_batch().unwrap();
+            let change_type = batch
+                .column(1)
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .unwrap();
+            let commit_version = batch
+                .column(2)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap();
+            let commit_timestamp = batch
+                .column(3)
+                .as_any()
+                .downcast_ref::<TimestampMicrosecondArray>()
+                .unwrap();
+            for row in 0..batch.num_rows() {
+                observed.push((
+                    change_type.value(row).to_string(),
+                    commit_version.value(row),
+                    commit_timestamp.value(row),
+                ));
+            }
+        }
+
+        assert!(!observed.is_empty());
+        assert!(observed.iter().any(|row| row.1 == 1));
+        assert!(observed.iter().any(|row| row.1 == 2));
+        for (change_type, version, timestamp) in observed {
+            match version {
+                1 => {
+                    assert_eq!(change_type, "delete");
+                    assert_eq!(timestamp, VERSION_1_MILLIS as i64 * 1_000);
+                }
+                2 => {
+                    assert_eq!(change_type, "insert");
+                    assert_eq!(timestamp, VERSION_2_MILLIS as i64 * 1_000);
+                }
+                _ => panic!("provider version was rebased to {version}"),
+            }
+        }
+    }
+
+    #[test]
+    fn cdf_reader_metadata_only_projection_is_exact_and_panic_free() {
+        let table = prepared_bounded_cdf_table();
+        let columns = vec![
+            "_change_type".to_string(),
+            "_commit_version".to_string(),
+            "_commit_timestamp".to_string(),
+        ];
+        let reader = cdf_reader(
+            CdfReadOptions::try_new(
+                table.path().to_string_lossy().into_owned(),
+                Some(columns.clone()),
+                1,
+                2,
+                3,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            reader
+                .schema()
+                .fields()
+                .iter()
+                .map(|field| field.name().as_str())
+                .collect::<Vec<_>>(),
+            columns
+        );
+        let batches = reader.collect::<Result<Vec<_>, _>>().unwrap();
+        assert!(!batches.is_empty());
+        assert!(batches.iter().all(|batch| batch.num_columns() == 3));
+        assert!(batches.iter().all(|batch| batch.num_rows() <= 3));
+    }
+
+    #[test]
+    fn cdf_reader_uses_inclusive_provider_bounds() {
+        let table = prepared_bounded_cdf_table();
+        let versions_for = |end_version| {
+            let reader = cdf_reader(
+                CdfReadOptions::try_new(
+                    table.path().to_string_lossy().into_owned(),
+                    Some(vec!["id".to_string(), "_commit_version".to_string()]),
+                    1,
+                    end_version,
+                    64,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            reader
+                .flat_map(|batch| {
+                    let batch = batch.unwrap();
+                    batch
+                        .column(1)
+                        .as_any()
+                        .downcast_ref::<Int64Array>()
+                        .unwrap()
+                        .values()
+                        .to_vec()
+                })
+                .collect::<Vec<_>>()
+        };
+
+        let through_two = versions_for(2);
+        assert!(through_two.contains(&1));
+        assert!(through_two.contains(&2));
+        let through_one = versions_for(1);
+        assert!(!through_one.is_empty());
+        assert!(through_one.iter().all(|version| *version == 1));
+    }
+
+    #[test]
+    fn cdf_reader_supports_a_zero_start_without_a_checkpoint() {
+        let table = TestDirectory::new("cdf-zero-start");
+        fs::write(table.path().join("part-00000.parquet"), fixture_parquet()).unwrap();
+        write_commit(table.path(), Some("part-00000.parquet"), 1);
+        let commit = table.path().join("_delta_log/00000000000000000000.json");
+        let contents = fs::read_to_string(&commit)
+            .unwrap()
+            .replace(
+                r#""minWriterVersion":2"#,
+                r#""minWriterVersion":7,"writerFeatures":["changeDataFeed"]"#,
+            )
+            .replace(
+                r#""configuration":{}"#,
+                r#""configuration":{"delta.enableChangeDataFeed":"true"}"#,
+            );
+        fs::write(&commit, contents).unwrap();
+        set_modified_millis(&commit, 1_734_480_100_000);
+
+        let reader = cdf_reader(
+            CdfReadOptions::try_new(
+                table.path().to_string_lossy().into_owned(),
+                Some(vec![
+                    "id".to_string(),
+                    "_change_type".to_string(),
+                    "_commit_version".to_string(),
+                ]),
+                0,
+                0,
+                64,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let batches = reader.collect::<Result<Vec<_>, _>>().unwrap();
+        assert!(!batches.is_empty());
+        for batch in batches {
+            let change_type = batch
+                .column(1)
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .unwrap();
+            let commit_version = batch
+                .column(2)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap();
+            assert!(change_type.iter().flatten().all(|value| value == "insert"));
+            assert!(commit_version.iter().flatten().all(|value| value == 0));
+        }
+    }
+
+    #[test]
+    fn bounded_cdf_range_with_no_files_returns_schema_and_no_rows() {
+        let table = prepared_bounded_cdf_table();
+        let version_one = table.path().join("_delta_log/00000000000000000001.json");
+        let head = fs::read_to_string(&version_one)
+            .unwrap()
+            .lines()
+            .take(2)
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&version_one, format!("{head}\n")).unwrap();
+        fs::write(
+            table.path().join("_delta_log/00000000000000000002.json"),
+            "",
+        )
+        .unwrap();
+        set_modified_millis(&version_one, 1_734_480_105_872);
+
+        let reader = cdf_reader(
+            CdfReadOptions::try_new(
+                table.path().to_string_lossy().into_owned(),
+                Some(vec![
+                    "_change_type".to_string(),
+                    "_commit_version".to_string(),
+                    "_commit_timestamp".to_string(),
+                ]),
+                1,
+                2,
+                64,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(reader.schema().fields().len(), 3);
+        assert!(reader.collect::<Result<Vec<_>, _>>().unwrap().is_empty());
     }
 
     #[test]
@@ -471,6 +960,8 @@ mod tests {
                         let mut request = vec![0_u8; 8192];
                         let bytes_read = connection.read(&mut request).unwrap();
                         let request = String::from_utf8_lossy(&request[..bytes_read]);
+                        assert!(request.starts_with("GET "));
+                        assert!(!request.starts_with("PROPFIND "));
                         assert!(request.contains("X-Amz-Signature=url-secret"));
                         write!(
                             connection,

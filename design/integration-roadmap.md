@@ -234,13 +234,15 @@ schemas agree, with no IPC or full-table R-vector conversion in the stream path.
 
 ### Phase 5 — Change Data Feed
 
-- [ ] Implement a separate immutable `SharingChanges` descriptor and planner.
-- [ ] Validate homogeneous version or timestamp bounds before I/O.
-- [ ] Build the versioned synthetic log required by the Kernel CDF API in R.
-- [ ] Invoke the narrow Rust bridge only for the Kernel CDF scan.
-- [ ] Expose only pinned-kernel CDF capabilities.
+- [x] Implement a separate immutable `SharingChanges` descriptor and planner.
+- [x] Validate homogeneous version or timestamp bounds before I/O.
+- [x] Build the versioned synthetic log required by the Kernel CDF API in R.
+- [x] Invoke the narrow Rust bridge only for the Kernel CDF scan.
+- [x] Expose only pinned-kernel CDF capabilities. Execution currently requires
+  explicit inclusive version bounds; timestamp and open-ended descriptors fail
+  with typed unsupported conditions before HTTP.
 - [ ] Cover insert/update/delete metadata and unsupported schema ranges.
-- [ ] Reuse the materializer and lifecycle interfaces without sharing planners.
+- [x] Reuse the materializer and lifecycle interfaces without sharing planners.
 
 Exit gate G5: supported CDF fixtures pass across stream, Arrow, and data-frame
 outputs on all target platforms; unsupported cases fail before materialization.
@@ -348,16 +350,17 @@ or main-line integration.
 | 3 | R snapshot request/planning (`0b1a709`) | Integrated | Pull-only Query Table transport, bounded incremental NDJSON, pagination consistency, expiry enforcement, and prepared-log invocation |
 | 3 | Kernel snapshot execution (`cc71c58`, `941fd46`) | Integrated publicly | Real Kernel Snapshot/Scan, projection, exact limits, bounded Arrow batches, public stream dispatch, and prepared-log lifecycle; platform proof remains open |
 | 4 | Eager materializers (`a42e189`) | Integrated | Arrow and data-frame outputs consume one lazy Arrow stream without IPC or a second scan |
-| 5–7 | CDF, Parquet normalization, remaining hardening | Active or open | Exact CDF provider-version preservation is proven against Kernel 0.22; implementation and remaining completion gates stay active |
-| 7 | R coverage hardening (`d1598b8`) | Integrated | Exact combined-tree coverage is 90.79%; tooling and CI enforce the final 90% R gate |
-| 7 | Rust coverage evidence | Integrated-tree gate passing | Exact Rust line coverage is 88.69% with 28 tests passing; CI enforces the 85% gate |
+| 5 | Explicit-version CDF (`4913f19`) | Integrated | Separate R planner/log, exact inclusive provider versions, Kernel `TableChanges`, shared materializers, typed pre-I/O rejection for timestamp/open-ended ranges |
+| 6–7 | Parquet normalization and remaining hardening | Active or open | The R-owned Parquet-to-Kernel mapping is proven; implementation and remaining completion gates stay active |
+| 7 | R coverage hardening (`d1598b8`, `4913f19`) | Integrated-tree gate passing | Exact combined snapshot/CDF coverage is 91.34%; tooling and CI enforce the final 90% R gate |
+| 7 | Rust coverage evidence | Integrated-tree gate passing | Exact snapshot/CDF Rust line coverage is 85.76% with 36 tests passing; CI enforces the 85% gate |
 | 7 | Rust dependency policy | Integrated-tree gate passing | Pinned `cargo-deny` passes advisory, dependency-rule, license, and source checks with four reviewed transitive advisory exceptions |
 
 Current integration evidence: the R planning and native execution handoffs each
 pass built-source package checks on macOS arm64, and the integrated native tree
-passes strict clippy plus 28 Rust tests. The public snapshot stream and eager
-materializers pass built-source package checks, and exact integrated R line
-coverage is 90.79% against the enforced 90% gate. Exact integrated Rust line
-coverage is 88.69% against the enforced 85% gate. Both coverage gates require a
-final rerun after the remaining feature work; cross-platform, performance,
-offline packaging, binary-size, and remaining lifecycle gates remain open.
+passes strict clippy plus 36 Rust tests. The combined R and explicit-version
+CDF tree measures 91.34% R line coverage. A manual `rustc`/LLVM instrumented
+coverage run over the locked workspace measures 1,764 of 2,057 lines (85.76%).
+Both coverage gates require a final rerun after the remaining feature work.
+Cross-platform, final offline packaging, binary-size, diagnostics, Parquet
+implementation, and performance/lifecycle gates remain open.

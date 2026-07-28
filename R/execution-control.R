@@ -180,19 +180,13 @@
   random,
   max_attempts,
   temp_parent,
-  native_stream_factory
+  native_stream_factory,
+  native_cdf_stream_factory = .native_cdf_stream
 ) {
-  if (.object_is(specification, SharingChanges)) {
+  is_cdf <- .object_is(specification, SharingChanges)
+  if (!is_cdf && !.object_is(specification, SharingRead)) {
     .abort_delta_sharing(
-      "Change data feed streaming is not implemented.",
-      type = "unsupported",
-      operation = "read_arrow_stream",
-      feature = "cdf"
-    )
-  }
-  if (!.object_is(specification, SharingRead)) {
-    .abort_delta_sharing(
-      "`read` must be a SharingRead.",
+      "`read` must be a SharingRead or SharingChanges.",
       type = "validation",
       operation = "read_arrow_stream"
     )
@@ -200,16 +194,29 @@
   batch_size <- .normalize_read_batch_size(batch_size)
   .validate_read_concurrency(concurrency)
 
-  prepared <- .prepare_snapshot_http_read(
-    read = specification,
-    stream_transport = snapshot_transport,
-    auth_transport = auth_transport,
-    clock = clock,
-    sleeper = sleeper,
-    random = random,
-    max_attempts = max_attempts,
-    temp_parent = temp_parent
-  )
+  prepared <- if (is_cdf) {
+    .prepare_cdf_http_read(
+      read = specification,
+      stream_transport = snapshot_transport,
+      auth_transport = auth_transport,
+      clock = clock,
+      sleeper = sleeper,
+      random = random,
+      max_attempts = max_attempts,
+      temp_parent = temp_parent
+    )
+  } else {
+    .prepare_snapshot_http_read(
+      read = specification,
+      stream_transport = snapshot_transport,
+      auth_transport = auth_transport,
+      clock = clock,
+      sleeper = sleeper,
+      random = random,
+      max_attempts = max_attempts,
+      temp_parent = temp_parent
+    )
+  }
   transferred <- FALSE
   on.exit({
     if (!transferred) {
@@ -219,15 +226,29 @@
 
   state <- .prepared_snapshot_state(prepared)
   invocation <- .prepared_snapshot_invocation(prepared)
-  stream <- native_stream_factory(
-    table_location = state$guard,
-    columns = invocation$projection,
-    limit = invocation$exact_limit,
-    batch_size = batch_size
-  )
+  stream <- if (is_cdf) {
+    native_cdf_stream_factory(
+      table_location = state$guard,
+      start_version = invocation$start_version,
+      end_version = invocation$end_version,
+      columns = invocation$projection,
+      batch_size = batch_size
+    )
+  } else {
+    native_stream_factory(
+      table_location = state$guard,
+      columns = invocation$projection,
+      limit = invocation$exact_limit,
+      batch_size = batch_size
+    )
+  }
   if (!isTRUE(.validate_snapshot_log_guard(state$guard)$released)) {
     .abort_delta_sharing(
-      "The native stream did not accept snapshot cleanup ownership.",
+      if (is_cdf) {
+        "The native stream did not accept CDF cleanup ownership."
+      } else {
+        "The native stream did not accept snapshot cleanup ownership."
+      },
       type = "native",
       operation = "read_arrow_stream"
     )
@@ -247,6 +268,7 @@
   metadata_chunk_bytes = .http_read_chunk_bytes,
   snapshot_temp_parent = tempdir(),
   native_stream_factory = .native_snapshot_stream,
+  native_cdf_stream_factory = .native_cdf_stream,
   arrow_available = .arrow_package_available,
   arrow_reader_factory = .arrow_reader_from_stream,
   data_frame_converter = .nanoarrow_data_frame_from_stream
@@ -259,6 +281,7 @@
       !is.function(sleeper) ||
       !is.function(random) ||
       !is.function(native_stream_factory) ||
+      !is.function(native_cdf_stream_factory) ||
       !is.function(arrow_available) ||
       !is.function(arrow_reader_factory) ||
       !is.function(data_frame_converter)) {
@@ -381,7 +404,8 @@
         random = random,
         max_attempts = max_attempts,
         temp_parent = snapshot_temp_parent,
-        native_stream_factory = native_stream_factory
+        native_stream_factory = native_stream_factory,
+        native_cdf_stream_factory = native_cdf_stream_factory
       )
     },
     data_frame_from_stream = function(stream) {

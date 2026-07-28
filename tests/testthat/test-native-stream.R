@@ -148,7 +148,7 @@ test_that("the C control boundary rejects invalid or reused pointers", {
 test_that("native diagnostics prove the slim pinned foundation", {
   info <- delta.sharing:::.native_diagnostics()
 
-  expect_identical(info$abi_version, 2L)
+  expect_identical(info$abi_version, 3L)
   expect_true(info$kernel_smoke_ok, info$kernel_smoke_message)
   expect_identical(info$delta_kernel_version, "0.22.0")
   expect_identical(info$arrow_rs_version, "57.3.0")

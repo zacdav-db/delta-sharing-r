@@ -40,6 +40,18 @@ int32_t delta_sharing_native_populate_snapshot_stream(
     char *error_buffer,
     size_t error_capacity);
 
+int32_t delta_sharing_native_populate_cdf_stream(
+    ArrowArrayStream *destination,
+    const char *table_location,
+    const char *cleanup_root,
+    const char *const *columns,
+    size_t column_count,
+    uint64_t start_version,
+    uint64_t end_version,
+    uint32_t batch_size,
+    char *error_buffer,
+    size_t error_capacity);
+
 int32_t delta_sharing_native_info(
     DeltaSharingNativeInfo *output,
     char *error_buffer,

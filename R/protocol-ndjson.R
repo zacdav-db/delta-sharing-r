@@ -387,8 +387,7 @@
     response_format <- "parquet"
   }
 
-  structure(
-    list(
+  normalized <- list(
       response_format = response_format,
       min_reader_version = .wire_integer(
         protocol,
@@ -414,7 +413,12 @@
         "writerFeatures",
         operation
       )
-    ),
+    )
+  if (.json_has(value, "version")) {
+    normalized$version <- .wire_integer(value, "version", operation)
+  }
+  structure(
+    normalized,
     class = c("delta_sharing_protocol", "list")
   )
 }

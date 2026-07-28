@@ -61,6 +61,24 @@ static uint64_t optional_limit(SEXP value, int32_t *has_limit) {
   return (uint64_t)result;
 }
 
+static uint64_t required_version(SEXP value, const char *name) {
+  double result;
+  if (TYPEOF(value) == INTSXP && XLENGTH(value) == 1 &&
+      INTEGER(value)[0] != NA_INTEGER) {
+    result = (double)INTEGER(value)[0];
+  } else if (TYPEOF(value) == REALSXP && XLENGTH(value) == 1 &&
+             !ISNA(REAL(value)[0])) {
+    result = REAL(value)[0];
+  } else {
+    Rf_error("`%s` must be one non-missing number.", name);
+  }
+  if (!R_FINITE(result) || result < 0 || result > 9007199254740992.0 ||
+      floor(result) != result) {
+    Rf_error("`%s` must be a whole number between 0 and 2^53.", name);
+  }
+  return (uint64_t)result;
+}
+
 static void raise_native_error(int32_t status, const char *message) {
   const char *safe_message = message;
   if (safe_message == NULL || safe_message[0] == '\0') {
@@ -192,6 +210,85 @@ static SEXP delta_sharing_stream_from_snapshot(
   return R_NilValue;
 }
 
+static SEXP delta_sharing_stream_from_cdf(
+    SEXP stream_xptr,
+    SEXP table_location,
+    SEXP cleanup_root,
+    SEXP columns,
+    SEXP start_version,
+    SEXP end_version,
+    SEXP batch_size) {
+  if (TYPEOF(stream_xptr) != EXTPTRSXP) {
+    Rf_error("`stream_xptr` must be an R external pointer.");
+  }
+  if (!Rf_inherits(stream_xptr, "nanoarrow_array_stream")) {
+    Rf_error("`stream_xptr` must inherit from 'nanoarrow_array_stream'.");
+  }
+  ArrowArrayStream *stream =
+      (ArrowArrayStream *)R_ExternalPtrAddr(stream_xptr);
+  if (stream == NULL) {
+    Rf_error("nanoarrow stream pointer is NULL.");
+  }
+
+  const int32_t batch_size_value = scalar_int32(batch_size, "batch_size");
+  if (batch_size_value < 1 || batch_size_value > 1000000) {
+    Rf_error("`batch_size` must be between 1 and 1000000.");
+  }
+  if (columns != R_NilValue && TYPEOF(columns) != STRSXP) {
+    Rf_error("`columns` must be NULL or a character vector.");
+  }
+  const R_xlen_t column_count =
+      columns == R_NilValue ? 0 : XLENGTH(columns);
+  if (columns != R_NilValue && column_count == 0) {
+    Rf_error("`columns` must be NULL or contain at least one name.");
+  }
+  if (column_count > 10000) {
+    Rf_error("`columns` must contain at most 10000 names.");
+  }
+  const char **column_values = NULL;
+  if (column_count > 0) {
+    column_values =
+        (const char **)R_alloc((size_t)column_count, sizeof(const char *));
+    for (R_xlen_t index = 0; index < column_count; ++index) {
+      if (STRING_ELT(columns, index) == NA_STRING) {
+        Rf_error("`columns` must not contain missing names.");
+      }
+      column_values[index] = Rf_translateCharUTF8(STRING_ELT(columns, index));
+      if (column_values[index][0] == '\0') {
+        Rf_error("`columns` must not contain empty names.");
+      }
+    }
+  }
+
+  const char *table_location_value =
+      scalar_utf8(table_location, "table_location");
+  const char *cleanup_root_value = NULL;
+  if (cleanup_root != R_NilValue) {
+    cleanup_root_value = scalar_utf8(cleanup_root, "cleanup_root");
+  }
+  const uint64_t start_version_value =
+      required_version(start_version, "start_version");
+  const uint64_t end_version_value =
+      required_version(end_version, "end_version");
+
+  char error[DELTA_SHARING_ERROR_CAPACITY] = {0};
+  const int32_t status = delta_sharing_native_populate_cdf_stream(
+      stream,
+      table_location_value,
+      cleanup_root_value,
+      column_values,
+      (size_t)column_count,
+      start_version_value,
+      end_version_value,
+      (uint32_t)batch_size_value,
+      error,
+      sizeof(error));
+  if (status != 0) {
+    raise_native_error(status, error);
+  }
+  return R_NilValue;
+}
+
 static SEXP delta_sharing_native_diagnostics(void) {
   DeltaSharingNativeInfo info;
   memset(&info, 0, sizeof(info));
@@ -252,6 +349,9 @@ static const R_CallMethodDef call_methods[] = {
     {"delta_sharing_stream_from_snapshot",
      (DL_FUNC)&delta_sharing_stream_from_snapshot,
      6},
+    {"delta_sharing_stream_from_cdf",
+     (DL_FUNC)&delta_sharing_stream_from_cdf,
+     7},
     {"delta_sharing_native_diagnostics",
      (DL_FUNC)&delta_sharing_native_diagnostics,
      0},

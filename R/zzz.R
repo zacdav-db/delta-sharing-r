@@ -1,5 +1,7 @@
 .register_internal_snapshot_s3_methods <- function(namespace) {
   classes <- c(
+    "delta_sharing_cdf_http_request",
+    "delta_sharing_cdf_request",
     "delta_sharing_prepared_snapshot",
     "delta_sharing_snapshot_http_request",
     "delta_sharing_snapshot_log",

@@ -93,12 +93,16 @@ behind the client's opaque R context and are never descriptor properties.
 Snapshot materialization currently supports `SharingRead` with Delta-format
 Query Table responses, including latest, version, and timestamp reads,
 projection, exact limits, bounded Arrow batches, and best-effort predicate
-hints.
+hints. `read_arrow_stream()`, `read_arrow()`, and `read_data_frame()` all
+consume the same Delta Kernel Arrow stream.
+
+CDF execution supports explicit inclusive version ranges through the separate
+immutable `SharingChanges` descriptor. Timestamp-bound and open-ended CDF
+descriptors fail with typed unsupported conditions before HTTP until both
+provider versions can be resolved exactly.
 
 The following work remains before release readiness:
 
-- `SharingChanges` is available as an immutable CDF specification, but reading
-  it raises a typed `cdf` unsupported condition before I/O.
 - Protocol Parquet responses are not materialized. An explicit
   `response_format = "parquet"` or a Parquet server selection raises a typed
   unsupported condition.
@@ -108,3 +112,6 @@ The following work remains before release readiness:
   implemented.
 - Cross-platform build proof, representative performance measurements, and
   final lifecycle/release evidence are still pending.
+
+The R package does not fall back to a second downloader, Parquet reader, offset
+version map, or compatibility layer.
