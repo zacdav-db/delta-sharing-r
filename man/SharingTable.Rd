@@ -22,3 +22,16 @@ cheap and reusable; query configuration belongs to \link{SharingRead} or
 \details{
 Most users call \code{\link[=sharing_table]{sharing_table()}} rather than this class constructor.
 }
+\examples{
+client <- sharing_client(list(
+  shareCredentialsVersion = 2,
+  type = "bearer_token",
+  endpoint = "https://sharing.example.test/api",
+  bearerToken = "example-only-not-a-secret"
+))
+table <- SharingTable(
+  client,
+  SharingTableIdentifier("sales", "default", "orders")
+)
+table@identifier@table
+}

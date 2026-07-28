@@ -31,8 +31,11 @@ Suggests:
   covr,
   DBI,
   duckdb (>= 1.5.0),
+  knitr,
   processx,
+  rmarkdown,
   testthat (>= 3.0.0)
+VignetteBuilder: knitr
 Config/Needs/check: rcmdcheck
 Config/Needs/coverage: covr
 Config/Needs/duckdb: arrow, DBI, duckdb

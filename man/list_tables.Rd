@@ -22,3 +22,9 @@ locations and auxiliary locations are deliberately excluded.
 \description{
 List tables
 }
+\examples{
+\dontshow{if (interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+list_tables(client, share = "sales", schema = "default")
+\dontshow{\}) # examplesIf}
+}

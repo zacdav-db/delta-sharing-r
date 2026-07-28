@@ -120,6 +120,18 @@
 #'   planning completed, or `NULL`. This is an immutable observation, not a
 #'   live countdown.
 #' @return A read-only `SharingReadDiagnostics` object.
+#' @examples
+#' diagnostics <- SharingReadDiagnostics(
+#'   read_kind = "snapshot",
+#'   response_format = "delta",
+#'   table_version = 42,
+#'   page_count = 2,
+#'   file_count = 8,
+#'   columns = c("order_id", "amount"),
+#'   limit = 100,
+#'   batch_size = 65536
+#' )
+#' diagnostics@file_count
 #' @export
 SharingReadDiagnostics <- S7::new_class(
   "SharingReadDiagnostics",

@@ -7,8 +7,7 @@
 read_data_frame(read, ...)
 }
 \arguments{
-\item{read}{A \link{SharingRead}. A \link{SharingChanges} descriptor is accepted by
-dispatch but CDF execution is not yet supported.}
+\item{read}{A \link{SharingRead} or explicit-version \link{SharingChanges}.}
 
 \item{...}{Scan options. \code{batch_size} must be a whole number from 1 through
 1,000,000 and defaults to 65,536. \code{concurrency} must currently be \code{NULL}.}
@@ -22,4 +21,11 @@ This eager adapter consumes the exact stream returned by
 and rows in R memory, so use the lazy stream interface when the full result
 may not fit comfortably in memory. Stream ownership is released after
 complete materialization or an adapter error.
+}
+\examples{
+\dontshow{if (interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+table <- sharing_table(client, "sales.default.orders")
+read_data_frame(sharing_read(table, limit = 100))
+\dontshow{\}) # examplesIf}
 }

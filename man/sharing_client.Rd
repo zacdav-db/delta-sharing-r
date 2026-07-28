@@ -25,7 +25,7 @@ client <- sharing_client(list(
   shareCredentialsVersion = 2,
   type = "bearer_token",
   endpoint = "https://sharing.example.test/api",
-  bearerToken = "example-token"
+  bearerToken = "example-only-not-a-secret"
 ))
-client
+client@profile@endpoint
 }

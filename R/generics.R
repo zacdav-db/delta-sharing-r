@@ -9,6 +9,12 @@
 #'   [SharingTableIdentifier], or a [SharingTable].
 #' @param schema,table Schema and table components when `x` is the share name.
 #' @return A [SharingTableIdentifier].
+#' @examples
+#' table_identifier("sales.default.orders")
+#'
+#' # Explicit components preserve dots within a name.
+#' identifier <- table_identifier("sales", "default", "orders.v2")
+#' identifier@table
 #' @export
 table_identifier <- S7::new_generic(
   "table_identifier",
@@ -25,6 +31,20 @@ table_identifier <- S7::new_generic(
 #' @param share,schema,table Explicit identifier components. Use these instead
 #'   of `name` when a component contains a dot.
 #' @return A [SharingTable].
+#' @examples
+#' client <- sharing_client(list(
+#'   shareCredentialsVersion = 2,
+#'   type = "bearer_token",
+#'   endpoint = "https://sharing.example.test/api",
+#'   bearerToken = "example-only-not-a-secret"
+#' ))
+#' sharing_table(client, "sales.default.orders")
+#' sharing_table(
+#'   client,
+#'   share = "sales",
+#'   schema = "default",
+#'   table = "orders.v2"
+#' )
 #' @export
 sharing_table <- S7::new_generic(
   "sharing_table",
@@ -50,10 +70,17 @@ sharing_table <- S7::new_generic(
 #'   shareCredentialsVersion = 2,
 #'   type = "bearer_token",
 #'   endpoint = "https://sharing.example.test/api",
-#'   bearerToken = "example-token"
+#'   bearerToken = "example-only-not-a-secret"
 #' ))
 #' table <- sharing_table(client, "sales.default.orders")
-#' sharing_read(table, columns = c("order_id", "amount"), limit = 100)
+#' latest <- sharing_read(
+#'   table,
+#'   columns = c("order_id", "amount"),
+#'   limit = 100
+#' )
+#' at_version <- sharing_read(table, version = 42)
+#' latest@columns
+#' at_version@version
 #' @export
 sharing_read <- S7::new_generic(
   "sharing_read",
@@ -71,9 +98,9 @@ sharing_read <- S7::new_generic(
 
 #' Specify a change data feed read
 #'
-#' This creates and validates an immutable CDF specification. CDF execution is
-#' not yet implemented; passing the result to a materializer raises a typed
-#' `cdf` unsupported condition before I/O.
+#' This creates and validates an immutable CDF specification. Materialization
+#' supports Delta-format CDF when both inclusive version bounds are explicit.
+#' Open-ended, timestamp-bound, and Parquet-format changes fail before HTTP.
 #'
 #' @inheritParams SharingChanges
 #' @return A [SharingChanges].
@@ -82,10 +109,16 @@ sharing_read <- S7::new_generic(
 #'   shareCredentialsVersion = 2,
 #'   type = "bearer_token",
 #'   endpoint = "https://sharing.example.test/api",
-#'   bearerToken = "example-token"
+#'   bearerToken = "example-only-not-a-secret"
 #' ))
 #' table <- sharing_table(client, "sales.default.orders")
-#' sharing_changes(table, starting_version = 120, ending_version = 125)
+#' changes <- sharing_changes(
+#'   table,
+#'   starting_version = 120,
+#'   ending_version = 125,
+#'   columns = c("order_id", "status")
+#' )
+#' changes@ending_version
 #' @export
 sharing_changes <- S7::new_generic(
   "sharing_changes",
@@ -108,6 +141,9 @@ sharing_changes <- S7::new_generic(
 #' @param client A [SharingClient].
 #' @return A base data frame with stable `name`, `id`, `display_name`, and
 #'   `comment` character columns. Missing optional values are `NA`.
+#' @examplesIf interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' list_shares(client)
 #' @export
 list_shares <- S7::new_generic(
   "list_shares",
@@ -121,6 +157,9 @@ list_shares <- S7::new_generic(
 #' @param share Optional share name. When omitted, schemas in all accessible
 #'   shares are listed.
 #' @return A base data frame with stable `share` and `name` character columns.
+#' @examplesIf interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' list_schemas(client, share = "sales")
 #' @export
 list_schemas <- S7::new_generic(
   "list_schemas",
@@ -139,6 +178,9 @@ list_schemas <- S7::new_generic(
 #' @return A base data frame with stable `share`, `schema`, `name`, `share_id`,
 #'   and `id` character columns plus an `access_modes` list-column. Storage
 #'   locations and auxiliary locations are deliberately excluded.
+#' @examplesIf interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' list_tables(client, share = "sales", schema = "default")
 #' @export
 list_tables <- S7::new_generic(
   "list_tables",
@@ -152,6 +194,10 @@ list_tables <- S7::new_generic(
 #'
 #' @param table A [SharingTable].
 #' @return A non-negative whole-number table version.
+#' @examplesIf interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' table <- sharing_table(client, "sales.default.orders")
+#' table_version(table)
 #' @export
 table_version <- S7::new_generic(
   "table_version",
@@ -164,6 +210,10 @@ table_version <- S7::new_generic(
 #' @inheritParams table_version
 #' @return A safe list containing `response_format`, `min_reader_version`,
 #'   `min_writer_version`, `reader_features`, and `writer_features`.
+#' @examplesIf interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' table <- sharing_table(client, "sales.default.orders")
+#' table_protocol(table)
 #' @export
 table_protocol <- S7::new_generic(
   "table_protocol",
@@ -180,6 +230,10 @@ table_protocol <- S7::new_generic(
 #'   identifiers, format, schema JSON, configuration, partition columns,
 #'   optional size statistics, creation time, and access modes. Storage
 #'   locations and auxiliary locations are excluded.
+#' @examplesIf interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' table <- sharing_table(client, "sales.default.orders")
+#' table_metadata(table)
 #' @export
 table_metadata <- S7::new_generic(
   "table_metadata",
@@ -191,6 +245,10 @@ table_metadata <- S7::new_generic(
 #'
 #' @inheritParams table_version
 #' @return The table's parsed logical struct schema as a JSON-style list.
+#' @examplesIf interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' table <- sharing_table(client, "sales.default.orders")
+#' table_schema(table)
 #' @export
 table_schema <- S7::new_generic(
   "table_schema",
@@ -207,6 +265,19 @@ table_schema <- S7::new_generic(
 #' @param read A [SharingRead] or [SharingChanges].
 #' @return When implemented, the logical schema after applying the read
 #'   projection.
+#' @examples
+#' client <- sharing_client(list(
+#'   shareCredentialsVersion = 2,
+#'   type = "bearer_token",
+#'   endpoint = "https://sharing.example.test/api",
+#'   bearerToken = "example-only-not-a-secret"
+#' ))
+#' table <- sharing_table(client, "sales.default.orders")
+#' read <- sharing_read(table, columns = c("order_id", "amount"))
+#'
+#' # Projected read schemas are intentionally unavailable in this version.
+#' schema_error <- tryCatch(read_schema(read), error = identity)
+#' inherits(schema_error, "delta_sharing_unsupported_error")
 #' @export
 read_schema <- S7::new_generic(
   "read_schema",
@@ -223,17 +294,25 @@ read_schema <- S7::new_generic(
 #' The stream is single-consumer. Exhaustion, explicit `stream$release()`, and
 #' finalization release the native scan and private temporary state. Explicit
 #' release is recommended when consumption stops early.
+#' An R interrupt during a pull cancels and releases the native stream, then
+#' raises a typed `delta_sharing_cancelled` condition on the owning R thread.
 #'
 #' `SharingRead` supports Delta- and Parquet-format snapshot responses through
 #' the same Kernel stream. `SharingChanges` supports Delta-format explicit
 #' version ranges. Parquet-format changes and any non-`NULL` `concurrency`
 #' value fail with typed unsupported conditions before materialization.
 #'
-#' @param read A [SharingRead]. A [SharingChanges] descriptor is accepted by
-#'   dispatch but CDF execution is not yet supported.
+#' @param read A [SharingRead] or explicit-version [SharingChanges].
 #' @param ... Scan options. `batch_size` must be a whole number from 1 through
 #'   1,000,000 and defaults to 65,536. `concurrency` must currently be `NULL`.
 #' @return A live `nanoarrow_array_stream`.
+#' @examplesIf interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' table <- sharing_table(client, "sales.default.orders")
+#' read <- sharing_read(table, columns = c("order_id", "amount"))
+#' stream <- read_arrow_stream(read, batch_size = 65536L)
+#' read_diagnostics(stream)
+#' stream$release()
 #' @export
 read_arrow_stream <- S7::new_generic("read_arrow_stream", "read")
 
@@ -247,6 +326,12 @@ read_arrow_stream <- S7::new_generic("read_arrow_stream", "read")
 #'
 #' @inheritParams read_arrow_stream
 #' @return An eager Arrow table.
+#' @examplesIf interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' table <- sharing_table(client, "sales.default.orders")
+#' if (requireNamespace("arrow", quietly = TRUE)) {
+#'   read_arrow(sharing_read(table, limit = 100))
+#' }
 #' @export
 read_arrow <- S7::new_generic("read_arrow", "read")
 
@@ -260,6 +345,10 @@ read_arrow <- S7::new_generic("read_arrow", "read")
 #'
 #' @inheritParams read_arrow_stream
 #' @return A base data frame.
+#' @examplesIf interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' table <- sharing_table(client, "sales.default.orders")
+#' read_data_frame(sharing_read(table, limit = 100))
 #' @export
 read_data_frame <- S7::new_generic("read_data_frame", "read")
 
@@ -276,6 +365,14 @@ read_data_frame <- S7::new_generic("read_data_frame", "read")
 #'
 #' @param stream A stream returned by [read_arrow_stream()].
 #' @return A [SharingReadDiagnostics].
+#' @examplesIf interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+#' table <- sharing_table(client, "sales.default.orders")
+#' stream <- read_arrow_stream(sharing_read(table, limit = 100))
+#' diagnostics <- read_diagnostics(stream)
+#' stream$release()
+#' diagnostics
+#' read_diagnostics(stream)
 #' @export
 read_diagnostics <- S7::new_generic(
   "read_diagnostics",

@@ -6,6 +6,9 @@ in R. Snapshot rows are read by Delta Kernel and returned through an Arrow C
 Stream; the native layer is limited to the Kernel scan and the Arrow lifecycle
 tied to that stream.
 
+For a complete walkthrough, see the
+[vNext vignette](vignettes/delta-sharing-vnext.Rmd).
+
 ## Create a snapshot read
 
 ``` r
@@ -34,6 +37,10 @@ events <- sharing_table(
 )
 ```
 
+Serialized descriptors contain no credential or token state and are
+deliberately inert after deserialization. Reconstruct the client from its
+protected profile source in the receiving process before making requests.
+
 `limit` is enforced exactly by the Kernel scan. A structured `predicate` is
 only a best-effort server hint and is not an exact row filter.
 
@@ -57,6 +64,8 @@ read_diagnostics(stream)
 
 Exhaustion, explicit release, and finalization all release the private
 synthetic log and native scan state. A stream is single-consumer.
+An R interrupt during a pull or eager materialization cancels and releases the
+native stream before raising a typed cancellation condition.
 `read_diagnostics()` returns immutable, redacted R-owned facts such as the
 selected format and version, page/file counts, projection, limit, batch size,
 and URL-expiry summary. It never contains credentials, URLs, paths, tokens,
@@ -108,6 +117,12 @@ Kernel-readable log used by Delta responses; there is no second downloader or
 Parquet reader. `read_arrow_stream()`, `read_arrow()`, and
 `read_data_frame()` all consume the same Delta Kernel Arrow stream.
 
+Reader capabilities are response-specific. Delta snapshot requests advertise
+`columnmapping` and `timestampntz`; Parquet-response normalization does not
+advertise Delta reader features. `deletionvectors` is intentionally
+unadvertised until exact absolute-path HTTPS deletion-vector resolution has
+end-to-end proof.
+
 CDF execution supports explicit inclusive version ranges through the separate
 immutable `SharingChanges` descriptor. Timestamp-bound and open-ended CDF
 descriptors fail with typed unsupported conditions before HTTP until both
@@ -118,8 +133,10 @@ The following work remains before release readiness:
 - `batch_size` is supported; any non-`NULL` `concurrency` value is explicitly
   unsupported.
 - Projected `read_schema()` is not implemented.
-- Cross-platform build proof, representative performance measurements, and
-  final lifecycle/release evidence are still pending.
+- Comparable local performance and lifecycle evidence exists and supports
+  keeping the native boundary narrow. Release and target-platform performance
+  gates remain unresolved, alongside hosted cross-platform build and check
+  evidence.
 
 The R package does not fall back to a second downloader, Parquet reader, offset
-version map, or compatibility layer.
+version map, or R-side row synthesis.

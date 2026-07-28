@@ -26,8 +26,7 @@ timestamp bounds.}
 \item{columns}{Optional character vector of projected columns.}
 
 \item{response_format}{One of \code{"auto"}, \code{"delta"}, or \code{"parquet"}.
-This is retained on the specification for future CDF execution; no CDF
-response format is currently materialized.}
+Explicit-version CDF currently materializes Delta-format responses only.}
 }
 \value{
 A read-only \code{SharingChanges} object.
@@ -38,7 +37,23 @@ ending bound of the same kind. Version and timestamp bounds cannot be mixed.
 }
 \details{
 Most users call \code{\link[=sharing_changes]{sharing_changes()}} rather than this class constructor.
-The descriptor and its validation are available, but CDF execution is not
-yet implemented. Passing a \code{SharingChanges} object to a materializer fails
-with a typed \code{cdf} unsupported condition before I/O.
+Materialization supports Delta-format CDF only when both inclusive version
+bounds are explicit. Open-ended ranges, timestamp bounds, and
+Parquet-format CDF fail with a typed unsupported condition before HTTP.
+}
+\examples{
+client <- sharing_client(list(
+  shareCredentialsVersion = 2,
+  type = "bearer_token",
+  endpoint = "https://sharing.example.test/api",
+  bearerToken = "example-only-not-a-secret"
+))
+table <- sharing_table(client, "sales.default.orders")
+changes <- SharingChanges(
+  table,
+  starting_version = 120,
+  ending_version = 125,
+  columns = c("order_id", "status")
+)
+changes@starting_version
 }

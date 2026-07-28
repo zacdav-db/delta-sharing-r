@@ -20,3 +20,18 @@ A \link{SharingTable}.
 \description{
 Create a table descriptor
 }
+\examples{
+client <- sharing_client(list(
+  shareCredentialsVersion = 2,
+  type = "bearer_token",
+  endpoint = "https://sharing.example.test/api",
+  bearerToken = "example-only-not-a-secret"
+))
+sharing_table(client, "sales.default.orders")
+sharing_table(
+  client,
+  share = "sales",
+  schema = "default",
+  table = "orders.v2"
+)
+}

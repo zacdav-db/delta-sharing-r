@@ -44,3 +44,19 @@ and never mutate the reusable table handle.
 \details{
 Most users call \code{\link[=sharing_read]{sharing_read()}} rather than this class constructor.
 }
+\examples{
+client <- sharing_client(list(
+  shareCredentialsVersion = 2,
+  type = "bearer_token",
+  endpoint = "https://sharing.example.test/api",
+  bearerToken = "example-only-not-a-secret"
+))
+table <- sharing_table(client, "sales.default.orders")
+read <- SharingRead(
+  table,
+  version = 42,
+  columns = c("order_id", "amount"),
+  limit = 100
+)
+read@version
+}

@@ -23,3 +23,14 @@ predicate values, protocol actions, or private temporary locations. It also
 does not report active/released state because nanoarrow does not expose that
 per-stream state reliably.
 }
+\examples{
+\dontshow{if (interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+table <- sharing_table(client, "sales.default.orders")
+stream <- read_arrow_stream(sharing_read(table, limit = 100))
+diagnostics <- read_diagnostics(stream)
+stream$release()
+diagnostics
+read_diagnostics(stream)
+\dontshow{\}) # examplesIf}
+}

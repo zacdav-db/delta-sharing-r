@@ -49,6 +49,15 @@ embedded credentials, query strings, or fragments. Bearer expiration times
 use RFC 3339.
 }
 
+\examples{
+profile <- SharingProfile(list(
+  shareCredentialsVersion = 2,
+  type = "bearer_token",
+  endpoint = "https://sharing.example.test/api",
+  bearerToken = "example-only-not-a-secret"
+))
+profile@endpoint
+}
 \seealso{
 \code{\link[=sharing_client]{sharing_client()}}
 }

@@ -21,3 +21,10 @@ dot. Supplying the three components separately is unambiguous and preserves
 dots within names. Applied to a \link{SharingTable}, this generic returns the
 table's identifier.
 }
+\examples{
+table_identifier("sales.default.orders")
+
+# Explicit components preserve dots within a name.
+identifier <- table_identifier("sales", "default", "orders.v2")
+identifier@table
+}

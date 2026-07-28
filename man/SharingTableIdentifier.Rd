@@ -23,3 +23,11 @@ including names that themselves contain dots.
 \details{
 Use \code{\link[=table_identifier]{table_identifier()}} for the functional constructor.
 }
+\examples{
+identifier <- SharingTableIdentifier(
+  "sales",
+  "default",
+  "orders.v2"
+)
+identifier@table
+}

@@ -7,8 +7,7 @@
 read_arrow(read, ...)
 }
 \arguments{
-\item{read}{A \link{SharingRead}. A \link{SharingChanges} descriptor is accepted by
-dispatch but CDF execution is not yet supported.}
+\item{read}{A \link{SharingRead} or explicit-version \link{SharingChanges}.}
 
 \item{...}{Scan options. \code{batch_size} must be a whole number from 1 through
 1,000,000 and defaults to 65,536. \code{concurrency} must currently be \code{NULL}.}
@@ -22,4 +21,13 @@ The optional eager adapter consumes the exact stream returned by
 requires the optional \code{{arrow}} package and imports the Arrow C Stream
 directly without an IPC or R-vector round trip. Stream ownership is released
 after complete materialization or an adapter error.
+}
+\examples{
+\dontshow{if (interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+table <- sharing_table(client, "sales.default.orders")
+if (requireNamespace("arrow", quietly = TRUE)) {
+  read_arrow(sharing_read(table, limit = 100))
+}
+\dontshow{\}) # examplesIf}
 }

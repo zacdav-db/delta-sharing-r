@@ -19,3 +19,12 @@ A \link{SharingProfile}.
 \description{
 Create a Delta Sharing profile descriptor
 }
+\examples{
+profile <- sharing_profile(list(
+  shareCredentialsVersion = 2,
+  type = "bearer_token",
+  endpoint = "https://sharing.example.test/api",
+  bearerToken = "example-only-not-a-secret"
+))
+profile@auth_type
+}

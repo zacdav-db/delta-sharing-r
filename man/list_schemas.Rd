@@ -18,3 +18,9 @@ A base data frame with stable \code{share} and \code{name} character columns.
 \description{
 List schemas
 }
+\examples{
+\dontshow{if (interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+list_schemas(client, share = "sales")
+\dontshow{\}) # examplesIf}
+}

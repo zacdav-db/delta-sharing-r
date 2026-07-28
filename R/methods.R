@@ -2,6 +2,14 @@
 #'
 #' @inheritParams SharingProfile
 #' @return A [SharingProfile].
+#' @examples
+#' profile <- sharing_profile(list(
+#'   shareCredentialsVersion = 2,
+#'   type = "bearer_token",
+#'   endpoint = "https://sharing.example.test/api",
+#'   bearerToken = "example-only-not-a-secret"
+#' ))
+#' profile@auth_type
 #' @export
 sharing_profile <- function(source, source_type = NULL) {
   SharingProfile(source, source_type = source_type)
@@ -23,9 +31,9 @@ sharing_profile <- function(source, source_type = NULL) {
 #'   shareCredentialsVersion = 2,
 #'   type = "bearer_token",
 #'   endpoint = "https://sharing.example.test/api",
-#'   bearerToken = "example-token"
+#'   bearerToken = "example-only-not-a-secret"
 #' ))
-#' client
+#' client@profile@endpoint
 #' @export
 sharing_client <- function(profile) {
   SharingClient(.as_sharing_profile(profile))

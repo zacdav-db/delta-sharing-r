@@ -23,3 +23,13 @@ cannot use the original process-local client context.
 \details{
 Most users call \code{\link[=sharing_client]{sharing_client()}} rather than this class constructor.
 }
+\examples{
+profile <- SharingProfile(list(
+  shareCredentialsVersion = 2,
+  type = "bearer_token",
+  endpoint = "https://sharing.example.test/api",
+  bearerToken = "example-only-not-a-secret"
+))
+client <- SharingClient(profile)
+client@profile@endpoint
+}

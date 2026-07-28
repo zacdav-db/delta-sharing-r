@@ -15,3 +15,10 @@ A non-negative whole-number table version.
 \description{
 Retrieve a table version
 }
+\examples{
+\dontshow{if (interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+table <- sharing_table(client, "sales.default.orders")
+table_version(table)
+\dontshow{\}) # examplesIf}
+}

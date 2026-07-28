@@ -16,3 +16,10 @@ A safe list containing \code{response_format}, \code{min_reader_version},
 \description{
 Retrieve table protocol capabilities
 }
+\examples{
+\dontshow{if (interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+table <- sharing_table(client, "sales.default.orders")
+table_protocol(table)
+\dontshow{\}) # examplesIf}
+}

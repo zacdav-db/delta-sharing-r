@@ -16,3 +16,9 @@ A base data frame with stable \code{name}, \code{id}, \code{display_name}, and
 \description{
 Discovery results use a compact data frame containing all pages.
 }
+\examples{
+\dontshow{if (interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+list_shares(client)
+\dontshow{\}) # examplesIf}
+}

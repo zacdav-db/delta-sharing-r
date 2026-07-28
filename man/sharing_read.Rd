@@ -45,8 +45,15 @@ client <- sharing_client(list(
   shareCredentialsVersion = 2,
   type = "bearer_token",
   endpoint = "https://sharing.example.test/api",
-  bearerToken = "example-token"
+  bearerToken = "example-only-not-a-secret"
 ))
 table <- sharing_table(client, "sales.default.orders")
-sharing_read(table, columns = c("order_id", "amount"), limit = 100)
+latest <- sharing_read(
+  table,
+  columns = c("order_id", "amount"),
+  limit = 100
+)
+at_version <- sharing_read(table, version = 42)
+latest@columns
+at_version@version
 }

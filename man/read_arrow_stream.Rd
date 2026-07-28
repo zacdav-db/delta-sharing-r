@@ -7,8 +7,7 @@
 read_arrow_stream(read, ...)
 }
 \arguments{
-\item{read}{A \link{SharingRead}. A \link{SharingChanges} descriptor is accepted by
-dispatch but CDF execution is not yet supported.}
+\item{read}{A \link{SharingRead} or explicit-version \link{SharingChanges}.}
 
 \item{...}{Scan options. \code{batch_size} must be a whole number from 1 through
 1,000,000 and defaults to 65,536. \code{concurrency} must currently be \code{NULL}.}
@@ -25,9 +24,21 @@ returns a lazy, bounded \code{nanoarrow_array_stream}.
 The stream is single-consumer. Exhaustion, explicit \code{stream$release()}, and
 finalization release the native scan and private temporary state. Explicit
 release is recommended when consumption stops early.
+An R interrupt during a pull cancels and releases the native stream, then
+raises a typed \code{delta_sharing_cancelled} condition on the owning R thread.
 
 \code{SharingRead} supports Delta- and Parquet-format snapshot responses through
 the same Kernel stream. \code{SharingChanges} supports Delta-format explicit
 version ranges. Parquet-format changes and any non-\code{NULL} \code{concurrency}
 value fail with typed unsupported conditions before materialization.
+}
+\examples{
+\dontshow{if (interactive() && nzchar(Sys.getenv("DELTA_SHARING_PROFILE"))) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+client <- sharing_client(Sys.getenv("DELTA_SHARING_PROFILE"))
+table <- sharing_table(client, "sales.default.orders")
+read <- sharing_read(table, columns = c("order_id", "amount"))
+stream <- read_arrow_stream(read, batch_size = 65536L)
+read_diagnostics(stream)
+stream$release()
+\dontshow{\}) # examplesIf}
 }

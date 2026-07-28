@@ -38,6 +38,14 @@
 #' The endpoint and token endpoint must be absolute HTTP(S) URLs without
 #' embedded credentials, query strings, or fragments. Bearer expiration times
 #' use RFC 3339.
+#' @examples
+#' profile <- SharingProfile(list(
+#'   shareCredentialsVersion = 2,
+#'   type = "bearer_token",
+#'   endpoint = "https://sharing.example.test/api",
+#'   bearerToken = "example-only-not-a-secret"
+#' ))
+#' profile@endpoint
 #' @seealso [sharing_client()]
 #' @export
 SharingProfile <- S7::new_class(
@@ -112,6 +120,15 @@ SharingProfile <- S7::new_class(
 #'
 #' @param profile A [SharingProfile].
 #' @return A read-only `SharingClient` object.
+#' @examples
+#' profile <- SharingProfile(list(
+#'   shareCredentialsVersion = 2,
+#'   type = "bearer_token",
+#'   endpoint = "https://sharing.example.test/api",
+#'   bearerToken = "example-only-not-a-secret"
+#' ))
+#' client <- SharingClient(profile)
+#' client@profile@endpoint
 #' @export
 SharingClient <- S7::new_class(
   "SharingClient",
@@ -150,6 +167,13 @@ SharingClient <- S7::new_class(
 #' @param schema Schema name.
 #' @param table Table name.
 #' @return A read-only `SharingTableIdentifier` object.
+#' @examples
+#' identifier <- SharingTableIdentifier(
+#'   "sales",
+#'   "default",
+#'   "orders.v2"
+#' )
+#' identifier@table
 #' @export
 SharingTableIdentifier <- S7::new_class(
   "SharingTableIdentifier",
@@ -195,6 +219,18 @@ SharingTableIdentifier <- S7::new_class(
 #' @param client A [SharingClient].
 #' @param identifier A [SharingTableIdentifier].
 #' @return A read-only `SharingTable` object.
+#' @examples
+#' client <- sharing_client(list(
+#'   shareCredentialsVersion = 2,
+#'   type = "bearer_token",
+#'   endpoint = "https://sharing.example.test/api",
+#'   bearerToken = "example-only-not-a-secret"
+#' ))
+#' table <- SharingTable(
+#'   client,
+#'   SharingTableIdentifier("sales", "default", "orders")
+#' )
+#' table@identifier@table
 #' @export
 SharingTable <- S7::new_class(
   "SharingTable",
@@ -246,6 +282,21 @@ SharingTable <- S7::new_class(
 #'   Snapshot execution supports both protocol formats through the same Delta
 #'   Kernel stream. Parquet-format change data feed remains unsupported.
 #' @return A read-only `SharingRead` object.
+#' @examples
+#' client <- sharing_client(list(
+#'   shareCredentialsVersion = 2,
+#'   type = "bearer_token",
+#'   endpoint = "https://sharing.example.test/api",
+#'   bearerToken = "example-only-not-a-secret"
+#' ))
+#' table <- sharing_table(client, "sales.default.orders")
+#' read <- SharingRead(
+#'   table,
+#'   version = 42,
+#'   columns = c("order_id", "amount"),
+#'   limit = 100
+#' )
+#' read@version
 #' @export
 SharingRead <- S7::new_class(
   "SharingRead",
@@ -318,9 +369,9 @@ SharingRead <- S7::new_class(
 #' ending bound of the same kind. Version and timestamp bounds cannot be mixed.
 #'
 #' Most users call [sharing_changes()] rather than this class constructor.
-#' The descriptor and its validation are available, but CDF execution is not
-#' yet implemented. Passing a `SharingChanges` object to a materializer fails
-#' with a typed `cdf` unsupported condition before I/O.
+#' Materialization supports Delta-format CDF only when both inclusive version
+#' bounds are explicit. Open-ended ranges, timestamp bounds, and
+#' Parquet-format CDF fail with a typed unsupported condition before HTTP.
 #'
 #' @param table A [SharingTable].
 #' @param starting_version,ending_version Optional non-negative whole-number
@@ -329,9 +380,23 @@ SharingRead <- S7::new_class(
 #'   timestamp bounds.
 #' @param columns Optional character vector of projected columns.
 #' @param response_format One of `"auto"`, `"delta"`, or `"parquet"`.
-#'   This is retained on the specification for future CDF execution; no CDF
-#'   response format is currently materialized.
+#'   Explicit-version CDF currently materializes Delta-format responses only.
 #' @return A read-only `SharingChanges` object.
+#' @examples
+#' client <- sharing_client(list(
+#'   shareCredentialsVersion = 2,
+#'   type = "bearer_token",
+#'   endpoint = "https://sharing.example.test/api",
+#'   bearerToken = "example-only-not-a-secret"
+#' ))
+#' table <- sharing_table(client, "sales.default.orders")
+#' changes <- SharingChanges(
+#'   table,
+#'   starting_version = 120,
+#'   ending_version = 125,
+#'   columns = c("order_id", "status")
+#' )
+#' changes@starting_version
 #' @export
 SharingChanges <- S7::new_class(
   "SharingChanges",
