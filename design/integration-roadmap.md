@@ -149,8 +149,9 @@ work remains in any implementation phase.
   validation remains a hosted-CI evidence item.
 - [x] Add the macOS, Linux, Windows, and R-version matrix.
 - [x] Add a pinned Rust advisory, license, and source-policy job.
-- [ ] Add Rust sanitizer jobs; MSRV, stable, platform, and coverage jobs are
-  already conditional on the native crate landing.
+- [x] Add Rust sanitizer jobs; MSRV, stable, platform, and coverage jobs are
+  conditional on the native crate landing. Hosted execution evidence remains
+  part of G7.
 
 #### S7 API foundation
 
@@ -165,7 +166,7 @@ work remains in any implementation phase.
 
 - [x] Add the native package skeleton, pinned Rust toolchain policy, and lockfile.
 - [x] Isolate Delta Kernel concrete APIs behind one internal adapter.
-- [ ] Define one compact R-to-Kernel invocation contract.
+- [x] Define one compact R-to-Kernel invocation contract.
 - [x] Prove zero-, one-, and multi-batch Arrow C Streams.
 - [x] Prove early release, garbage-collection release, cancellation, errors
   before/after a batch, and panic containment.
@@ -205,10 +206,12 @@ and tested without row reading.
 - [x] Parse response headers and NDJSON incrementally in R.
 - [x] Build an atomic synthetic Delta log in R.
 - [x] Pass only a compact validated scan invocation and prepared log to Rust.
-- [ ] Record decoded-action preparation time and peak R memory on
-  representative large manifests. If retaining bounded validated actions is
-  material, replace the list with a permission-restricted R staging sink
-  before G3; this is not a Rust-scope exception.
+- [x] Record decoded-action preparation time and peak R memory on
+  representative large manifests.
+- [ ] Replace the material whole-manifest R retention with a
+  permission-restricted R staging sink before G3. The Darwin arm64
+  100,000-file evidence records roughly 450 MiB above baseline for a 25 MiB
+  wire manifest. This is R-owned planning work, not a Rust-scope exception.
 - [x] Execute projection and scan semantics through Delta Kernel.
 - [x] Enforce exact limits across batch boundaries.
 - [x] Return a lazy, bounded, single-consumer Arrow C Stream.
@@ -232,7 +235,9 @@ meets the stream thresholds in the design plan.
 - [x] Implement `read_arrow()` as an optional eager `{arrow}` adapter.
 - [x] Implement `read_data_frame()` and `as.data.frame()`.
 - [x] Prove every adapter consumes the same Arrow stream path.
-- [ ] Add DuckDB registration/composition coverage.
+- [x] Add DuckDB registration/composition coverage. The tests require the
+  optional `{duckdb}` package and remain a hosted evidence item when it is not
+  installed locally.
 - [x] Expose stable, redacted read diagnostics.
 - [x] Document eager-memory cost and explicit stream release.
 
@@ -256,14 +261,14 @@ outputs on all target platforms; unsupported cases fail before materialization.
 
 ### Phase 6 — protocol Parquet response format
 
-- [ ] Parse and normalize Parquet response actions in R.
-- [ ] Represent those actions as an R-prepared Kernel-readable synthetic log.
-- [ ] Let Delta Kernel stream the referenced objects through the same narrow
+- [x] Parse and normalize Parquet response actions in R.
+- [x] Represent those actions as an R-prepared Kernel-readable synthetic log.
+- [x] Let Delta Kernel stream the referenced objects through the same narrow
   Rust bridge; do not add a standalone Rust Parquet reader.
-- [ ] Reconstruct partition values, logical field order, and Arrow types through
+- [x] Reconstruct partition values, logical field order, and Arrow types through
   R planning plus Kernel semantics.
-- [ ] Apply projection, exact limit, cancellation, and diagnostics consistently.
-- [ ] Prove parity with the Delta-format path where both are valid.
+- [x] Apply projection, exact limit, cancellation, and diagnostics consistently.
+- [x] Prove parity with the Delta-format path where both are valid.
 
 Exit gate G6: supported Delta Sharing servers that select the Parquet response
 format use the same public descriptors and materializers without the old R
@@ -275,7 +280,7 @@ reader architecture.
 - [x] Complete R and Rust dependency/license notices and source-build policy
   with a locked-graph inventory, verbatim legal-text bundle, and deterministic
   offline generator/checker.
-- [ ] Meet the coverage gates below with reviewed exclusions.
+- [x] Meet the coverage gates below with reviewed exclusions.
 - [x] Enforce and pass the 90% whole-tree R line-coverage gate.
 - [x] Enforce and pass the 85% whole-tree Rust line-coverage gate.
 - [ ] Pass package checks on minimum, release, and development R.
@@ -287,11 +292,11 @@ reader architecture.
   call the R API.
 - [ ] Meet throughput, FFI overhead, RSS, backpressure, first-batch, and
   cancellation performance gates.
-- [ ] Finish reference documentation, README, architecture notes, examples, and
+- [x] Finish reference documentation, README, architecture notes, examples, and
   vignettes for the vNext API.
 - [ ] Build and install source and binary artifacts in clean environments.
-- [ ] Remove superseded R6 implementation, help, and dependencies.
-- [ ] Confirm there are no aliases, shims, deprecations, or prior-version tests.
+- [x] Remove superseded R6 implementation, help, and dependencies.
+- [x] Confirm there are no aliases, shims, deprecations, or prior-version tests.
 
 Exit gate G7: every definition-of-done item is evidenced on the integration
 branch. Only then is the overhaul eligible for a separately authorized release
@@ -362,18 +367,28 @@ or main-line integration.
 | 3 | R snapshot request/planning (`0b1a709`) | Integrated | Pull-only Query Table transport, bounded incremental NDJSON, pagination consistency, expiry enforcement, and prepared-log invocation |
 | 3 | Kernel snapshot execution (`cc71c58`, `941fd46`) | Integrated publicly | Real Kernel Snapshot/Scan, projection, exact limits, bounded Arrow batches, public stream dispatch, and prepared-log lifecycle; platform proof remains open |
 | 4 | Eager materializers (`a42e189`) | Integrated | Arrow and data-frame outputs consume one lazy Arrow stream without IPC or a second scan |
-| 5 | Explicit-version CDF (`4913f19`) | Integrated | Separate R planner/log, exact inclusive provider versions, Kernel `TableChanges`, shared materializers, typed pre-I/O rejection for timestamp/open-ended ranges |
-| 6–7 | Parquet normalization and remaining hardening | Active or open | The R-owned Parquet-to-Kernel mapping is proven; implementation and remaining completion gates stay active |
-| 7 | R coverage hardening (`d1598b8`, `4913f19`) | Integrated-tree gate passing | Exact combined snapshot/CDF coverage is 91.34%; tooling and CI enforce the final 90% R gate |
-| 7 | Rust coverage evidence | Integrated-tree gate passing | Exact snapshot/CDF Rust line coverage is 85.76% with 36 tests passing; CI enforces the 85% gate |
-| 7 | Rust dependency policy | Integrated-tree gate passing | Pinned `cargo-deny` passes advisory, dependency-rule, license, and source checks with four reviewed transitive advisory exceptions |
-| 7 | Dependency notices | Handoff ready | All 326 locked Rust packages and direct R requirements are inventoried; 214 unique legal texts ship in a deterministic bundle with 14 fail-closed missing-file overrides |
+| 5 | Explicit-version CDF (`4913f19`, `a2c5196`) | Integrated | Separate R planner/log, exact inclusive provider versions, Kernel `TableChanges`, shared materializers, typed pre-I/O rejection for timestamp/open-ended ranges |
+| 6 | Parquet snapshots (`15c931a`, `70e7be0`) | Integrated | R normalizes Parquet actions into the same private log and Kernel stream; asymmetric protocol fallback, projection, limits, cancellation, diagnostics, and Delta/Parquet parity are tested |
+| 3, 6 | Kernel feature conformance (`1d5e0da`) | Integrated | Production Sharing wrappers prove column mapping by name and ID, partitions, `timestampNtz`, inline deletion vectors, Arrow output, and lifecycle; absolute-`p` deletion vectors remain unadvertised |
+| 7 | Serialization and diagnostics (`a4e22df`, `9214629`) | Integrated | Descriptors serialize without live handles or secrets and deserialize inert; per-stream immutable diagnostics remain available after release |
+| 7 | Interrupt cancellation (`b8e3f68`, `23673c1`) | Integrated locally | Real SIGINT subprocesses cancel and release synthetic, snapshot, CDF, direct-pull, Arrow, and data-frame paths exactly once on macOS; Windows hosted proof remains open |
+| 7 | Performance/lifecycle evidence (`72f8e8b`, `6096774`) | Integrated | Reproducible Kernel comparator and lifecycle harnesses record throughput/RSS/cancellation; current release thresholds are unresolved and do not justify expanding Rust |
+| 3, 7 | Manifest memory evidence (`ebad8dc`, `5fbc522`) | Integrated evidence; mitigation active | Reproducible production-path measurements find material multi-representation R retention at 100,000 files while proving exact close/root cleanup; an R-only bounded staging sink remains required |
+| 7 | Offline source portability (`2494378`) | Integrated locally | Frozen source-package install/check succeeds without network from the deterministic vendored Rust archive; hosted Linux/other target evidence remains open |
+| 7 | vNext documentation (`f43a744`) | Integrated | Canonical vignette, README, and all public Rd topics document only the clean S7 API, R/native boundary, supported formats/CDF, cancellation, diagnostics, serialization, and explicit limitations |
+| 7 | R coverage hardening (`d1598b8`, `4913f19`, `23673c1`) | Integrated-tree gate passing | Exact whole-tree R coverage is 91.81%; tooling and CI enforce the 90% gate |
+| 7 | Rust coverage evidence | Integrated-tree gate passing | Exact snapshot/CDF Rust line coverage is 85.76%; 54 Rust library/example tests plus strict clippy and formatting pass locally |
+| 7 | Rust dependency policy | Policy integrated, hosted evidence open | The pinned `cargo-deny` advisory, dependency-rule, license, and source-policy job is committed; `cargo-deny` is unavailable locally |
+| 7 | Dependency notices (`a150899`, `0c88b9e`) | Integrated | All 326 locked Rust packages and all DESCRIPTION dependency roles are inventoried; 214 unique legal texts ship in a deterministic bundle with 14 fail-closed missing-file overrides |
 
-Current integration evidence: the R planning and native execution handoffs each
-pass built-source package checks on macOS arm64, and the integrated native tree
-passes strict clippy plus 36 Rust tests. The combined R and explicit-version
-CDF tree measures 91.34% R line coverage. A manual `rustc`/LLVM instrumented
-coverage run over the locked workspace measures 1,764 of 2,057 lines (85.76%).
-Both coverage gates require a final rerun after the remaining feature work.
-Cross-platform, final offline packaging, binary-size, diagnostics, Parquet
-implementation, and performance/lifecycle gates remain open.
+Current integration evidence: the integrated source tree passes its complete R
+suite on macOS arm64 with only the two optional `{duckdb}` tests skipped when
+that package is absent. Whole-tree R line coverage is 91.81%. Strict clippy,
+formatting, and all 54 Rust library/example tests pass. A manual
+`rustc`/LLVM-instrumented run over the locked workspace measures 1,764 of 2,057
+Rust lines (85.76%). The deterministic vendor and dependency-license checks
+pass locally. Final combined package/vignette checks must be rerun after the
+remaining handoffs. Hosted cross-platform builds, sanitizer execution,
+`cargo-deny`, Windows interrupts, optional DuckDB execution, absolute-`p`
+deletion-vector HTTPS proof, and the unresolved release performance thresholds
+remain open.
