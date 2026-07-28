@@ -3,6 +3,7 @@
 Status: active branch checklist
 Integration branch: `codex/delta-kernel-s7-overhaul`
 Date: 2026-07-28
+Last integration update: 2026-07-29
 
 This is the branch-local execution plan for the vNext overhaul. The integration
 branch is the long-lived delivery line until every completion gate in this
@@ -330,7 +331,16 @@ or main-line integration.
 | Phase | Lane/commit | Integration status | Evidence |
 |---|---|---|---|
 | 0 | Integration governance | Complete | Roadmap, interface matrix, and ADR 003 |
-| 1 | Test/package/CI foundation | Pending handoff | — |
-| 1 | S7 and R foundation | Pending handoff | — |
-| 1 | Minimal Kernel/Arrow foundation | Pending handoff | — |
-| 2–7 | Feature and hardening lanes | Not started | — |
+| 1 | Test/package/CI foundation (`b5734a4`, `aa89e47`, `d4f7836`) | Integrated | `testthat`, 80% interim coverage gate, R/platform matrices, package checks |
+| 1 | S7 and R foundation (`fe0d522`, `936f5cf`) | Integrated | Immutable clean-break descriptors, dispatch, validation, documentation, lifecycle guards |
+| 1 | Minimal Kernel/Arrow foundation | Slim handoff in progress | Registered C shim, pinned Kernel, Arrow C Stream, and lifecycle proof under review; platform proof remains open |
+| 2 | R profiles/auth/control plane (`7379493` through `aa0f8a6`) | Foundations integrated | Profile v1/v2 parsing, bearer/basic/OAuth client auth, retry, pagination, bounded authenticated HTTP |
+| 2 | Discovery/metadata planning (`94c4b8f`, `776bd16`, `01cef8b`) | Planning integrated | Safe route planning, incremental NDJSON, metadata projections, current `GET .../version` contract |
+| 2 | Public discovery/metadata execution | Handoff in progress | Planner/transport segment alignment and R callback wiring |
+| 3 | R snapshot synthetic log | Handoff in progress | Atomic private log preparation and lifetime/redaction proof |
+| 3–7 | Kernel snapshot execution, materializers, CDF, Parquet normalization, hardening | Not started or not yet integrated | Completion gates remain mandatory |
+
+Current integration evidence after `aa0f8a6`: 1,583 passing expectations,
+86.69% R line coverage, and a clean local `R CMD check --no-manual` before the
+native foundation lands. The final 90% R coverage, 85% Rust coverage,
+cross-platform, performance, packaging, and lifecycle gates remain open.
