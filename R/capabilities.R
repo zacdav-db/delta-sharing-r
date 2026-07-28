@@ -1,0 +1,69 @@
+.snapshot_response_formats <- c("delta", "parquet")
+.snapshot_reader_features <- c(
+  "columnmapping",
+  "deletionvectors",
+  "timestampntz"
+)
+
+.snapshot_capability_header <- function(response_format = "auto") {
+  response_format <- .normalize_response_format(response_format)
+  formats <- if (identical(response_format, "auto")) {
+    .snapshot_response_formats
+  } else {
+    response_format
+  }
+
+  paste0(
+    "responseformat=",
+    paste(formats, collapse = ","),
+    ";readerfeatures=",
+    paste(sort(.snapshot_reader_features), collapse = ",")
+  )
+}
+
+.parse_table_version_header <- function(headers) {
+  if (is.null(headers) || is.null(names(headers))) {
+    .abort_delta_sharing(
+      "The server response is missing the table version.",
+      type = "protocol",
+      operation = "table_version"
+    )
+  }
+
+  index <- which(tolower(names(headers)) == "delta-table-version")
+  if (length(index) != 1L) {
+    .abort_delta_sharing(
+      "The server response has an invalid table version.",
+      type = "protocol",
+      operation = "table_version"
+    )
+  }
+
+  value <- headers[[index]]
+  if (!.is_scalar_character(value) || !grepl("^[0-9]+$", value)) {
+    .abort_delta_sharing(
+      "The server response has an invalid table version.",
+      type = "protocol",
+      operation = "table_version"
+    )
+  }
+
+  version <- suppressWarnings(as.numeric(value))
+  if (!is.finite(version) ||
+      version < 0 ||
+      version != floor(version) ||
+      version > 2^53) {
+    .abort_delta_sharing(
+      "The server response has an invalid table version.",
+      type = "protocol",
+      operation = "table_version"
+    )
+  }
+
+  version
+}
+
+.format_protocol_timestamp <- function(timestamp) {
+  timestamp <- .normalize_timestamp(timestamp, "timestamp", required = TRUE)
+  format(timestamp, "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC")
+}
