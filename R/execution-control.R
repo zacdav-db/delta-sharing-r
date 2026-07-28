@@ -124,20 +124,143 @@
   )
 }
 
+.normalize_read_batch_size <- function(batch_size) {
+  if (is.null(batch_size)) {
+    return(65536L)
+  }
+  if (!is.numeric(batch_size) ||
+      length(batch_size) != 1L ||
+      is.na(batch_size) ||
+      !is.finite(batch_size) ||
+      batch_size < 1 ||
+      batch_size > 1000000 ||
+      batch_size != floor(batch_size)) {
+    .abort_delta_sharing(
+      "`batch_size` must be one whole number between 1 and 1000000.",
+      type = "validation",
+      operation = "read_arrow_stream"
+    )
+  }
+  as.integer(batch_size)
+}
+
+.validate_read_concurrency <- function(concurrency) {
+  if (is.null(concurrency)) {
+    return(invisible(NULL))
+  }
+  if (!is.numeric(concurrency) ||
+      length(concurrency) != 1L ||
+      is.na(concurrency) ||
+      !is.finite(concurrency) ||
+      concurrency < 1 ||
+      concurrency > .Machine$integer.max ||
+      concurrency != floor(concurrency)) {
+    .abort_delta_sharing(
+      "`concurrency` must be NULL or one positive whole number.",
+      type = "validation",
+      operation = "read_arrow_stream"
+    )
+  }
+  .abort_delta_sharing(
+    "Explicit read concurrency is not supported by this native boundary.",
+    type = "unsupported",
+    operation = "read_arrow_stream",
+    feature = "concurrency"
+  )
+}
+
+.execute_snapshot_arrow_stream <- function(
+  specification,
+  batch_size,
+  concurrency,
+  snapshot_transport,
+  auth_transport,
+  clock,
+  sleeper,
+  random,
+  max_attempts,
+  temp_parent,
+  native_stream_factory
+) {
+  if (.object_is(specification, SharingChanges)) {
+    .abort_delta_sharing(
+      "Change data feed streaming is not implemented.",
+      type = "unsupported",
+      operation = "read_arrow_stream",
+      feature = "cdf"
+    )
+  }
+  if (!.object_is(specification, SharingRead)) {
+    .abort_delta_sharing(
+      "`read` must be a SharingRead.",
+      type = "validation",
+      operation = "read_arrow_stream"
+    )
+  }
+  batch_size <- .normalize_read_batch_size(batch_size)
+  .validate_read_concurrency(concurrency)
+
+  prepared <- .prepare_snapshot_http_read(
+    read = specification,
+    stream_transport = snapshot_transport,
+    auth_transport = auth_transport,
+    clock = clock,
+    sleeper = sleeper,
+    random = random,
+    max_attempts = max_attempts,
+    temp_parent = temp_parent
+  )
+  transferred <- FALSE
+  on.exit({
+    if (!transferred) {
+      try(.release_prepared_snapshot(prepared), silent = TRUE)
+    }
+  }, add = TRUE)
+
+  state <- .prepared_snapshot_state(prepared)
+  invocation <- .prepared_snapshot_invocation(prepared)
+  stream <- native_stream_factory(
+    table_location = state$guard,
+    columns = invocation$projection,
+    limit = invocation$exact_limit,
+    batch_size = batch_size
+  )
+  if (!isTRUE(.validate_snapshot_log_guard(state$guard)$released)) {
+    .abort_delta_sharing(
+      "The native stream did not accept snapshot cleanup ownership.",
+      type = "native",
+      operation = "read_arrow_stream"
+    )
+  }
+  state$released <- TRUE
+  transferred <- TRUE
+  stream
+}
+
 .new_control_execution_callbacks <- function(
   transport = .httr2_http_transport(),
+  snapshot_transport = .httr2_snapshot_transport(),
   clock = Sys.time,
   sleeper = Sys.sleep,
   random = stats::runif,
   max_attempts = 5L,
-  metadata_chunk_bytes = .http_read_chunk_bytes
+  metadata_chunk_bytes = .http_read_chunk_bytes,
+  snapshot_temp_parent = tempdir(),
+  native_stream_factory = .native_snapshot_stream
 ) {
   transport <- .normalize_http_transport(transport)
+  snapshot_transport <- .normalize_snapshot_stream_transport(
+    snapshot_transport
+  )
   if (!is.function(clock) ||
       !is.function(sleeper) ||
-      !is.function(random)) {
+      !is.function(random) ||
+      !is.function(native_stream_factory)) {
     stop("Execution control hooks must be functions.", call. = FALSE)
   }
+  snapshot_temp_parent <- .validate_snapshot_temp_parent(
+    snapshot_temp_parent
+  )
   if (!is.numeric(max_attempts) ||
       length(max_attempts) != 1L ||
       is.na(max_attempts) ||
@@ -234,6 +357,25 @@
         operation = "table_schema"
       )
       .project_table_schema(response)
+    },
+    read_arrow_stream = function(
+      specification,
+      batch_size = NULL,
+      concurrency = NULL
+    ) {
+      .execute_snapshot_arrow_stream(
+        specification = specification,
+        batch_size = batch_size,
+        concurrency = concurrency,
+        snapshot_transport = snapshot_transport,
+        auth_transport = transport,
+        clock = clock,
+        sleeper = sleeper,
+        random = random,
+        max_attempts = max_attempts,
+        temp_parent = snapshot_temp_parent,
+        native_stream_factory = native_stream_factory
+      )
     }
   )
 }

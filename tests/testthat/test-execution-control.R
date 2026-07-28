@@ -40,7 +40,7 @@ encoded_execution_path <- function(...) {
   )
 }
 
-test_that("production callback set is R-only and unload clears it", {
+test_that("production callbacks preserve R control-plane ownership and unload clears them", {
   callbacks <- delta.sharing:::.new_control_execution_callbacks(
     transport = delta.sharing:::.fake_http_transport(function(request) {
       list(status = 200L, body = list(items = list()))
@@ -56,12 +56,12 @@ test_that("production callback set is R-only and unload clears it", {
       "table_version",
       "table_protocol",
       "table_metadata",
-      "table_schema"
+      "table_schema",
+      "read_arrow_stream"
     )
   )
   expect_false(any(c(
     "read_schema",
-    "read_arrow_stream",
     "read_diagnostics"
   ) %in% names(callbacks)))
 

@@ -53,9 +53,14 @@ test_that("validation errors inherit from the common error class", {
 })
 
 test_that("native unavailable errors are also unsupported errors", {
-  condition <- expect_error(
-    read_arrow_stream(sharing_read(test_table())),
-    class = "delta_sharing_native_unavailable_error"
+  condition <- delta.sharing:::.with_execution_interface(
+    delta.sharing:::.new_execution_interface(list(
+      list_shares = function(...) NULL
+    )),
+    expect_error(
+      read_arrow_stream(sharing_read(test_table())),
+      class = "delta_sharing_native_unavailable_error"
+    )
   )
 
   expect_s3_class(condition, "delta_sharing_unsupported_error")

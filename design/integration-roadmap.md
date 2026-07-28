@@ -203,14 +203,14 @@ and tested without row reading.
 - [x] Negotiate capabilities and response format in R from a tested allowlist.
 - [x] Parse response headers and NDJSON incrementally in R.
 - [x] Build an atomic synthetic Delta log in R.
-- [ ] Pass only a compact validated scan invocation and prepared log to Rust.
+- [x] Pass only a compact validated scan invocation and prepared log to Rust.
 - [ ] Record decoded-action preparation time and peak R memory on
   representative large manifests. If retaining bounded validated actions is
   material, replace the list with a permission-restricted R staging sink
   before G3; this is not a Rust-scope exception.
 - [x] Execute projection and scan semantics through Delta Kernel.
 - [x] Enforce exact limits across batch boundaries.
-- [ ] Return a lazy, bounded, single-consumer Arrow C Stream.
+- [x] Return a lazy, bounded, single-consumer Arrow C Stream.
 - [ ] Cover empty tables, partitions, nested types, timestamps, column mapping,
   deletion vectors, time travel, malformed input, and mid-stream failure.
 - [ ] Assemble redacted public diagnostics in R from R and Kernel metrics.
