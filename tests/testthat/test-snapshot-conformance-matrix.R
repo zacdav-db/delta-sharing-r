@@ -179,6 +179,50 @@ snapshot_matrix_file_uri <- function(path) {
   )
 }
 
+.absolute_dv_kernel_commit <-
+  "1c876015bb16902ae94f10916c7e78d7e6ced25e"
+.absolute_dv_object_name <-
+  "deletion_vector_ae7177f2-6d17-4ea8-819b-8d62fa2c5469.bin"
+.absolute_dv_sha256 <-
+  "a4e7e6964f4d5271a10b9caae795508bfb293c1be8f74ad0f0aa1a200419a233"
+
+absolute_dv_https_url <- function(secret) {
+  paste0(
+    "https://raw.githubusercontent.com/delta-io/delta-kernel-rs/",
+    .absolute_dv_kernel_commit,
+    "/kernel/tests/data/with-short-dv/",
+    .absolute_dv_object_name,
+    "?X-Amz-Signature=",
+    secret
+  )
+}
+
+absolute_dv_actions <- function(url, size_in_bytes = 38L) {
+  actions <- snapshot_matrix_actions("feature-deletion-vectors")
+  actions[[3L]]$add$deletionVector <- list(
+    storageType = "p",
+    pathOrInlineDv = url,
+    offset = 1L,
+    sizeInBytes = size_in_bytes,
+    cardinality = 3L
+  )
+  actions
+}
+
+absolute_dv_response_bytes <- function(url) {
+  response <- httr2::request(url) |>
+    httr2::req_timeout(30) |>
+    httr2::req_perform()
+  httr2::resp_body_raw(response)
+}
+
+test_that("absolute deletion vectors remain outside production capabilities", {
+  expect_false(
+    "deletionvectors" %in%
+      delta.sharing:::.snapshot_reader_features
+  )
+})
+
 snapshot_matrix_native_factory <- function(source_root, recorder) {
   source_files <- normalizePath(
     list.files(
@@ -214,6 +258,10 @@ snapshot_matrix_native_factory <- function(source_root, recorder) {
       actions[add_indexes],
       function(action) startsWith(action$add$path, "https://"),
       logical(1)
+    )
+    recorder$normalized_deletion_vectors <- lapply(
+      actions[add_indexes],
+      function(action) action$add$deletionVector
     )
     for (index in add_indexes) {
       file_name <- basename(sub("\\?.*$", "", actions[[index]]$add$path))
@@ -441,6 +489,171 @@ test_that("mapped multi-column partitions are restored by Delta Kernel", {
   expect_true(all(opened$native$normalized_https))
   expect_identical(read_diagnostics(opened$stream)@table_version, 11)
   expect_false(file.exists(opened$native$root))
+  snapshot_matrix_expect_balanced(before)
+})
+
+test_that("absolute deletion vectors pass trusted HTTPS through Kernel", {
+  if (!identical(
+    Sys.getenv("DELTA_SHARING_HTTPS_DV_PROOF"),
+    "true"
+  )) {
+    skip("set DELTA_SHARING_HTTPS_DV_PROOF=true to run the trusted HTTPS proof")
+  }
+
+  testthat::local_mocked_bindings(
+    .snapshot_reader_features = c(
+      "columnmapping",
+      "deletionvectors",
+      "timestampntz"
+    ),
+    .package = "delta.sharing"
+  )
+  secret <- "absolute-dv-proof-query-sentinel"
+  url <- absolute_dv_https_url(secret)
+  object <- absolute_dv_response_bytes(url)
+  expect_identical(
+    unclass(as.character(openssl::sha256(object))),
+    .absolute_dv_sha256
+  )
+
+  gc()
+  before <- delta.sharing:::.native_diagnostics()
+  opened <- snapshot_matrix_open(
+    snapshot_matrix_wire(
+      absolute_dv_actions(url),
+      version = 12
+    ),
+    snapshot_matrix_fixture("feature-deletion-vectors"),
+    sharing_read(test_table()),
+    batch_size = 2L
+  )
+  on.exit(
+    unlink(opened$parent, recursive = TRUE, force = TRUE),
+    add = TRUE
+  )
+  on.exit(opened$stream$release(), add = TRUE)
+
+  request_capabilities <-
+    opened$transport$requests[[1L]]$headers[[
+      "delta-sharing-capabilities"
+    ]]
+  expect_match(
+    request_capabilities,
+    "readerfeatures=columnmapping,deletionvectors,timestampntz",
+    fixed = TRUE
+  )
+  committed_dv <- opened$native$normalized_deletion_vectors[[1L]]
+  expect_identical(committed_dv$storageType, "p")
+  expect_identical(committed_dv$pathOrInlineDv, url)
+  expect_identical(committed_dv$offset, 1L)
+  expect_identical(committed_dv$sizeInBytes, 38L)
+  expect_identical(committed_dv$cardinality, 3L)
+  expect_named(opened$stream$get_schema()$children, c("id", "value"))
+
+  diagnostics <- read_diagnostics(opened$stream)
+  safe_output <- c(
+    capture.output(print(opened$stream)),
+    capture.output(print(diagnostics))
+  )
+  expect_false(any(grepl(url, safe_output, fixed = TRUE)))
+  expect_false(any(grepl(secret, safe_output, fixed = TRUE)))
+
+  data <- delta.sharing:::.materialize_data_frame_stream(opened$stream)
+  expect_equal(data$id, c(3, 4))
+  expect_identical(data$value, c("three", "four"))
+  expect_false(any(data$id %in% c(0, 1, 2)))
+  expect_false(file.exists(opened$native$root))
+  snapshot_matrix_expect_balanced(before)
+
+  failed <- snapshot_matrix_open(
+    snapshot_matrix_wire(
+      absolute_dv_actions(url, size_in_bytes = 37L),
+      version = 13
+    ),
+    snapshot_matrix_fixture("feature-deletion-vectors"),
+    sharing_read(test_table()),
+    batch_size = 2L
+  )
+  on.exit(
+    unlink(failed$parent, recursive = TRUE, force = TRUE),
+    add = TRUE
+  )
+  on.exit(failed$stream$release(), add = TRUE)
+
+  condition <- tryCatch(
+    {
+      delta.sharing:::.materialize_data_frame_stream(failed$stream)
+      NULL
+    },
+    error = identity
+  )
+  expect_s3_class(condition, "error")
+  expect_match(
+    conditionMessage(condition),
+    "Delta Kernel data scan failed",
+    fixed = TRUE
+  )
+  failure_output <- c(
+    conditionMessage(condition),
+    capture.output(str(condition))
+  )
+  expect_false(any(grepl(url, failure_output, fixed = TRUE)))
+  expect_false(any(grepl(secret, failure_output, fixed = TRUE)))
+  expect_false(file.exists(failed$native$root))
+  snapshot_matrix_expect_balanced(before)
+
+  missing_secret <- "absolute-dv-download-failure-sentinel"
+  missing_url <- sub(
+    .absolute_dv_object_name,
+    "missing-deletion-vector.bin",
+    absolute_dv_https_url(missing_secret),
+    fixed = TRUE
+  )
+  download_failed <- snapshot_matrix_open(
+    snapshot_matrix_wire(
+      absolute_dv_actions(missing_url),
+      version = 14
+    ),
+    snapshot_matrix_fixture("feature-deletion-vectors"),
+    sharing_read(test_table()),
+    batch_size = 2L
+  )
+  on.exit(
+    unlink(download_failed$parent, recursive = TRUE, force = TRUE),
+    add = TRUE
+  )
+  on.exit(download_failed$stream$release(), add = TRUE)
+
+  download_condition <- tryCatch(
+    {
+      delta.sharing:::.materialize_data_frame_stream(
+        download_failed$stream
+      )
+      NULL
+    },
+    error = identity
+  )
+  expect_s3_class(download_condition, "error")
+  expect_match(
+    conditionMessage(download_condition),
+    "Delta Kernel data scan failed",
+    fixed = TRUE
+  )
+  download_failure_output <- c(
+    conditionMessage(download_condition),
+    capture.output(str(download_condition))
+  )
+  expect_false(any(grepl(
+    missing_url,
+    download_failure_output,
+    fixed = TRUE
+  )))
+  expect_false(any(grepl(
+    missing_secret,
+    download_failure_output,
+    fixed = TRUE
+  )))
+  expect_false(file.exists(download_failed$native$root))
   snapshot_matrix_expect_balanced(before)
 })
 

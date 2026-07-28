@@ -22,7 +22,9 @@ The design packet is read in this order:
    ownership, safety gates, and executable fixture evidence.
 11. `r-read-diagnostics-contract.md` — stream-local, immutable, redacted
     diagnostics and lifecycle boundaries.
-12. `api-mock.R` — non-executable illustration of the canonical API.
+12. `absolute-dv-https-proof.md` — opt-in production-path proof for
+    server-resolved absolute deletion vectors over trusted HTTPS.
+13. `api-mock.R` — non-executable illustration of the canonical API.
 
 Implemented R subsystems also carry focused contracts. Snapshot synthetic-log
 mapping, atomic publication, privacy, and lifetime are recorded in
