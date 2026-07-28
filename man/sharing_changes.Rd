@@ -25,11 +25,25 @@ timestamp bounds.}
 
 \item{columns}{Optional character vector of projected columns.}
 
-\item{response_format}{One of \code{"auto"}, \code{"delta"}, or \code{"parquet"}.}
+\item{response_format}{One of \code{"auto"}, \code{"delta"}, or \code{"parquet"}.
+This is retained on the specification for future CDF execution; no CDF
+response format is currently materialized.}
 }
 \value{
 A \link{SharingChanges}.
 }
 \description{
-Specify a change data feed read
+This creates and validates an immutable CDF specification. CDF execution is
+not yet implemented; passing the result to a materializer raises a typed
+\code{cdf} unsupported condition before I/O.
+}
+\examples{
+client <- sharing_client(list(
+  shareCredentialsVersion = 2,
+  type = "bearer_token",
+  endpoint = "https://sharing.example.test/api",
+  bearerToken = "example-token"
+))
+table <- sharing_table(client, "sales.default.orders")
+sharing_changes(table, starting_version = 120, ending_version = 125)
 }

@@ -45,6 +45,15 @@ sharing_table <- S7::new_generic(
 #'
 #' @inheritParams SharingRead
 #' @return A [SharingRead].
+#' @examples
+#' client <- sharing_client(list(
+#'   shareCredentialsVersion = 2,
+#'   type = "bearer_token",
+#'   endpoint = "https://sharing.example.test/api",
+#'   bearerToken = "example-token"
+#' ))
+#' table <- sharing_table(client, "sales.default.orders")
+#' sharing_read(table, columns = c("order_id", "amount"), limit = 100)
 #' @export
 sharing_read <- S7::new_generic(
   "sharing_read",
@@ -62,8 +71,21 @@ sharing_read <- S7::new_generic(
 
 #' Specify a change data feed read
 #'
+#' This creates and validates an immutable CDF specification. CDF execution is
+#' not yet implemented; passing the result to a materializer raises a typed
+#' `cdf` unsupported condition before I/O.
+#'
 #' @inheritParams SharingChanges
 #' @return A [SharingChanges].
+#' @examples
+#' client <- sharing_client(list(
+#'   shareCredentialsVersion = 2,
+#'   type = "bearer_token",
+#'   endpoint = "https://sharing.example.test/api",
+#'   bearerToken = "example-token"
+#' ))
+#' table <- sharing_table(client, "sales.default.orders")
+#' sharing_changes(table, starting_version = 120, ending_version = 125)
 #' @export
 sharing_changes <- S7::new_generic(
   "sharing_changes",
@@ -178,8 +200,13 @@ table_schema <- S7::new_generic(
 
 #' Retrieve a projected read schema
 #'
+#' This exported operation is reserved for projected schema execution. It is
+#' not yet implemented by the default execution interface and currently raises
+#' a typed unsupported condition.
+#'
 #' @param read A [SharingRead] or [SharingChanges].
-#' @return The logical schema after applying the read projection.
+#' @return When implemented, the logical schema after applying the read
+#'   projection.
 #' @export
 read_schema <- S7::new_generic(
   "read_schema",
@@ -189,12 +216,24 @@ read_schema <- S7::new_generic(
 
 #' Read an Arrow C stream
 #'
-#' This is the primary materialization interface. The future Kernel bridge
+#' This is the primary materialization interface. R prepares the Delta Sharing
+#' Query Table response and a private synthetic Delta log, then Delta Kernel
 #' returns a lazy, bounded `nanoarrow_array_stream`.
 #'
-#' @param read A [SharingRead] or [SharingChanges].
-#' @param ... Kernel scan options such as batch size or concurrency.
-#' @return A native Arrow C stream.
+#' The stream is single-consumer. Exhaustion, explicit `stream$release()`, and
+#' finalization release the native scan and private temporary state. Explicit
+#' release is recommended when consumption stops early.
+#'
+#' `SharingRead` is supported for Delta-format responses.
+#' `SharingChanges`, protocol Parquet responses, and any non-`NULL`
+#' `concurrency` value currently fail with typed unsupported conditions before
+#' materialization.
+#'
+#' @param read A [SharingRead]. A [SharingChanges] descriptor is accepted by
+#'   dispatch but CDF execution is not yet supported.
+#' @param ... Scan options. `batch_size` must be a whole number from 1 through
+#'   1,000,000 and defaults to 65,536. `concurrency` must currently be `NULL`.
+#' @return A live `nanoarrow_array_stream`.
 #' @export
 read_arrow_stream <- S7::new_generic("read_arrow_stream", "read")
 
@@ -226,8 +265,13 @@ read_data_frame <- S7::new_generic("read_data_frame", "read")
 
 #' Retrieve read diagnostics
 #'
+#' This exported operation is reserved for stable, redacted diagnostics. It is
+#' not yet implemented by the default execution interface and currently raises
+#' a typed unsupported condition.
+#'
 #' @param stream A stream returned by [read_arrow_stream()].
-#' @return Safe diagnostics from the active or completed stream.
+#' @return When implemented, safe diagnostics from the active or completed
+#'   stream.
 #' @export
 read_diagnostics <- S7::new_generic(
   "read_diagnostics",

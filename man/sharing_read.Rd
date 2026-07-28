@@ -29,7 +29,10 @@ it as a server hint and must also enforce it exactly.}
 \item{predicate}{Optional structured server-side predicate hint. Hints are
 best effort and are not exact row filters.}
 
-\item{response_format}{One of \code{"auto"}, \code{"delta"}, or \code{"parquet"}.}
+\item{response_format}{One of \code{"auto"}, \code{"delta"}, or \code{"parquet"}.
+Snapshot execution currently materializes Delta-format responses only;
+explicit or server-selected Parquet responses fail with a typed
+unsupported condition.}
 }
 \value{
 A \link{SharingRead}.
@@ -37,4 +40,14 @@ A \link{SharingRead}.
 \description{
 Calling \code{sharing_read(table)} represents the latest snapshot. Query options
 create a new immutable descriptor and never mutate the table.
+}
+\examples{
+client <- sharing_client(list(
+  shareCredentialsVersion = 2,
+  type = "bearer_token",
+  endpoint = "https://sharing.example.test/api",
+  bearerToken = "example-token"
+))
+table <- sharing_table(client, "sales.default.orders")
+sharing_read(table, columns = c("order_id", "amount"), limit = 100)
 }

@@ -10,9 +10,10 @@ Authors@R:
            email = "zac@databricks.com"),
     person("Databricks", role = c("cph", "fnd"))
   )
-Description: Defines an immutable R interface for Delta Sharing clients,
-  tables, snapshot reads, and change data feed reads. Row scans use a narrow
-  Delta Kernel bridge and Arrow streams.
+Description: Provides immutable S7 descriptors for Delta Sharing clients,
+  tables, snapshot reads, and change data feed specifications. R manages the
+  control plane and snapshot planning. Snapshot row scans use a narrow Delta
+  Kernel bridge and Arrow C Streams, with eager Arrow and data-frame adapters.
 License: Apache License (>= 2) | file LICENSE
 URL: https://github.com/zacdav-db/delta-sharing-r
 BugReports: https://github.com/zacdav-db/delta-sharing-r/issues

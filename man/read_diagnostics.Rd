@@ -10,8 +10,11 @@ read_diagnostics(stream)
 \item{stream}{A stream returned by \code{\link[=read_arrow_stream]{read_arrow_stream()}}.}
 }
 \value{
-Safe diagnostics from the active or completed stream.
+When implemented, safe diagnostics from the active or completed
+stream.
 }
 \description{
-Retrieve read diagnostics
+This exported operation is reserved for stable, redacted diagnostics. It is
+not yet implemented by the default execution interface and currently raises
+a typed unsupported condition.
 }

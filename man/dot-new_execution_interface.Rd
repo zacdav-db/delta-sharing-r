@@ -13,10 +13,9 @@
 A validated internal execution interface.
 }
 \description{
-This internal callback interface keeps the first S7 tranche testable without
-retaining the previous reader. Discovery and table control-plane operations
-are R callbacks. Only \code{read_arrow_stream(specification, ...)} represents the
-future compact Rust and Delta Kernel boundary.
+This internal callback interface keeps R-owned discovery and table
+control-plane operations separate from the compact Rust and Delta Kernel
+boundary used by \code{read_arrow_stream(specification, ...)}.
 }
 \details{
 Eager \code{arrow_from_stream(stream)} and \code{data_frame_from_stream(stream)}

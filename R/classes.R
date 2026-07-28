@@ -34,6 +34,7 @@
 #' The endpoint and token endpoint must be absolute HTTP(S) URLs without
 #' embedded credentials, query strings, or fragments. Bearer expiration times
 #' use RFC 3339.
+#' @seealso [sharing_client()]
 #' @export
 SharingProfile <- S7::new_class(
   "SharingProfile",
@@ -236,6 +237,9 @@ SharingTable <- S7::new_class(
 #' @param predicate Optional structured server-side predicate hint. Hints are
 #'   best effort and are not exact row filters.
 #' @param response_format One of `"auto"`, `"delta"`, or `"parquet"`.
+#'   Snapshot execution currently materializes Delta-format responses only;
+#'   explicit or server-selected Parquet responses fail with a typed
+#'   unsupported condition.
 #' @return A read-only `SharingRead` object.
 #' @export
 SharingRead <- S7::new_class(
@@ -309,6 +313,9 @@ SharingRead <- S7::new_class(
 #' ending bound of the same kind. Version and timestamp bounds cannot be mixed.
 #'
 #' Most users call [sharing_changes()] rather than this class constructor.
+#' The descriptor and its validation are available, but CDF execution is not
+#' yet implemented. Passing a `SharingChanges` object to a materializer fails
+#' with a typed `cdf` unsupported condition before I/O.
 #'
 #' @param table A [SharingTable].
 #' @param starting_version,ending_version Optional non-negative whole-number
@@ -317,6 +324,8 @@ SharingRead <- S7::new_class(
 #'   timestamp bounds.
 #' @param columns Optional character vector of projected columns.
 #' @param response_format One of `"auto"`, `"delta"`, or `"parquet"`.
+#'   This is retained on the specification for future CDF execution; no CDF
+#'   response format is currently materialized.
 #' @return A read-only `SharingChanges` object.
 #' @export
 SharingChanges <- S7::new_class(

@@ -20,3 +20,12 @@ immediately. Credential material and future refresh state remain in a
 hidden R-owned context; construction performs no network request or OAuth
 exchange.
 }
+\examples{
+client <- sharing_client(list(
+  shareCredentialsVersion = 2,
+  type = "bearer_token",
+  endpoint = "https://sharing.example.test/api",
+  bearerToken = "example-token"
+))
+client
+}

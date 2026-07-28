@@ -7,14 +7,27 @@
 read_arrow_stream(read, ...)
 }
 \arguments{
-\item{read}{A \link{SharingRead} or \link{SharingChanges}.}
+\item{read}{A \link{SharingRead}. A \link{SharingChanges} descriptor is accepted by
+dispatch but CDF execution is not yet supported.}
 
-\item{...}{Kernel scan options such as batch size or concurrency.}
+\item{...}{Scan options. \code{batch_size} must be a whole number from 1 through
+1,000,000 and defaults to 65,536. \code{concurrency} must currently be \code{NULL}.}
 }
 \value{
-A native Arrow C stream.
+A live \code{nanoarrow_array_stream}.
 }
 \description{
-This is the primary materialization interface. The future Kernel bridge
+This is the primary materialization interface. R prepares the Delta Sharing
+Query Table response and a private synthetic Delta log, then Delta Kernel
 returns a lazy, bounded \code{nanoarrow_array_stream}.
+}
+\details{
+The stream is single-consumer. Exhaustion, explicit \code{stream$release()}, and
+finalization release the native scan and private temporary state. Explicit
+release is recommended when consumption stops early.
+
+\code{SharingRead} is supported for Delta-format responses.
+\code{SharingChanges}, protocol Parquet responses, and any non-\code{NULL}
+\code{concurrency} value currently fail with typed unsupported conditions before
+materialization.
 }

@@ -7,9 +7,11 @@
 read_arrow(read, ...)
 }
 \arguments{
-\item{read}{A \link{SharingRead} or \link{SharingChanges}.}
+\item{read}{A \link{SharingRead}. A \link{SharingChanges} descriptor is accepted by
+dispatch but CDF execution is not yet supported.}
 
-\item{...}{Kernel scan options such as batch size or concurrency.}
+\item{...}{Scan options. \code{batch_size} must be a whole number from 1 through
+1,000,000 and defaults to 65,536. \code{concurrency} must currently be \code{NULL}.}
 }
 \value{
 An eager Arrow table.

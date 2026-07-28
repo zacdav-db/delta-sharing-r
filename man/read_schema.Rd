@@ -10,8 +10,11 @@ read_schema(read)
 \item{read}{A \link{SharingRead} or \link{SharingChanges}.}
 }
 \value{
-The logical schema after applying the read projection.
+When implemented, the logical schema after applying the read
+projection.
 }
 \description{
-Retrieve a projected read schema
+This exported operation is reserved for projected schema execution. It is
+not yet implemented by the default execution interface and currently raises
+a typed unsupported condition.
 }

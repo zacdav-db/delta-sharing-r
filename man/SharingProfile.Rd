@@ -44,3 +44,7 @@ The endpoint and token endpoint must be absolute HTTP(S) URLs without
 embedded credentials, query strings, or fragments. Bearer expiration times
 use RFC 3339.
 }
+
+\seealso{
+\code{\link[=sharing_client]{sharing_client()}}
+}

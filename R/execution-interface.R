@@ -18,10 +18,9 @@
 
 #' R and native execution interface
 #'
-#' This internal callback interface keeps the first S7 tranche testable without
-#' retaining the previous reader. Discovery and table control-plane operations
-#' are R callbacks. Only `read_arrow_stream(specification, ...)` represents the
-#' future compact Rust and Delta Kernel boundary.
+#' This internal callback interface keeps R-owned discovery and table
+#' control-plane operations separate from the compact Rust and Delta Kernel
+#' boundary used by `read_arrow_stream(specification, ...)`.
 #'
 #' Eager `arrow_from_stream(stream)` and `data_frame_from_stream(stream)`
 #' adapters receive only that stream, preventing an independent scan path.

@@ -18,6 +18,14 @@ sharing_profile <- function(source, source_type = NULL) {
 #' @param profile A profile file path, inline JSON string or raw vector,
 #'   connection, list, or existing [SharingProfile].
 #' @return A [SharingClient].
+#' @examples
+#' client <- sharing_client(list(
+#'   shareCredentialsVersion = 2,
+#'   type = "bearer_token",
+#'   endpoint = "https://sharing.example.test/api",
+#'   bearerToken = "example-token"
+#' ))
+#' client
 #' @export
 sharing_client <- function(profile) {
   SharingClient(.as_sharing_profile(profile))
