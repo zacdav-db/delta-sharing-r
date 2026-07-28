@@ -1,42 +1,40 @@
-# R Delta Sharing Connector
+# Delta Sharing for R
 
-#### Note: Working on an updated version, coming soon :)
-
+The vNext API uses small immutable S7 descriptors. Query configuration creates
+new snapshot or change data feed specifications; mutable execution state stays
+behind the future Rust/Delta Kernel boundary.
 
 ``` r
-# connect to client
 library(delta.sharing)
+
 client <- sharing_client("~/Desktop/config.share")
+orders <- sharing_table(client, "sales.default.orders")
 
-# see what data is accessible
-client$list_shares()
-client$list_all_schemas()
-client$list_schemas(share = "deltasharingr")
-client$list_tables(share = "deltasharingr", schema = "simple")
-client$list_tables_in_share(share = "deltasharingr")
+latest <- sharing_read(
+  orders,
+  columns = c("order_id", "ordered_at", "amount"),
+  limit = 1000
+)
 
-# table class
-ds_tbl <- client$table(share = "deltasharingr", schema = "simple", table = "all_types")
-
-# (optional) specify a limit (best effort to enforce)
-ds_tbl$set_limit(limit = 1000)
-ds_tbl$limit
-
-# (optional) where to download files (before arrow kicks in)
-ds_tbl$set_download_path("~/Desktop/share-download/")
-
-# load data in as arrow::Dataset 
-ds_tbl_arrow <- ds_tbl$load_as_arrow()
-# if schema mapping is casuing problems, infer the schema
-# ds_tbl_arrow <- ds_tbl$load_as_arrow(infer_schema = TRUE)
-
-# do standard {dplyr} things if you like that
-ds_tbl_arrow %>%
-  select(1, 2) %>%
-  mutate(x = column1 + column2) %>%
-  collect()
-
-# just want a tibble? (alias for collect on arrow)
-ds_tbl_tibble <- ds_tbl$load_as_tibble()
-# ds_tbl_tibble <- ds_tbl$load_as_tibble(infer_schema = TRUE)
+changes <- sharing_changes(
+  orders,
+  starting_version = 120,
+  ending_version = 125
+)
 ```
+
+Use a structured identifier when a component contains a dot:
+
+``` r
+events <- sharing_table(
+  client,
+  share = "product",
+  schema = "default",
+  table = "events.v2"
+)
+```
+
+`read_arrow_stream()`, `read_arrow()`, and `read_data_frame()` define the
+execution interface. Until the Rust layer is linked, they fail with a typed
+`delta_sharing_native_unavailable_error`; the R package does not fall back to a
+second downloader or reader.

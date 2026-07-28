@@ -8,3 +8,5 @@
 ^coverage$
 ^design$
 ^tools$
+^delta\.sharing_[0-9.]+\.tar\.gz$
+^delta\.sharing\.Rcheck$
