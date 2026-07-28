@@ -92,6 +92,37 @@ test_that("discovery route validation is typed and secret-safe", {
   )
 })
 
+test_that("discovery route contracts reject inapplicable filter combinations", {
+  expect_error(
+    delta.sharing:::.discovery_route_segments("unknown"),
+    "Unknown discovery resource"
+  )
+  expect_error(
+    delta.sharing:::.discovery_route_segments("shares", share = "sales"),
+    "do not apply to the shares route"
+  )
+  expect_error(
+    delta.sharing:::.discovery_route_segments("schemas"),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    delta.sharing:::.discovery_route_segments(
+      "schemas",
+      share = "sales",
+      schema = "default"
+    ),
+    "does not apply to the schemas route"
+  )
+  expect_error(
+    delta.sharing:::.discovery_route_segments(
+      "all_tables",
+      share = "sales",
+      schema = "default"
+    ),
+    "does not apply to the all-tables route"
+  )
+})
+
 test_that("share normalization has stable base-data-frame columns", {
   records <- c(
     discovery_fixture("shares-page-1.json")$items,
@@ -163,6 +194,38 @@ test_that("empty normalized discovery results retain stable types", {
   expect_true(is.list(tables$access_modes))
 })
 
+test_that("empty discovery fan-out keeps stable route and result schemas", {
+  shares <- data.frame(name = character(), stringsAsFactors = FALSE)
+  schema_routes <- delta.sharing:::.plan_schema_routes(shares = shares)
+  table_routes <- delta.sharing:::.plan_table_routes(shares = shares)
+
+  expect_identical(nrow(schema_routes), 0L)
+  expect_identical(nrow(table_routes), 0L)
+  expect_identical(
+    names(schema_routes),
+    c("operation", "share", "schema", "path_segments")
+  )
+  expect_identical(
+    names(table_routes),
+    c("operation", "share", "schema", "path_segments")
+  )
+  expect_error(
+    delta.sharing:::.plan_table_routes(schema = "default", shares = shares),
+    class = "delta_sharing_validation_error"
+  )
+  expect_identical(
+    delta.sharing:::.plan_table_routes(share = "sales")$path_segments[[1L]],
+    c("shares", "sales", "all-tables")
+  )
+  expect_identical(
+    delta.sharing:::.bind_discovery_frames(
+      list(),
+      delta.sharing:::.empty_table_records
+    ),
+    delta.sharing:::.empty_table_records()
+  )
+})
+
 test_that("invalid records fail without exposing record contents", {
   secret <- "record-secret-must-not-leak"
   condition <- expect_error(
@@ -183,6 +246,57 @@ test_that("invalid records fail without exposing record contents", {
   expect_identical(condition$operation, "list_tables")
   expect_false(grepl(secret, rendered, fixed = TRUE))
   expect_null(condition$location)
+})
+
+test_that("discovery record validation enforces shape and requested scope", {
+  for (normalizer in list(
+    delta.sharing:::.normalize_share_records,
+    delta.sharing:::.normalize_schema_records,
+    delta.sharing:::.normalize_table_records
+  )) {
+    expect_error(
+      normalizer("not-a-record-list"),
+      class = "delta_sharing_protocol_error"
+    )
+  }
+
+  expect_error(
+    delta.sharing:::.normalize_share_records(list(unname(list(name = "x")))),
+    class = "delta_sharing_protocol_error"
+  )
+  expect_error(
+    delta.sharing:::.normalize_share_records(list(list(id = "missing-name"))),
+    class = "delta_sharing_protocol_error"
+  )
+  expect_error(
+    delta.sharing:::.normalize_schema_records(
+      list(list(share = "operations", name = "default")),
+      expected_share = "sales"
+    ),
+    "outside the requested share",
+    class = "delta_sharing_protocol_error"
+  )
+  expect_error(
+    delta.sharing:::.normalize_table_records(
+      list(list(
+        share = "sales",
+        schema = "analytics",
+        name = "events"
+      )),
+      expected_share = "sales",
+      expected_schema = "default"
+    ),
+    "outside the requested scope",
+    class = "delta_sharing_protocol_error"
+  )
+
+  table <- delta.sharing:::.normalize_table_records(list(list(
+    share = "sales",
+    schema = "default",
+    name = "events",
+    accessModes = list()
+  )))
+  expect_identical(table$access_modes[[1L]], character())
 })
 
 test_that("schema and table planners fan out omitted filters in provider order", {
@@ -283,4 +397,53 @@ test_that("discovery collection wraps untyped callback errors safely", {
 
   expect_identical(condition$operation, "list_shares")
   expect_false(grepl(secret, conditionMessage(condition), fixed = TRUE))
+})
+
+test_that("discovery collection validates hooks and forwards route scope", {
+  route <- delta.sharing:::.new_discovery_route_record(
+    operation = "list_tables",
+    share = NA_character_,
+    schema = "default",
+    path_segments = c("shares", "sales", "all-tables")
+  )
+  scope <- NULL
+  result <- delta.sharing:::.collect_discovery_route(
+    fetch_page = function(path_segments, page_token) {
+      list(items = list())
+    },
+    route = route,
+    normalizer = function(records, expected_share, expected_schema) {
+      scope <<- list(
+        share = expected_share,
+        schema = expected_schema
+      )
+      delta.sharing:::.empty_table_records()
+    }
+  )
+  expect_identical(nrow(result), 0L)
+  expect_null(scope$share)
+  expect_identical(scope$schema, "default")
+
+  expect_error(
+    delta.sharing:::.collect_discovery_route(
+      fetch_page = "not-a-function",
+      route = route,
+      normalizer = identity
+    ),
+    "hooks must be functions"
+  )
+  expect_error(
+    delta.sharing:::.collect_discovery_route(
+      fetch_page = function(...) list(items = list()),
+      route = data.frame(),
+      normalizer = identity
+    ),
+    "one discovery route record"
+  )
+
+  table <- delta.sharing:::.collect_table_records(
+    fixture_discovery_fetcher(),
+    share = "sales"
+  )
+  expect_identical(table$name, c("orders", "forecast"))
 })

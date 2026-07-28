@@ -59,6 +59,292 @@ unused_snapshot_auth_transport <- function() {
   })
 }
 
+test_that("snapshot HTTP boundary objects validate and redact their contents", {
+  response <- delta.sharing:::.new_snapshot_pull_response(
+    status = 200L,
+    headers = planned_snapshot_headers(),
+    pull = function() charToRaw("private-response-body"),
+    close = function() invisible(NULL)
+  )
+  expect_identical(
+    delta.sharing:::.normalize_snapshot_pull_response(response),
+    response
+  )
+  expect_false(grepl(
+    "private-response-body",
+    paste(capture.output(print(response)), collapse = "\n"),
+    fixed = TRUE
+  ))
+
+  invalid_responses <- list(
+    list(
+      headers = planned_snapshot_headers(),
+      pull = response$pull,
+      close = response$close
+    ),
+    structure(
+      list(
+        headers = planned_snapshot_headers(),
+        pull = "not-a-function",
+        close = response$close
+      ),
+      class = "delta_sharing_snapshot_pull_response"
+    ),
+    structure(
+      list(
+        headers = planned_snapshot_headers(),
+        pull = response$pull,
+        close = "not-a-function"
+      ),
+      class = "delta_sharing_snapshot_pull_response"
+    ),
+    structure(
+      list(headers = NULL, pull = response$pull, close = response$close),
+      class = "delta_sharing_snapshot_pull_response"
+    )
+  )
+  for (invalid_response in invalid_responses) {
+    expect_error(
+      delta.sharing:::.normalize_snapshot_pull_response(invalid_response),
+      "invalid pull response",
+      class = "delta_sharing_protocol_error"
+    )
+  }
+
+  client <- test_table()@client
+  plan <- delta.sharing:::.plan_snapshot_request(sharing_read(test_table()))
+  request <- delta.sharing:::.new_snapshot_http_request(client, plan)
+  expect_s3_class(request, "delta_sharing_snapshot_http_request")
+  expect_false(grepl(
+    "Authorization|private",
+    paste(capture.output(print(request)), collapse = "\n"),
+    fixed = TRUE
+  ))
+
+  expect_error(
+    delta.sharing:::.new_snapshot_http_request(client, list()),
+    class = "delta_sharing_validation_error"
+  )
+  invalid_method <- plan
+  invalid_method$method <- "GET"
+  expect_error(
+    delta.sharing:::.new_snapshot_http_request(client, invalid_method),
+    "snapshot request plan is invalid",
+    class = "delta_sharing_validation_error"
+  )
+  missing_body <- plan
+  missing_body$body <- NULL
+  expect_error(
+    delta.sharing:::.new_snapshot_http_request(client, missing_body),
+    "snapshot request plan is invalid",
+    class = "delta_sharing_validation_error"
+  )
+})
+
+test_that("snapshot stream transports require complete callable hooks", {
+  response <- list(headers = c("Retry-After" = "7"))
+  transport <- fake_snapshot_stream_transport(list(
+    snapshot_stream_specification()
+  ))
+  transport$retry_after <- NULL
+  normalized <- delta.sharing:::.normalize_snapshot_stream_transport(transport)
+  expect_identical(normalized$retry_after(response), "7")
+
+  invalid_transports <- list(
+    NULL,
+    unname(transport),
+    within(transport, open <- NULL),
+    within(transport, retry_after <- 1)
+  )
+  for (invalid_transport in invalid_transports) {
+    expect_error(
+      delta.sharing:::.normalize_snapshot_stream_transport(invalid_transport),
+      "must provide.*functions",
+      fixed = FALSE
+    )
+  }
+})
+
+test_that("the httr2 raw response adapter pulls bounded chunks and closes", {
+  httr_response <- httr2::new_response(
+    method = "POST",
+    url = "https://sharing.example.test/query",
+    status_code = 206L,
+    headers = planned_snapshot_headers(),
+    body = charToRaw("abcdefg")
+  )
+  response <- delta.sharing:::.new_httr2_snapshot_response(
+    httr_response,
+    chunk_bytes = 3L
+  )
+
+  expect_identical(response$status, 206L)
+  expect_identical(
+    delta.sharing:::.httr2_snapshot_pull(response),
+    charToRaw("abc")
+  )
+  expect_identical(
+    delta.sharing:::.httr2_snapshot_pull(response),
+    charToRaw("def")
+  )
+  expect_identical(
+    delta.sharing:::.httr2_snapshot_pull(response),
+    charToRaw("g")
+  )
+  expect_null(delta.sharing:::.httr2_snapshot_pull(response))
+  expect_null(delta.sharing:::.httr2_snapshot_close(response))
+  expect_error(
+    delta.sharing:::.httr2_snapshot_pull(response),
+    "not available"
+  )
+  expect_error(
+    delta.sharing:::.httr2_snapshot_close(list()),
+    "stream is invalid"
+  )
+})
+
+test_that("the httr2 response adapter cleans up malformed streams", {
+  closes <- 0L
+  body <- new.env(parent = emptyenv())
+  body$close <- function() {
+    closes <<- closes + 1L
+    stop("private-close-error")
+  }
+  httr_response <- httr2::new_response(
+    method = "POST",
+    url = "https://sharing.example.test/query",
+    status_code = 200L,
+    headers = planned_snapshot_headers(),
+    body = raw()
+  )
+  httr_response$body <- body
+  condition <- expect_error(
+    delta.sharing:::.new_httr2_snapshot_response(
+      httr_response,
+      chunk_bytes = 3L
+    ),
+    "invalid body stream"
+  )
+  expect_identical(closes, 1L)
+  expect_false(grepl(
+    "private-close-error",
+    conditionMessage(condition),
+    fixed = TRUE
+  ))
+
+  make_body <- function(read, complete = function() FALSE) {
+    stream <- new.env(parent = emptyenv())
+    stream$read <- read
+    stream$is_complete <- complete
+    stream$close <- function() invisible(NULL)
+    stream
+  }
+  make_response <- function(stream) {
+    httr_response <- httr2::new_response(
+      method = "POST",
+      url = "https://sharing.example.test/query",
+      status_code = 200L,
+      headers = planned_snapshot_headers(),
+      body = raw()
+    )
+    httr_response$body <- stream
+    delta.sharing:::.new_httr2_snapshot_response(
+      httr_response,
+      chunk_bytes = 3L
+    )
+  }
+
+  expect_error(
+    delta.sharing:::.httr2_snapshot_pull(make_response(
+      make_body(function(size) "not-raw")
+    )),
+    "invalid body chunk"
+  )
+  expect_error(
+    delta.sharing:::.httr2_snapshot_pull(make_response(
+      make_body(function(size) raw())
+    )),
+    "ended unexpectedly"
+  )
+
+  complete <- FALSE
+  stream <- make_body(
+    read = function(size) {
+      complete <<- TRUE
+      raw()
+    },
+    complete = function() complete
+  )
+  expect_null(delta.sharing:::.httr2_snapshot_pull(make_response(stream)))
+})
+
+test_that("snapshot transport controls validate status and preserve cleanup", {
+  for (timeout in list(0, NA_real_, Inf, "120", c(1, 2))) {
+    expect_error(
+      delta.sharing:::.httr2_snapshot_transport(timeout_seconds = timeout),
+      "positive number"
+    )
+  }
+  expect_error(
+    delta.sharing:::.httr2_snapshot_transport(chunk_bytes = 0),
+    class = "delta_sharing_validation_error"
+  )
+
+  transport <- delta.sharing:::.httr2_snapshot_transport(
+    timeout_seconds = 3,
+    chunk_bytes = 11L
+  )
+  response <- new.env(parent = emptyenv())
+  response$status <- 200L
+  response$headers <- c("Retry-After" = "9")
+  expect_identical(transport$status(response), 200L)
+  expect_identical(transport$headers(response), response$headers)
+  expect_identical(transport$retry_after(response), "9")
+
+  closes <- 0L
+  invalid_status_transport <- list(
+    status = function(response) stop("private-status-error"),
+    close = function(response) {
+      closes <<- closes + 1L
+      stop("private-close-error")
+    }
+  )
+  condition <- expect_error(
+    delta.sharing:::.snapshot_transport_status(
+      invalid_status_transport,
+      response
+    ),
+    class = "delta_sharing_protocol_error"
+  )
+  expect_identical(closes, 1L)
+  expect_false(grepl(
+    "private",
+    planned_condition_text(condition),
+    fixed = TRUE
+  ))
+
+  for (status in list(99, 600, 200.5, NA_real_, Inf, c(200, 201))) {
+    closes <- 0L
+    invalid_status_transport$status <- function(response) status
+    invalid_status_transport$close <- function(response) {
+      closes <<- closes + 1L
+    }
+    expect_error(
+      delta.sharing:::.snapshot_transport_status(
+        invalid_status_transport,
+        response
+      ),
+      class = "delta_sharing_protocol_error"
+    )
+    expect_identical(closes, 1L)
+  }
+
+  expect_null(delta.sharing:::.snapshot_retry_after(
+    list(retry_after = function(response) stop("private-retry-error")),
+    response
+  ))
+})
+
 test_that("the authenticated snapshot seam streams without control buffering", {
   recorder <- new.env(parent = emptyenv())
   transport <- fake_snapshot_stream_transport(
@@ -198,6 +484,86 @@ test_that("Query Table retries only before successful body streaming", {
     class = "delta_sharing_cancelled"
   )
   expect_identical(recorder$opens, 1L)
+})
+
+test_that("snapshot retries honor server delay and redact exhausted opens", {
+  read <- sharing_read(test_table())
+  plan <- delta.sharing:::.plan_snapshot_request(read)
+
+  recorder <- new.env(parent = emptyenv())
+  transport <- fake_snapshot_stream_transport(
+    list(
+      snapshot_stream_specification(status = 429L),
+      snapshot_stream_specification(status = 200L)
+    ),
+    recorder
+  )
+  transport$retry_after <- function(response) "7"
+  delays <- numeric()
+  response <- delta.sharing:::.perform_authenticated_snapshot_http(
+    client = read@table@client,
+    plan = plan,
+    stream_transport = transport,
+    auth_transport = unused_snapshot_auth_transport(),
+    max_attempts = 2L,
+    sleeper = function(seconds) delays <<- c(delays, seconds),
+    random = function(...) stop("jitter must not be used")
+  )
+  expect_identical(delays, 7)
+  expect_null(response$close())
+  expect_identical(recorder$closed, c(1L, 1L))
+
+  recorder <- new.env(parent = emptyenv())
+  transport <- fake_snapshot_stream_transport(
+    list(
+      simpleError("private-open-secret-1"),
+      simpleError("private-open-secret-2")
+    ),
+    recorder
+  )
+  condition <- expect_error(
+    delta.sharing:::.perform_authenticated_snapshot_http(
+      client = read@table@client,
+      plan = plan,
+      stream_transport = transport,
+      auth_transport = unused_snapshot_auth_transport(),
+      max_attempts = 2L,
+      sleeper = function(seconds) NULL,
+      random = function(...) 0
+    ),
+    class = "delta_sharing_http_error"
+  )
+  expect_identical(recorder$opens, 2L)
+  expect_identical(condition$retry_count, 1L)
+  expect_false(grepl(
+    "private-open-secret",
+    planned_condition_text(condition),
+    fixed = TRUE
+  ))
+})
+
+test_that("non-retryable snapshot status closes without replay", {
+  recorder <- new.env(parent = emptyenv())
+  transport <- fake_snapshot_stream_transport(
+    list(snapshot_stream_specification(status = 404L)),
+    recorder
+  )
+  read <- sharing_read(test_table())
+  condition <- expect_error(
+    delta.sharing:::.perform_authenticated_snapshot_http(
+      client = read@table@client,
+      plan = delta.sharing:::.plan_snapshot_request(read),
+      stream_transport = transport,
+      auth_transport = unused_snapshot_auth_transport(),
+      max_attempts = 3L
+    ),
+    class = "delta_sharing_http_error"
+  )
+
+  expect_identical(recorder$opens, 1L)
+  expect_identical(recorder$closed, 1L)
+  expect_identical(condition$status, 404L)
+  expect_identical(condition$retry_count, 0L)
 })
 
 test_that("a definitive OAuth 401 is closed and replayed once", {
@@ -355,6 +721,137 @@ test_that("two OAuth 401 responses stop after one private replay", {
   )) {
     expect_false(grepl(secret, condition_text, fixed = TRUE))
   }
+})
+
+test_that("bearer 401 and invalid headers close without exposing payloads", {
+  read <- sharing_read(
+    test_table(),
+    predicate = list(
+      op = "equal",
+      column = "region",
+      value = "private-predicate-secret"
+    )
+  )
+  plan <- delta.sharing:::.plan_snapshot_request(read)
+
+  recorder <- new.env(parent = emptyenv())
+  transport <- fake_snapshot_stream_transport(
+    list(snapshot_stream_specification(
+      status = 401L,
+      bytes = charToRaw("private-response-secret")
+    )),
+    recorder
+  )
+  condition <- expect_error(
+    delta.sharing:::.perform_authenticated_snapshot_http(
+      client = read@table@client,
+      plan = plan,
+      stream_transport = transport,
+      auth_transport = unused_snapshot_auth_transport()
+    ),
+    class = "delta_sharing_http_error"
+  )
+  expect_identical(recorder$opens, 1L)
+  expect_identical(recorder$closed, 1L)
+  expect_identical(condition$status, 401L)
+  for (secret in c(
+    "test-only-bearer-token",
+    "private-predicate-secret",
+    "private-response-secret"
+  )) {
+    expect_false(grepl(
+      secret,
+      planned_condition_text(condition),
+      fixed = TRUE
+    ))
+  }
+
+  for (header_hook in list(
+    function(response) NULL,
+    function(response) stop("private-header-secret")
+  )) {
+    recorder <- new.env(parent = emptyenv())
+    transport <- fake_snapshot_stream_transport(
+      list(snapshot_stream_specification()),
+      recorder
+    )
+    transport$headers <- header_hook
+    condition <- expect_error(
+      delta.sharing:::.perform_authenticated_snapshot_http(
+        client = read@table@client,
+        plan = plan,
+        stream_transport = transport,
+        auth_transport = unused_snapshot_auth_transport()
+      ),
+      "invalid snapshot headers",
+      class = "delta_sharing_protocol_error"
+    )
+    expect_identical(recorder$closed, 1L)
+    expect_false(grepl(
+      "private-header-secret",
+      planned_condition_text(condition),
+      fixed = TRUE
+    ))
+  }
+})
+
+test_that("authenticated pull responses own one explicit close lifecycle", {
+  recorder <- new.env(parent = emptyenv())
+  transport <- fake_snapshot_stream_transport(
+    list(snapshot_stream_specification(chunk_bytes = 5L)),
+    recorder
+  )
+  read <- sharing_read(test_table())
+  response <- delta.sharing:::.perform_authenticated_snapshot_http(
+    client = read@table@client,
+    plan = delta.sharing:::.plan_snapshot_request(read),
+    stream_transport = transport,
+    auth_transport = unused_snapshot_auth_transport()
+  )
+
+  expect_type(response$pull(), "raw")
+  expect_null(response$close())
+  expect_null(response$close())
+  expect_identical(recorder$closed, 1L)
+  expect_error(response$pull(), "already been closed")
+})
+
+test_that("authenticated snapshot controls reject invalid hooks early", {
+  read <- sharing_read(test_table())
+  plan <- delta.sharing:::.plan_snapshot_request(read)
+  transport <- fake_snapshot_stream_transport(list(
+    snapshot_stream_specification()
+  ))
+
+  for (hook in c("clock", "sleeper", "random")) {
+    controls <- list(
+      client = read@table@client,
+      plan = plan,
+      stream_transport = transport,
+      auth_transport = unused_snapshot_auth_transport(),
+      clock = function() Sys.time(),
+      sleeper = function(seconds) NULL,
+      random = function(...) 0
+    )
+    controls[[hook]] <- "not-a-function"
+    expect_error(
+      do.call(
+        delta.sharing:::.perform_authenticated_snapshot_http,
+        controls
+      ),
+      "control hooks must be functions"
+    )
+  }
+  expect_error(
+    delta.sharing:::.perform_authenticated_snapshot_http(
+      client = read@table@client,
+      plan = plan,
+      stream_transport = transport,
+      auth_transport = unused_snapshot_auth_transport(),
+      max_attempts = 0
+    ),
+    class = "delta_sharing_validation_error"
+  )
 })
 
 test_that("the httr2 connection body is pulled in bounded chunks", {

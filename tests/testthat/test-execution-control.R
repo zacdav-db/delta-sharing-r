@@ -22,6 +22,64 @@ execution_metadata_fixture <- function() {
   readBin(path, what = "raw", n = file.info(path)$size)
 }
 
+test_that("execution control rejects malformed boundary inputs", {
+  expect_error(
+    delta.sharing:::.parse_discovery_http_body(
+      list(items = list()),
+      "list_shares"
+    ),
+    class = "delta_sharing_protocol_error"
+  )
+  expect_error(
+    delta.sharing:::.new_raw_chunk_source("not-raw"),
+    "`bytes` must be a raw vector",
+    fixed = TRUE
+  )
+  for (chunk_bytes in list(0, 1.5, NA_real_, Inf, c(1, 2))) {
+    expect_error(
+      delta.sharing:::.new_raw_chunk_source(
+        charToRaw("abc"),
+        chunk_bytes = chunk_bytes
+      ),
+      "positive whole number"
+    )
+  }
+
+  expect_error(
+    delta.sharing:::.execute_snapshot_arrow_stream(
+      specification = list(),
+      batch_size = NULL,
+      concurrency = NULL,
+      snapshot_transport = NULL,
+      auth_transport = NULL,
+      clock = Sys.time,
+      sleeper = Sys.sleep,
+      random = stats::runif,
+      max_attempts = 1L,
+      temp_parent = tempdir(),
+      native_stream_factory = function(...) NULL
+    ),
+    class = "delta_sharing_validation_error"
+  )
+
+  expect_error(
+    delta.sharing:::.new_control_execution_callbacks(clock = "not-a-function"),
+    "control hooks must be functions"
+  )
+  expect_error(
+    delta.sharing:::.new_control_execution_callbacks(max_attempts = 0),
+    "`max_attempts` must be one positive whole number",
+    fixed = TRUE
+  )
+  expect_error(
+    delta.sharing:::.new_control_execution_callbacks(
+      metadata_chunk_bytes = 0
+    ),
+    "`metadata_chunk_bytes` must be one positive whole number",
+    fixed = TRUE
+  )
+})
+
 encoded_execution_path <- function(...) {
   segments <- c(...)
   paste0(

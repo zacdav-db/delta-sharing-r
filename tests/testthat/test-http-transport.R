@@ -144,6 +144,178 @@ test_that("unsafe request components fail without echoing values", {
   expect_false(grepl("snapshot", conditionMessage(condition), fixed = TRUE))
 })
 
+test_that("buffered HTTP helpers validate controls and optional fields", {
+  expect_error(
+    delta.sharing:::.normalize_http_method(NULL),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    delta.sharing:::.normalize_http_method("TRACE"),
+    class = "delta_sharing_validation_error"
+  )
+  expect_identical(
+    delta.sharing:::.validate_named_http_fields(
+      list(optional = NULL),
+      "query",
+      allow_vectors = TRUE
+    ),
+    list(optional = NULL)
+  )
+  for (fields in list(
+    unname(list("value")),
+    list(value = raw(1)),
+    list(value = NA_character_),
+    list(value = Inf)
+  )) {
+    expect_error(
+      delta.sharing:::.validate_named_http_fields(fields, "query"),
+      class = "delta_sharing_validation_error"
+    )
+  }
+  expect_error(
+    delta.sharing:::.normalize_http_json(list(1)),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    delta.sharing:::.normalize_http_buffer_limit(
+      "discovery",
+      max_response_bytes = 0
+    ),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    delta.sharing:::.new_client_http_request(
+      test_client(),
+      "POST",
+      "control",
+      form = list(a = 1),
+      json = list(b = 2),
+      response_kind = "metadata"
+    ),
+    class = "delta_sharing_validation_error"
+  )
+
+  response <- list(headers = c("Retry-After" = "5"))
+  transport <- delta.sharing:::.fake_http_transport(function(request) {
+    list(status = 200L, body = raw())
+  })
+  transport$retry_after <- NULL
+  normalized <- delta.sharing:::.normalize_http_transport(transport)
+  expect_identical(normalized$retry_after(response), "5")
+  for (invalid_transport in list(
+    NULL,
+    unname(transport),
+    within(transport, send <- NULL),
+    within(transport, retry_after <- 1)
+  )) {
+    expect_error(
+      delta.sharing:::.normalize_http_transport(invalid_transport),
+      "must provide.*functions"
+    )
+  }
+  expect_null(delta.sharing:::.http_header(NULL, "x-test"))
+  expect_null(delta.sharing:::.http_header(
+    c("X-Test" = "bad\nvalue"),
+    "x-test"
+  ))
+  expect_error(
+    delta.sharing:::.normalize_fake_http_response(
+      "not-a-response",
+      list(max_response_bytes = 10)
+    ),
+    "invalid response"
+  )
+  expect_error(
+    delta.sharing:::.fake_http_transport("not-a-function"),
+    "`handler` must be a function",
+    fixed = TRUE
+  )
+  expect_identical(
+    delta.sharing:::.http_query_string(list(optional = NULL)),
+    ""
+  )
+  expect_error(
+    delta.sharing:::.httr2_http_transport(timeout_seconds = 0),
+    "positive number"
+  )
+  httr_transport <- delta.sharing:::.httr2_http_transport(3)
+  expect_identical(
+    httr_transport$retry_after(list(headers = c("Retry-After" = "4"))),
+    "4"
+  )
+})
+
+test_that("buffered connection bodies are bounded and always closed", {
+  make_body <- function(pieces, complete_when_empty = TRUE) {
+    body <- new.env(parent = emptyenv())
+    body$pieces <- pieces
+    body$closes <- 0L
+    body$read_sizes <- integer()
+    body$is_complete <- function() {
+      complete_when_empty && length(body$pieces) == 0L
+    }
+    body$read <- function(size) {
+      body$read_sizes <- c(body$read_sizes, size)
+      if (length(body$pieces) == 0L) {
+        return(raw())
+      }
+      piece <- body$pieces[[1L]]
+      body$pieces <- body$pieces[-1L]
+      piece
+    }
+    body$close <- function() {
+      body$closes <- body$closes + 1L
+    }
+    body
+  }
+
+  body <- make_body(list(charToRaw("abc"), charToRaw("def")))
+  result <- delta.sharing:::.read_httr2_response_body(
+    list(body = body),
+    max_bytes = 6L
+  )
+  expect_identical(result, charToRaw("abcdef"))
+  expect_identical(body$closes, 1L)
+  expect_true(all(body$read_sizes <= 7L))
+
+  body <- make_body(list())
+  expect_identical(
+    delta.sharing:::.read_httr2_response_body(
+      list(body = body),
+      max_bytes = 6L
+    ),
+    raw()
+  )
+  expect_identical(body$closes, 1L)
+
+  invalid_body <- list(body = list())
+  expect_error(
+    delta.sharing:::.read_httr2_response_body(invalid_body, 6L),
+    "invalid body stream"
+  )
+
+  body <- make_body(list("not-raw"))
+  expect_error(
+    delta.sharing:::.read_httr2_response_body(list(body = body), 6L),
+    "invalid body chunk"
+  )
+  expect_identical(body$closes, 1L)
+
+  body <- make_body(list(raw()), complete_when_empty = FALSE)
+  expect_error(
+    delta.sharing:::.read_httr2_response_body(list(body = body), 6L),
+    "ended unexpectedly"
+  )
+  expect_identical(body$closes, 1L)
+
+  body <- make_body(list(charToRaw("too-large")))
+  expect_error(
+    delta.sharing:::.read_httr2_response_body(list(body = body), 3L),
+    "too large"
+  )
+  expect_identical(body$closes, 1L)
+})
+
 test_that("fake adapter executes authenticated buffered control requests", {
   recorder <- new.env(parent = emptyenv())
   transport <- delta.sharing:::.fake_http_transport(function(request) {

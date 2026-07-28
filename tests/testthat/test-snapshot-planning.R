@@ -161,6 +161,126 @@ test_that("snapshot planning rejects invalid hints and Parquet before I/O", {
   expect_identical(condition$feature, "parquet_response")
 })
 
+test_that("snapshot planning helpers enforce bounded canonical controls", {
+  expect_error(
+    delta.sharing:::.validate_snapshot_read(list()),
+    class = "delta_sharing_validation_error"
+  )
+  for (value in list(0, -1, 1.5, NA_real_, Inf, c(1, 2), "1")) {
+    expect_error(
+      delta.sharing:::.snapshot_positive_integer(value, "page_number"),
+      class = "delta_sharing_validation_error"
+    )
+  }
+
+  expect_null(delta.sharing:::.canonical_snapshot_json(NULL))
+  expect_error(
+    delta.sharing:::.canonical_snapshot_json(
+      structure(list(value = 1), class = "unsupported")
+    ),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    delta.sharing:::.canonical_snapshot_json(
+      structure(list(1), names = "")
+    ),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    delta.sharing:::.snapshot_page_token("bad\r\nprivate-token"),
+    class = "delta_sharing_protocol_error"
+  )
+  expect_error(
+    delta.sharing:::.snapshot_query_capabilities("parquet"),
+    class = "delta_sharing_unsupported_error"
+  )
+})
+
+test_that("snapshot headers and capabilities reject ambiguous wire values", {
+  expect_null(delta.sharing:::.snapshot_header(NULL, "optional"))
+  expect_error(
+    delta.sharing:::.snapshot_header(NULL, "required", required = TRUE),
+    "missing",
+    class = "delta_sharing_protocol_error"
+  )
+  expect_error(
+    delta.sharing:::.snapshot_header(
+      c("X-Test" = "one", "x-test" = "two"),
+      "x-test"
+    ),
+    "invalid",
+    class = "delta_sharing_protocol_error"
+  )
+  expect_error(
+    delta.sharing:::.snapshot_header(
+      c("X-Test" = "bad\nprivate-value"),
+      "x-test"
+    ),
+    "invalid",
+    class = "delta_sharing_protocol_error"
+  )
+
+  invalid_capabilities <- c(
+    "responseformat=delta;;includeendstreamaction=true",
+    "responseformat",
+    "responseformat=delta;responseformat=delta",
+    "responseformat=delta,parquet",
+    "includeendstreamaction=maybe"
+  )
+  for (capability in invalid_capabilities) {
+    expect_error(
+      delta.sharing:::.parse_snapshot_capabilities(c(
+        "delta-sharing-capabilities" = capability
+      )),
+      class = "delta_sharing_error"
+    )
+  }
+  capabilities <- delta.sharing:::.parse_snapshot_capabilities(c(
+    "delta-sharing-capabilities" =
+      "responseformat=delta;readerfeatures=timestampntz,columnmapping"
+  ))
+  expect_identical(
+    capabilities$readerfeatures,
+    c("timestampntz", "columnmapping")
+  )
+})
+
+test_that("snapshot clock, fetch, and prepared-state guards fail closed", {
+  expect_error(
+    delta.sharing:::.snapshot_now("not-a-function"),
+    "`clock` must be a function",
+    fixed = TRUE
+  )
+  for (clock in list(
+    function() NA,
+    function() as.POSIXct(NA),
+    function() c(Sys.time(), Sys.time())
+  )) {
+    expect_error(
+      delta.sharing:::.snapshot_now(clock),
+      "must return one non-missing POSIXct"
+    )
+  }
+  expect_error(
+    delta.sharing:::.safe_snapshot_fetch("not-a-function", list()),
+    "`fetch` must be a function",
+    fixed = TRUE
+  )
+  expect_error(
+    delta.sharing:::.prepared_snapshot_state(list()),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    delta.sharing:::.prepare_snapshot_read(
+      sharing_read(test_table()),
+      fetch = function(request) stop("must not be called"),
+      write_commit = "not-a-function"
+    ),
+    "`write_commit` must be a function",
+    fixed = TRUE
+  )
+})
+
 test_that("a page is pulled incrementally and always closed", {
   recorder <- new.env(parent = emptyenv())
   bytes <- planned_snapshot_bytes("snapshot-page-1.ndjson")
@@ -300,6 +420,7 @@ test_that("paginated preparation hands a private atomic log to the native lane",
   expect_true(delta.sharing:::.release_prepared_snapshot(prepared))
   expect_false(dir.exists(table_path))
   expect_true(delta.sharing:::.release_prepared_snapshot(prepared))
+  expect_null(delta.sharing:::.prepared_snapshot_refresh_token(prepared))
   expect_error(
     delta.sharing:::.prepared_snapshot_invocation(prepared),
     class = "delta_sharing_validation_error"
