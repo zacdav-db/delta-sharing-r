@@ -121,6 +121,69 @@ directory = "vendor"
             )
             self.assertIn('cargo_flags="--frozen"', recipe)
 
+    def test_macos_build_uses_rust_target_default_and_preserves_override(self) -> None:
+        makevars = rust_vendor.REPOSITORY_ROOT / "src" / "Makevars"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binary_directory = root / "bin"
+            binary_directory.mkdir()
+
+            cargo = binary_directory / "cargo"
+            cargo.write_text(
+                '#!/bin/sh\nprintf "%s\\n" "$MACOSX_DEPLOYMENT_TARGET" '
+                '> "$DEPLOYMENT_TARGET_LOG"\n',
+                encoding="utf-8",
+            )
+            cargo.chmod(0o755)
+
+            uname = binary_directory / "uname"
+            uname.write_text("#!/bin/sh\nprintf 'Darwin\\n'\n", encoding="utf-8")
+            uname.chmod(0o755)
+
+            rustc = binary_directory / "rustc"
+            rustc.write_text(
+                "#!/bin/sh\n"
+                "test \"$1\" = '--print=deployment-target'\n"
+                "printf 'MACOSX_DEPLOYMENT_TARGET=11.0\\n'\n",
+                encoding="utf-8",
+            )
+            rustc.chmod(0o755)
+
+            log = root / "deployment-target"
+            environment = os.environ.copy()
+            environment.pop("MACOSX_DEPLOYMENT_TARGET", None)
+            environment["DEPLOYMENT_TARGET_LOG"] = str(log)
+            environment["PATH"] = (
+                f"{binary_directory}{os.pathsep}{environment['PATH']}"
+            )
+            command = [
+                "make",
+                "-f",
+                str(makevars),
+                "./rust/target/r-package/release/libdelta_sharing_native.a",
+            ]
+
+            subprocess.run(
+                command,
+                cwd=root,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(log.read_text(encoding="utf-8"), "11.0\n")
+
+            environment["MACOSX_DEPLOYMENT_TARGET"] = "14.0"
+            subprocess.run(
+                command,
+                cwd=root,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(log.read_text(encoding="utf-8"), "14.0\n")
+
 
 if __name__ == "__main__":
     unittest.main()

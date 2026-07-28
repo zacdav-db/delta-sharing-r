@@ -2,6 +2,16 @@ TARGET_DIR = ./rust/target/r-package
 LIBDIR = $(TARGET_DIR)/release
 STATLIB = $(LIBDIR)/libdelta_sharing_native.a
 
+# Cargo build scripts compile bundled C and assembly sources. On macOS, Clang
+# otherwise treats the current SDK as their minimum OS version. Match rustc's
+# supported target default unless the caller has chosen a deployment target.
+ifeq ($(shell uname -s),Darwin)
+ifeq ($(strip $(MACOSX_DEPLOYMENT_TARGET)),)
+MACOSX_DEPLOYMENT_TARGET := $(shell rustc --print=deployment-target 2>/dev/null | sed 's/^[^=]*=//')
+endif
+export MACOSX_DEPLOYMENT_TARGET
+endif
+
 PKG_CPPFLAGS = -DSTRICT_R_HEADERS -DR_NO_REMAP
 PKG_LIBS = -L$(LIBDIR) -ldelta_sharing_native
 

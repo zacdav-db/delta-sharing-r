@@ -119,6 +119,63 @@ includes Arrow, Parquet, object-store, TLS, and cloud support. The resulting
 archive and package binary must be measured rather than assuming they fit CRAN
 size expectations.
 
+### Isolated Linux offline source proof
+
+Hosted checks build the package on Linux, macOS, and Windows. The local proof
+below adds a different guarantee: the exact generated source archive installs
+in a read-only Linux container with networking disabled, an empty Cargo home,
+and only temporary writable storage. The proof also runs the Kernel smoke test
+and rejects installed Cargo, target, or vendor directories.
+
+First generate and check the vendor pair, then build the source archive:
+
+```sh
+python3 tools/rust_vendor.py generate
+python3 tools/rust_vendor.py check
+R CMD build .
+```
+
+Prepare the proof image while networking is available. The base must be an
+approved image selected by digest, rather than a mutable tag:
+
+```sh
+engine=${CONTAINER_ENGINE:-podman}
+base_image='rocker/r-ver:4.5.1@sha256:<approved-digest>'
+"$engine" build \
+  --build-arg BASE_IMAGE="$base_image" \
+  --build-arg RUST_VERSION=1.88.0 \
+  --file tools/linux-source-proof.Containerfile \
+  --tag delta-sharing-linux-proof:local \
+  .
+proof_image=$("$engine" image inspect \
+  --format '{{.Id}}' delta-sharing-linux-proof:local)
+```
+
+Run the package build with no container network:
+
+```sh
+CONTAINER_ENGINE="$engine" \
+DELTA_SHARING_LINUX_IMAGE="$proof_image" \
+tools/linux-source-proof.sh delta.sharing_*.tar.gz
+```
+
+`DELTA_SHARING_LINUX_IMAGE` accepts only a local `sha256:<id>` or a registry
+reference with `@sha256:<digest>`. The image recipe installs the package's
+declared R imports and exact Rust 1.88.0 while online; those dependencies are
+already present when the network-isolated package installation starts. This
+tool is release evidence in addition to the platform CI matrix, not a
+replacement for any hosted check.
+
+### macOS deployment target
+
+The Unix Makevars exports a macOS deployment target to both R's compiler and
+Cargo. It preserves an explicit caller value. When none is set, it uses
+`rustc --print=deployment-target`, which is the Rust toolchain's supported
+target default (11.0 on arm64 and 10.12 on x86_64 for Rust 1.88). This matters
+because Cargo build scripts compile bundled C and assembly in zstd and
+`aws-lc-sys`; without the environment value, current Apple Clang treats the
+SDK version as those objects' minimum OS.
+
 ## Ownership contract
 
 ```text
@@ -222,6 +279,37 @@ integration commit `63fa7a7`, before the active CDF lane:
 These are reproducibility and local offline-install results for the pre-CDF
 graph, not release artifacts to carry forward. The archive and config must be
 regenerated from the final post-CDF lockfile.
+
+The macOS portability follow-up from integration base `72f8e8b` reproduced the
+same 325-package archive bytes and then installed the generated source archive
+with Cargo offline and all proxy variables directed at a closed loopback port:
+
+- the 28,968,818-byte source archive had SHA-256
+  `d2cb7c2a12aac72dc1eb1385123e9fa53bc66ba32e6424922d62da3c4adeae07`
+  and contained the compressed vendor pair but no unpacked vendor, Cargo home,
+  target directory, design packet, or packaging tools;
+- the original build emitted deployment-version warnings for bundled zstd and
+  `aws-lc-sys` objects tagged macOS 26.1 while the package linked for 26.0;
+- after exporting the Rust deployment target through Makevars, the exact
+  offline source install emitted zero such warnings and produced a
+  32,359,808-byte shared library tagged minimum macOS 11.0 with SDK 26.1; and
+- the installed package reported Kernel 0.22.0, Arrow 57.3.0, a successful
+  Kernel smoke test, zero active streams, zero pending cleanups, and no retained
+  native build directories.
+
+This validates the package-scoped macOS deployment-target handling and
+pre-CDF offline archive. It does not remove the requirement to regenerate from
+the final post-CDF lockfile.
+
+An isolated Linux attempt from macOS on 2026-07-29 did not reach the package
+build. Docker 27.1.1 had no running daemon. The existing Podman 5.8.0
+`podman-machine-default` started its virtual machine but Fedora CoreOS entered
+emergency mode: Ignition failed, and `systemd-fsck-root` could not find root
+filesystem UUID `8d734016-8492-4487-a6db-27fc1ae5a7f0`. The Podman socket and
+SSH port therefore never became available. The hung start was stopped without
+deleting or recreating the user's machine. This is an exact local
+infrastructure blocker, not Linux package-build evidence; run the isolated
+proof above on a functioning engine.
 
 This is local evidence, not cross-platform build proof. Linux and Windows
 source builds, a final post-CDF network-isolated source install, dependency
