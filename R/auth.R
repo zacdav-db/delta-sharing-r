@@ -154,6 +154,7 @@
   list(
     method = "POST",
     url = credentials$token_endpoint,
+    query = list(),
     headers = c(
       Authorization = .basic_authorization(
         credentials$client_id,
@@ -163,7 +164,9 @@
       Accept = "application/json",
       `Content-Type` = "application/x-www-form-urlencoded"
     ),
-    body = body
+    body_type = "form",
+    body = body,
+    max_response_bytes = .oauth_response_max_bytes
   )
 }
 

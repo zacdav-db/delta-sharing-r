@@ -10,7 +10,8 @@
                                 clock = Sys.time,
                                 random = stats::runif,
                                 base_delay = 0.1,
-                                delay_cap = 30) {
+                                delay_cap = 30,
+                                return_statuses = integer()) {
   if (!is.function(send) ||
       !is.function(status_of) ||
       !is.function(retry_after_of) ||
@@ -39,6 +40,17 @@
       max_attempts > .Machine$integer.max) {
     stop("`max_attempts` must be one positive whole number.", call. = FALSE)
   }
+  if (!is.numeric(return_statuses) ||
+      anyNA(return_statuses) ||
+      any(!is.finite(return_statuses)) ||
+      any(return_statuses != floor(return_statuses)) ||
+      any(return_statuses < 100 | return_statuses > 599)) {
+    stop(
+      "`return_statuses` must contain valid whole-number HTTP statuses.",
+      call. = FALSE
+    )
+  }
+  return_statuses <- unique(as.integer(return_statuses))
 
   max_attempts <- as.integer(max_attempts)
   for (attempt in seq_len(max_attempts)) {
@@ -87,7 +99,7 @@
     }
     status <- as.integer(status)
 
-    if (status < 400L) {
+    if (status < 400L || status %in% return_statuses) {
       return(outcome$response)
     }
 

@@ -179,4 +179,30 @@ test_that("HTTP controls validate injected policy", {
     "`max_attempts` must be one positive whole number",
     fixed = TRUE
   )
+  expect_error(
+    delta.sharing:::.perform_with_retry(
+      request = NULL,
+      send = identity,
+      status_of = identity,
+      operation = "request",
+      return_statuses = c(99, 401)
+    ),
+    "`return_statuses` must contain valid whole-number HTTP statuses",
+    fixed = TRUE
+  )
+})
+
+test_that("explicit returned statuses bypass ordinary HTTP failure", {
+  response <- list(status = 401L)
+
+  expect_identical(
+    delta.sharing:::.perform_with_retry(
+      request = list(method = "GET"),
+      send = function(request) response,
+      status_of = function(response) response$status,
+      operation = "list_shares",
+      return_statuses = 401L
+    ),
+    response
+  )
 })

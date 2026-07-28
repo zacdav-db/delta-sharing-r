@@ -38,8 +38,8 @@ The OAuth request is transport-neutral:
 The injected transport is a private list of `send`, `status`, and `body`
 functions plus an optional `retry_after` function. It uses the shared R HTTP
 retry control. Client-credential exchanges are explicitly replayable for that
-control. Tests inject both transport and clock; production transport selection
-is not part of this slice.
+control. Tests inject both transport and clock; the internal R HTTP layer now
+supplies the httr2 production adapter through the same contract.
 
 Successful responses must be JSON-style objects containing an `access_token`
 and a positive numeric or numeric-string `expires_in`. `token_type` may be
