@@ -82,10 +82,6 @@ test_execution_interface <- function(recorder = new.env(parent = emptyenv())) {
     data_frame_from_stream = function(stream) {
       recorder$data_frame_from_stream <- stream
       data.frame(value = 1:2)
-    },
-    read_diagnostics = function(stream) {
-      recorder$diagnostics_stream <- stream
-      list(batches_emitted = 1L)
     }
   )
 

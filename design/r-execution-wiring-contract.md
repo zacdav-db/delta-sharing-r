@@ -1,8 +1,9 @@
 # R control-plane execution wiring contract
 
 Status: implemented Phase 2 control plane, Phase 3 snapshot stream, Phase 4
-eager materializers, and Phase 5 explicit-version CDF path
-Branch owner: `codex/cdf-planning-vnext`
+eager materializers and diagnostics, and Phase 5 explicit-version CDF path
+Branch owners: `codex/r-materializers-vnext`,
+`codex/read-diagnostics-vnext`, and `codex/cdf-planning-vnext`
 
 This contract connects the immutable S7 client/table descriptors to the
 R-owned authenticated HTTP, pagination, JSON/NDJSON, and safe-projection
@@ -15,7 +16,7 @@ parallel reader implementation.
 
 - `list_shares`, `list_schemas`, and `list_tables`;
 - `table_version`, `table_protocol`, `table_metadata`, and `table_schema`; and
-- `read_arrow_stream` for `SharingRead`;
+- `read_arrow_stream` for `SharingRead` and `SharingChanges`;
 - `data_frame_from_stream` for eager base data frames; and
 - `arrow_from_stream` for eager Arrow tables when `{arrow}` is installed.
 
@@ -72,6 +73,20 @@ dependency, import, conversion, or mid-stream failure. After Arrow accepts the
 C Stream, the record-batch reader owns it and is closed deterministically after
 the table has been materialized.
 
+## Stream-local diagnostics
+
+Successful snapshot and explicit-version CDF stream construction attaches an immutable
+`SharingReadDiagnostics` containing only safe R-owned planning and selection
+facts. `read_diagnostics()` reads that value directly from the stream before
+or after consumption and release; it is not an execution callback and does not
+own any stream resource.
+
+The attachment excludes credentials, URLs, paths, tokens, predicate values,
+protocol actions, temporary locations, and native ownership. No lifecycle
+state is inferred from process-global native counters. See
+`r-read-diagnostics-contract.md` for the complete field, redaction, and
+concurrency-isolation contract.
+
 ## Discovery execution
 
 Planners pass validated raw segment vectors to the HTTP transport. The
@@ -112,4 +127,5 @@ conflicting provider versions/timestamps, invalid or out-of-range actions, and
 timestamp/open-ended execution without a fallback reader. Versions without
 actions are represented by intentional empty commits inside the proven bounds.
 
-The callback set still excludes `read_schema` and public diagnostics.
+The callback set still excludes `read_schema`. Diagnostics are intentionally
+stream-local rather than process-global execution callbacks.

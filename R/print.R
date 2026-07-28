@@ -104,3 +104,51 @@ S7::method(print, SharingChanges) <- function(x, ...) {
   cat(" response format: ", x@response_format, "\n", sep = "")
   invisible(x)
 }
+
+S7::method(print, SharingReadDiagnostics) <- function(x, ...) {
+  .print_header("SharingReadDiagnostics", x@read_kind)
+  if (identical(x@read_kind, "snapshot")) {
+    cat(
+      " version: ",
+      format(x@table_version, scientific = FALSE),
+      "\n",
+      sep = ""
+    )
+  } else {
+    end <- if (is.null(x@ending_version)) {
+      "latest"
+    } else {
+      format(x@ending_version, scientific = FALSE)
+    }
+    cat(
+      " versions: ",
+      format(x@starting_version, scientific = FALSE),
+      " -> ",
+      end,
+      "\n",
+      sep = ""
+    )
+  }
+  columns <- if (is.null(x@columns)) {
+    "all"
+  } else {
+    paste(x@columns, collapse = ", ")
+  }
+  limit <- if (is.null(x@limit)) {
+    "none"
+  } else {
+    format(x@limit, scientific = FALSE)
+  }
+  cat(" response format: ", x@response_format, "\n", sep = "")
+  cat(" pages: ", format(x@page_count, scientific = FALSE), "\n", sep = "")
+  cat(" files: ", format(x@file_count, scientific = FALSE), "\n", sep = "")
+  cat(" columns: ", columns, "\n", sep = "")
+  cat(" limit: ", limit, "\n", sep = "")
+  cat(
+    " batch size: ",
+    format(x@batch_size, scientific = FALSE),
+    "\n",
+    sep = ""
+  )
+  invisible(x)
+}

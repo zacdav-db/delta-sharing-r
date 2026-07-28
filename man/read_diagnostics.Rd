@@ -10,11 +10,16 @@ read_diagnostics(stream)
 \item{stream}{A stream returned by \code{\link[=read_arrow_stream]{read_arrow_stream()}}.}
 }
 \value{
-When implemented, safe diagnostics from the active or completed
-stream.
+A \link{SharingReadDiagnostics}.
 }
 \description{
-This exported operation is reserved for stable, redacted diagnostics. It is
-not yet implemented by the default execution interface and currently raises
-a typed unsupported condition.
+Returns immutable, redacted planning and selection facts attached to the
+stream by \code{\link[=read_arrow_stream]{read_arrow_stream()}}. Diagnostics remain available before
+consumption, after exhaustion, and after explicit \code{stream$release()}.
+}
+\details{
+The result never contains credentials, URLs, paths, query strings, tokens,
+predicate values, protocol actions, or private temporary locations. It also
+does not report active/released state because nanoarrow does not expose that
+per-stream state reliably.
 }

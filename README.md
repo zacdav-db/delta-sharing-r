@@ -44,13 +44,23 @@ Use the lazy stream when the full result may not fit in memory:
 ``` r
 stream <- read_arrow_stream(latest_orders, batch_size = 65536L)
 
+# Safe planning facts remain available for this stream after consumption.
+diagnostics <- read_diagnostics(stream)
+
 # Consume the nanoarrow_array_stream here.
 # Release it explicitly when stopping before exhaustion.
 stream$release()
+
+# Diagnostics do not own the stream and remain available after release.
+read_diagnostics(stream)
 ```
 
 Exhaustion, explicit release, and finalization all release the private
 synthetic log and native scan state. A stream is single-consumer.
+`read_diagnostics()` returns immutable, redacted R-owned facts such as the
+selected format and version, page/file counts, projection, limit, batch size,
+and URL-expiry summary. It never contains credentials, URLs, paths, tokens,
+predicate values, protocol actions, or mutable execution state.
 
 The eager adapters consume that same stream path:
 
@@ -108,8 +118,7 @@ The following work remains before release readiness:
   unsupported condition.
 - `batch_size` is supported; any non-`NULL` `concurrency` value is explicitly
   unsupported.
-- Projected `read_schema()` and public `read_diagnostics()` execution are not
-  implemented.
+- Projected `read_schema()` is not implemented.
 - Cross-platform build proof, representative performance measurements, and
   final lifecycle/release evidence are still pending.
 

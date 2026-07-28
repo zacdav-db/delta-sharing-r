@@ -226,6 +226,22 @@
 
   state <- .prepared_snapshot_state(prepared)
   invocation <- .prepared_snapshot_invocation(prepared)
+  planning <- .prepared_snapshot_diagnostics(prepared)
+  diagnostics <- if (is_cdf) {
+    .new_cdf_read_diagnostics(
+      specification = specification,
+      planning = planning,
+      batch_size = batch_size,
+      concurrency = concurrency
+    )
+  } else {
+    .new_snapshot_read_diagnostics(
+      specification = specification,
+      planning = planning,
+      batch_size = batch_size,
+      concurrency = concurrency
+    )
+  }
   stream <- if (is_cdf) {
     native_cdf_stream_factory(
       table_location = state$guard,
@@ -254,6 +270,7 @@
     )
   }
   state$released <- TRUE
+  stream <- .attach_read_diagnostics(stream, diagnostics)
   transferred <- TRUE
   stream
 }

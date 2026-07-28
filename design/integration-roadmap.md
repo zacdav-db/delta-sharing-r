@@ -214,7 +214,8 @@ and tested without row reading.
 - [x] Return a lazy, bounded, single-consumer Arrow C Stream.
 - [ ] Cover empty tables, partitions, nested types, timestamps, column mapping,
   deletion vectors, time travel, malformed input, and mid-stream failure.
-- [ ] Assemble redacted public diagnostics in R from R and Kernel metrics.
+- [x] Assemble redacted public diagnostics from R-owned planning and selection
+  facts without misattributing process-global native counters.
 
 Exit gate G3: snapshot correctness/conformance fixtures pass on every
 materialization-neutral stream case, lifecycle cases pass, and performance
@@ -226,7 +227,7 @@ meets the stream thresholds in the design plan.
 - [x] Implement `read_data_frame()` and `as.data.frame()`.
 - [x] Prove every adapter consumes the same Arrow stream path.
 - [ ] Add DuckDB registration/composition coverage.
-- [ ] Expose stable, redacted read diagnostics.
+- [x] Expose stable, redacted read diagnostics.
 - [x] Document eager-memory cost and explicit stream release.
 
 Exit gate G4: Arrow, data-frame, and downstream-consumer fixture results and

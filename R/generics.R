@@ -265,13 +265,17 @@ read_data_frame <- S7::new_generic("read_data_frame", "read")
 
 #' Retrieve read diagnostics
 #'
-#' This exported operation is reserved for stable, redacted diagnostics. It is
-#' not yet implemented by the default execution interface and currently raises
-#' a typed unsupported condition.
+#' Returns immutable, redacted planning and selection facts attached to the
+#' stream by [read_arrow_stream()]. Diagnostics remain available before
+#' consumption, after exhaustion, and after explicit `stream$release()`.
+#'
+#' The result never contains credentials, URLs, paths, query strings, tokens,
+#' predicate values, protocol actions, or private temporary locations. It also
+#' does not report active/released state because nanoarrow does not expose that
+#' per-stream state reliably.
 #'
 #' @param stream A stream returned by [read_arrow_stream()].
-#' @return When implemented, safe diagnostics from the active or completed
-#'   stream.
+#' @return A [SharingReadDiagnostics].
 #' @export
 read_diagnostics <- S7::new_generic(
   "read_diagnostics",

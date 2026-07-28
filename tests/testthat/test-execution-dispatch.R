@@ -200,15 +200,25 @@ test_that("untyped execution errors are wrapped without leaking messages", {
   })
 })
 
-test_that("diagnostics dispatch on the returned stream", {
+test_that("diagnostics are owned by the returned stream", {
   recorder <- new.env(parent = emptyenv())
   interface <- test_execution_interface(recorder)
+  diagnostics <- SharingReadDiagnostics(
+    read_kind = "snapshot",
+    response_format = "delta",
+    table_version = 42,
+    page_count = 1,
+    file_count = 0,
+    batch_size = 1024
+  )
+  stream <- delta.sharing:::.attach_read_diagnostics(
+    delta.sharing:::.native_test_stream(),
+    diagnostics
+  )
+  on.exit(stream$release(), add = TRUE)
 
   delta.sharing:::.with_execution_interface(interface, {
-    stream <- read_arrow_stream(sharing_read(test_table()))
-    diagnostics <- read_diagnostics(stream)
-
-    expect_identical(diagnostics$batches_emitted, 1L)
-    expect_identical(recorder$diagnostics_stream, stream)
+    expect_identical(read_diagnostics(stream), diagnostics)
+    expect_null(recorder$diagnostics_stream)
   })
 })

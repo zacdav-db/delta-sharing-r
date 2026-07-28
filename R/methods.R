@@ -274,5 +274,5 @@ S7::method(as.data.frame, SharingChanges) <- function(
 }
 
 S7::method(read_diagnostics, S7::class_any) <- function(stream) {
-  .invoke_execution("read_diagnostics", stream = stream)
+  .stream_read_diagnostics(stream)
 }

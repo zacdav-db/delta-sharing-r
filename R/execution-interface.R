@@ -9,8 +9,7 @@
   "read_schema",
   "read_arrow_stream",
   "arrow_from_stream",
-  "data_frame_from_stream",
-  "read_diagnostics"
+  "data_frame_from_stream"
 )
 
 .execution_state <- new.env(parent = emptyenv())

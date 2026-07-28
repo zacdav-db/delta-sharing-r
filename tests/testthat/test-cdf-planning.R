@@ -392,6 +392,51 @@ test_that("public paginated CDF reaches Kernel and the eager materializer once",
   expect_false(file.exists(recorder$prepared_root))
 })
 
+test_that("public CDF attaches immutable stream-local diagnostics", {
+  recorder <- new.env(parent = emptyenv())
+  callbacks <- delta.sharing:::.new_control_execution_callbacks(
+    transport = delta.sharing:::.fake_http_transport(function(request) {
+      stop("static bearer authentication must not perform auth HTTP")
+    }),
+    snapshot_transport = cdf_stream_transport(recorder),
+    clock = function() as.POSIXct("2026-07-29", tz = "UTC"),
+    sleeper = function(seconds) NULL,
+    random = function(...) 0,
+    max_attempts = 1L,
+    native_cdf_stream_factory = cdf_local_native_factory(recorder)
+  )
+  interface <- delta.sharing:::.new_execution_interface(callbacks)
+  changes <- sharing_changes(
+    test_table(),
+    starting_version = 1,
+    ending_version = 2,
+    columns = c("id", "_change_type")
+  )
+  stream <- delta.sharing:::.with_execution_interface(interface, {
+    read_arrow_stream(changes, batch_size = 2L)
+  })
+  on.exit(stream$release(), add = TRUE)
+
+  diagnostics <- read_diagnostics(stream)
+  expect_true(S7::S7_inherits(diagnostics, SharingReadDiagnostics))
+  expect_identical(diagnostics@read_kind, "cdf")
+  expect_identical(diagnostics@response_format, "delta")
+  expect_null(diagnostics@table_version)
+  expect_identical(diagnostics@starting_version, 1)
+  expect_identical(diagnostics@ending_version, 2)
+  expect_identical(diagnostics@page_count, 2)
+  expect_identical(diagnostics@file_count, 2)
+  expect_identical(diagnostics@columns, c("id", "_change_type"))
+  expect_null(diagnostics@limit)
+  expect_identical(diagnostics@batch_size, 2)
+  expect_false(diagnostics@predicate_hint_sent)
+  expect_null(diagnostics@server_limit_hint)
+
+  stream$release()
+  expect_identical(read_diagnostics(stream), diagnostics)
+  expect_false(file.exists(recorder$prepared_root))
+})
+
 test_that("public CDF failure before native ownership removes the prepared root", {
   recorder <- new.env(parent = emptyenv())
   callbacks <- delta.sharing:::.new_control_execution_callbacks(

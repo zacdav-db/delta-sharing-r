@@ -18,7 +18,9 @@ The design packet is read in this order:
    execution, injection, and lifecycle boundary.
 9. `parquet-response-kernel-proof.md` — Phase 6 wire-to-log mapping, R/Kernel
    ownership, safety gates, and executable fixture evidence.
-10. `api-mock.R` — non-executable illustration of the canonical API.
+10. `r-read-diagnostics-contract.md` — stream-local, immutable, redacted
+    diagnostics and lifecycle boundaries.
+11. `api-mock.R` — non-executable illustration of the canonical API.
 
 Implemented R subsystems also carry focused contracts. Snapshot synthetic-log
 mapping, atomic publication, privacy, and lifetime are recorded in
