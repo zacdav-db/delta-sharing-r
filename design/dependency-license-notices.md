@@ -98,13 +98,13 @@ with any xz-capable tar implementation; no package code executes it.
 
 ## Current locked-graph evidence
 
-The 2026-07-29 generation from integration base `15c931a` produced:
+The 2026-07-29 final integration-tree generation produced:
 
 - 326 resolved packages, of which 325 are checksum-pinned registry packages;
 - 629 per-package legal-file references, including 19 notice-file references,
   deduplicated to 214 exact byte sequences;
-- a 390,037-byte JSON inventory with SHA-256
-  `281d6460a77648980aa4587cd9a3b11d62328a269f9ccca4117d5c42948c2ef9`;
+- a 390,830-byte JSON inventory with SHA-256
+  `8c9452300f09b260cc7cfbf864bcbfaa7457fee7202efbf00e53f3c5e066151e`;
 - a 45,900-byte legal-text bundle with SHA-256
   `3b3648f0ebfa5dac41e948612000242ed829a1f92f426e9462603ab8d9b099d9`;
   and
@@ -115,16 +115,12 @@ The two generated outputs passed byte-for-byte regeneration, manifest-to-bundle
 digest verification, and focused determinism, lock/metadata mismatch, stale
 override, override-checksum tamper, inventory tamper, and bundle tamper tests.
 
-`R CMD build` produced a 29,112,862-byte source package containing the compact
-vendor pair and installed license outputs, but no unpacked vendor directory,
-generator tools, or override-input duplicates. A full
-network-blocked/frozen-Cargo `R CMD check --no-manual --no-build-vignettes`
-installed the package and passed all package tests. It reported only the
-then-existing GNU-extension warning for `src/Makevars`; the installed package
-kept the two dependency-license files and no vendor, Cargo-home, or target
-tree. The final source archive, after adding the non-bundled `Config/Needs/*` R
-records, also passed the exact-source no-install package check with that
-warning. The current portable shell recipe removes the GNU make constructs
-that caused it; an exact-source package check still must confirm the warning is
-gone. Repeat the complete procedure if the integration lockfile, DESCRIPTION,
-or native sources change.
+The final compact vendor pair was included in a 29,187,334-byte source package
+without an unpacked vendor directory, generator tools, or override-input
+duplicates. Exact `R CMD check --as-cran --no-manual` installed that source,
+passed all package tests and vignettes, and reported zero errors, zero warnings,
+and one explained note for the development version and source size. The
+portable shell recipe removed the earlier GNU-make warning. The installed
+package kept the two dependency-license files and no vendor, Cargo-home, or
+target tree. Repeat the complete procedure if the integration lockfile,
+DESCRIPTION, or native sources change.

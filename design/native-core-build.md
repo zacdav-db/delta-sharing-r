@@ -327,6 +327,26 @@ This validates the package-scoped macOS deployment-target handling and
 pre-CDF offline archive. It does not remove the requirement to regenerate from
 the final post-CDF lockfile.
 
+The final local artifact pass after the snapshot/CDF and portability handoffs
+regenerated the same 28,805,176-byte vendor archive, then produced:
+
+- a 29,187,334-byte source archive with SHA-256
+  `3ebf1d2f8d9731bc2a7bfc2916f639331e9b4dd4427c61b2247056fd99e490c9`;
+- an exact `R CMD check --as-cran --no-manual` result with zero errors, zero
+  warnings, and one explained development-version/source-size note;
+- an 11,057,349-byte macOS arm64 binary archive with SHA-256
+  `5c0d67b3e013b8ca2a4ab421ff66d00bcd1aafea5b8a4d5b2e7435c5a5c033b1`;
+  and
+- a clean binary reinstall reporting Kernel 0.22.0, Arrow 57.3.0, a successful
+  smoke test, and zero active streams, with only `libR` and `libSystem`
+  dynamically linked and no retained Cargo, vendor, or target tree.
+
+The source-size note is a release acceptance gate. The vendor archive is
+98.69% of the source package; pruning locked cross-platform sources or
+downloading them during installation would weaken the accepted offline build
+contract. Request an increased source-size allowance rather than applying such
+a workaround.
+
 An isolated Linux attempt from macOS on 2026-07-29 did not reach the package
 build. Docker 27.1.1 had no running daemon. The existing Podman 5.8.0
 `podman-machine-default` started its virtual machine but Fedora CoreOS entered
@@ -338,8 +358,8 @@ infrastructure blocker, not Linux package-build evidence; run the isolated
 proof above on a functioning engine.
 
 This is local evidence, not cross-platform build proof. Linux and Windows
-source builds, real TLS/HTTPS and deletion-vector coverage, package-size
-disposition, and end-to-end Kernel scan performance remain release gates. The
-current locked graph now has a network-isolated macOS source install and
-complete dependency-license inventory; both must be regenerated and rechecked
-if integration changes the lockfile or package dependencies.
+source builds, genuine provider-signed deletion-vector expiry semantics,
+package-size disposition, and end-to-end Kernel scan performance remain
+release gates. The current locked graph now has a network-isolated macOS source
+install and complete dependency-license inventory; both must be regenerated
+and rechecked if integration changes the lockfile or package dependencies.

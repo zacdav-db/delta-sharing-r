@@ -311,7 +311,9 @@ reader architecture.
   cancellation performance gates.
 - [x] Finish reference documentation, README, architecture notes, examples, and
   vignettes for the vNext API.
-- [ ] Build and install source and binary artifacts in clean environments.
+- [x] Build and install the exact source archive and a macOS arm64 binary in
+  separate clean libraries; hosted target artifacts remain part of the
+  cross-platform gate.
 - [x] Remove superseded R6 implementation, help, and dependencies.
 - [x] Confirm there are no aliases, shims, deprecations, or prior-version tests.
 
@@ -396,6 +398,7 @@ or main-line integration.
 | 7 | Performance/lifecycle evidence (`72f8e8b`, `6096774`) | Integrated | Reproducible Kernel comparator and lifecycle harnesses record throughput/RSS/cancellation; current release thresholds are unresolved and do not justify expanding Rust |
 | 3, 7 | Manifest staging and memory evidence (`ebad8dc`, `5fbc522`, `0dc89eb`, `2f8b507`) | Integrated locally | Permission-restricted R staging runs replace material whole-manifest retention; the recorded 100,000-file workload cuts incremental peak RSS by 66.0% while preserving exact close/root cleanup, with a 69.7% preparation-time cost |
 | 7 | Offline source portability (`2494378`) | Integrated locally | Frozen source-package install/check succeeds without network from the deterministic vendored Rust archive; hosted Linux/other target evidence remains open |
+| 7 | Final local package portability (`4d89ca9`, `cfdad9e`) | Integrated-tree local gate passing | Portable fixture paths and POSIX Make recipes remove the prior tar and GNU-make warnings; exact `R CMD check --as-cran --no-manual` passes with zero errors/warnings and one explained source-size/development-version note; the 29,187,334-byte source archive and 11,057,349-byte macOS arm64 binary both install and report healthy Kernel 0.22/Arrow 57.3 diagnostics |
 | 7 | vNext documentation (`f43a744`) | Integrated | Canonical vignette, README, and all public Rd topics document only the clean S7 API, R/native boundary, supported formats/CDF, cancellation, diagnostics, serialization, and explicit limitations |
 | 7 | R coverage hardening (`d1598b8`, `4913f19`, `23673c1`, `5100d32`) | Integrated-tree gate passing | Exact whole-tree R line coverage is 91.83%; tooling and CI enforce the 90% gate |
 | 7 | Rust coverage evidence | Integrated-tree gate passing | Exact snapshot/CDF Rust line coverage is 85.76%; 54 Rust library/example tests plus strict clippy and formatting pass locally |
@@ -403,14 +406,18 @@ or main-line integration.
 | 7 | Dependency notices (`a150899`, `0c88b9e`) | Integrated | All 326 locked Rust packages and all DESCRIPTION dependency roles are inventoried; 214 unique legal texts ship in a deterministic bundle with 14 fail-closed missing-file overrides |
 
 Current integration evidence: the integrated source tree passes its complete R
-suite on macOS arm64 with only the two optional `{duckdb}` tests skipped when
-that package is absent. Exact whole-tree R line coverage is 91.83%. Strict
+suite on macOS arm64; optional `{duckdb}` tests skip when that package is
+absent, and the genuine-HTTPS deletion-vector matrix runs only under its
+explicit opt-in. That opt-in matrix also passes locally with 135 expectations.
+Exact whole-tree R line coverage is 91.83%. Strict
 Clippy, formatting, documentation, and all 54 Rust library/example tests pass
 under stable; the locked/offline Rust 1.88 MSRV gate also passes. A manual
 `rustc`/LLVM-instrumented run over the locked workspace measures 1,764 of 2,057
 Rust lines (85.76%). The deterministic vendor and dependency-license checks
-pass locally, as does pinned `cargo-deny` 0.19.4. Final combined
-package/vignette checks must be rerun after the remaining handoffs. Hosted
-cross-platform builds, sanitizer execution, Windows interrupts, optional
-DuckDB execution, genuine provider-signed deletion-vector proof, and the
-unresolved release performance thresholds remain open.
+pass locally, as does pinned `cargo-deny` 0.19.4. The final exact source
+archive passes local `R CMD check --as-cran --no-manual` with zero errors,
+zero warnings, and one explained note for its development version and
+29.19 MB source size. A CRAN size allowance, hosted cross-platform builds,
+sanitizer execution, Windows interrupts, optional DuckDB execution, genuine
+provider-signed deletion-vector proof, and the unresolved release performance
+thresholds remain open.
