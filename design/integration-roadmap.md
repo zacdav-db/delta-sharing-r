@@ -171,7 +171,9 @@ work remains in any implementation phase.
 - [x] Prove early release, garbage-collection release, cancellation, errors
   before/after a batch, and panic containment.
 - [x] Prove `{arrow}` import through the C Stream without IPC.
-- [ ] Prove temporary resources and buffers are not leaked.
+- [x] Prove temporary resources and buffers are released across local
+  happy-path, error, interrupt, and finalizer lifecycle gates; hosted
+  sanitizer/valgrind-equivalent proof remains part of G7.
 - [x] Verify that the native crate contains no client, auth, HTTP, protocol,
   retry, discovery, synthetic-log, or standalone Parquet implementation.
 
@@ -231,8 +233,9 @@ and tested without row reading.
 - [x] Cover empty tables, mapped multi-column partitions, representative
   primitive and nested Arrow values, time travel, malformed input, and
   mid-stream adapter failure as one production-path conformance matrix.
-- [ ] Extend the matrix to decimal, map, interval, additional timestamp and
-  deeper nested variants, plus on-disk deletion vectors.
+- [x] Extend the matrix through decimal, map, both timestamp kinds, deeper
+  nested name mapping, and query-required on-disk deletion vectors; record
+  interval as a typed, redacted Kernel 0.22 unsupported case.
 - [x] Assemble redacted public diagnostics from R-owned planning and selection
   facts without misattributing process-global native counters.
 
@@ -288,7 +291,8 @@ reader architecture.
 
 ### Phase 7 — completion hardening
 
-- [ ] Close all correctness and security review findings.
+- [x] Close all actionable local correctness and security review findings.
+  Provider-signed and hosted platform evidence remains explicitly gated below.
 - [x] Complete R and Rust dependency/license notices and source-build policy
   with a locked-graph inventory, verbatim legal-text bundle, and deterministic
   offline generator/checker.
@@ -297,7 +301,8 @@ reader architecture.
 - [x] Enforce and pass the 85% whole-tree Rust line-coverage gate.
 - [ ] Pass package checks on minimum, release, and development R.
 - [ ] Pass macOS arm64/x86_64, Linux x86_64/arm64, and Windows x86_64 builds.
-- [ ] Pass Rust MSRV and stable builds.
+- [x] Pass locked/offline Rust 1.88 MSRV and stable builds locally, including
+  strict formatting, Clippy, documentation, and all 54 tests.
 - [ ] Pass native lifecycle, sanitizer/valgrind-equivalent, and leak checks.
 - [ ] Prove owner-thread R interrupts cancel snapshot, CDF, and synthetic
   streams exactly once on every target; foreign-thread consumers must never
@@ -382,28 +387,30 @@ or main-line integration.
 | 5 | Explicit-version CDF (`4913f19`, `a2c5196`, `5100d32`) | Integrated and conformance-tested | Separate R planner/log, exact inclusive provider versions, Kernel `TableChanges`, all four change types, name/ID column mapping, schema-range rejection, shared materializers, and typed pre-I/O rejection for timestamp/open-ended ranges |
 | 6 | Parquet snapshots (`15c931a`, `70e7be0`) | Integrated | R normalizes Parquet actions into the same private log and Kernel stream; asymmetric protocol fallback, projection, limits, cancellation, diagnostics, and Delta/Parquet parity are tested |
 | 3, 6 | Kernel feature conformance (`1d5e0da`) | Integrated | Production Sharing wrappers prove column mapping by name and ID, partitions, `timestampNtz`, inline deletion vectors, Arrow output, and lifecycle; absolute-`p` deletion vectors remain unadvertised |
-| 3 | Snapshot conformance matrix (`16a18b0`) | Integrated | Production wrappers prove empty scans, representative primitive/nested Arrow values, mapped multi-column partitions, version/latest selection, malformed input, and real mid-stream cleanup; exhaustive logical types remain open |
-| 3 | Absolute deletion-vector HTTPS proof (`a35515d`, `8342cfa`) | Integrated as an opt-in local gate | An immutable official Kernel object and GitHub's query-required raw redirect prove local absolute-`p` query propagation, Kernel filtering, typed/redacted failures, and cleanup; this is not presigned semantics, and capability advertisement remains blocked on a genuine provider-signed target plus hosted cross-platform proof |
+| 3 | Snapshot conformance matrix (`16a18b0`, `57eeb03`) | Integrated | Production wrappers prove empty scans, decimals, maps, both timestamp kinds, deep name mapping, mapped partitions, version/latest selection, malformed input, explicit interval rejection, and real mid-stream cleanup |
+| 3 | Absolute deletion-vector HTTPS proof (`a35515d`, `8342cfa`, `3af73c6`) | Integrated as an opt-in local gate | An immutable official Kernel object and GitHub's query-required raw redirect prove local absolute-`p` query propagation, Kernel filtering, typed/redacted failures, and cleanup; this is not provider-signed semantics, and capability advertisement remains blocked on a genuine provider-signed target plus hosted cross-platform proof |
+| 3, 5 | Pull-response close lifecycle (`72cf1ab`) | Integrated | Snapshot and CDF cleanup retries failed closes, stays armed for finalization, redacts close failures, and disarms exactly once after success |
+| 3, 7 | Temporary-root hardening (`024413e`) | Integrated locally | R-owned synthetic-log roots validate their trusted parent, owner, permissions, marker, canonical identity, and replacement state before recursive cleanup; hosted Windows ACL/reparse-point proof remains open |
 | 7 | Serialization and diagnostics (`a4e22df`, `9214629`) | Integrated | Descriptors serialize without live handles or secrets and deserialize inert; per-stream immutable diagnostics remain available after release |
 | 7 | Interrupt cancellation (`b8e3f68`, `23673c1`) | Integrated locally | Real SIGINT subprocesses cancel and release synthetic, snapshot, CDF, direct-pull, Arrow, and data-frame paths exactly once on macOS; Windows hosted proof remains open |
 | 7 | Performance/lifecycle evidence (`72f8e8b`, `6096774`) | Integrated | Reproducible Kernel comparator and lifecycle harnesses record throughput/RSS/cancellation; current release thresholds are unresolved and do not justify expanding Rust |
 | 3, 7 | Manifest staging and memory evidence (`ebad8dc`, `5fbc522`, `0dc89eb`, `2f8b507`) | Integrated locally | Permission-restricted R staging runs replace material whole-manifest retention; the recorded 100,000-file workload cuts incremental peak RSS by 66.0% while preserving exact close/root cleanup, with a 69.7% preparation-time cost |
 | 7 | Offline source portability (`2494378`) | Integrated locally | Frozen source-package install/check succeeds without network from the deterministic vendored Rust archive; hosted Linux/other target evidence remains open |
 | 7 | vNext documentation (`f43a744`) | Integrated | Canonical vignette, README, and all public Rd topics document only the clean S7 API, R/native boundary, supported formats/CDF, cancellation, diagnostics, serialization, and explicit limitations |
-| 7 | R coverage hardening (`d1598b8`, `4913f19`, `23673c1`, `5100d32`) | Gate tooling integrated; current tree rerun pending | Tooling and CI enforce the 90% gate; exact coverage must be refreshed after the production staging addition |
+| 7 | R coverage hardening (`d1598b8`, `4913f19`, `23673c1`, `5100d32`) | Integrated-tree gate passing | Exact whole-tree R line coverage is 91.83%; tooling and CI enforce the 90% gate |
 | 7 | Rust coverage evidence | Integrated-tree gate passing | Exact snapshot/CDF Rust line coverage is 85.76%; 54 Rust library/example tests plus strict clippy and formatting pass locally |
-| 7 | Rust dependency policy | Policy integrated, hosted evidence open | The pinned `cargo-deny` advisory, dependency-rule, license, and source-policy job is committed; `cargo-deny` is unavailable locally |
+| 7 | Rust dependency policy | Integrated-tree local gate passing; hosted evidence open | Pinned `cargo-deny` 0.19.4 passes advisories, bans, licenses, and sources, including an offline frozen rerun with an unchanged lockfile |
 | 7 | Dependency notices (`a150899`, `0c88b9e`) | Integrated | All 326 locked Rust packages and all DESCRIPTION dependency roles are inventoried; 214 unique legal texts ship in a deterministic bundle with 14 fail-closed missing-file overrides |
 
 Current integration evidence: the integrated source tree passes its complete R
 suite on macOS arm64 with only the two optional `{duckdb}` tests skipped when
-that package is absent. Exact whole-tree R coverage must be refreshed after the
-production staging addition. Strict clippy, formatting, and all 54 Rust
-library/example tests pass. A manual
+that package is absent. Exact whole-tree R line coverage is 91.83%. Strict
+Clippy, formatting, documentation, and all 54 Rust library/example tests pass
+under stable; the locked/offline Rust 1.88 MSRV gate also passes. A manual
 `rustc`/LLVM-instrumented run over the locked workspace measures 1,764 of 2,057
 Rust lines (85.76%). The deterministic vendor and dependency-license checks
-pass locally. Final combined package/vignette checks must be rerun after the
-remaining handoffs. Hosted cross-platform builds, sanitizer execution,
-`cargo-deny`, Windows interrupts, optional DuckDB execution, absolute-`p`
-deletion-vector HTTPS proof, and the unresolved release performance thresholds
-remain open.
+pass locally, as does pinned `cargo-deny` 0.19.4. Final combined
+package/vignette checks must be rerun after the remaining handoffs. Hosted
+cross-platform builds, sanitizer execution, Windows interrupts, optional
+DuckDB execution, genuine provider-signed deletion-vector proof, and the
+unresolved release performance thresholds remain open.

@@ -469,13 +469,14 @@ and tested by the pinned kernel, initially:
 
 ```text
 responseformat=delta,parquet;
-readerfeatures=deletionvectors,columnmapping,timestampntz
+readerfeatures=columnmapping,timestampntz
 ```
 
 CDF has a separate capability set because Delta Kernel's current CDF support is
 narrower. Never advertise a reader feature merely because it exists in the
 protocol. Capability values must come from a tested allowlist tied to the
-pinned kernel release.
+pinned kernel release. `deletionvectors` remains withheld until the separate
+provider-signed and hosted cross-platform gates are complete.
 
 ### Snapshot flow
 

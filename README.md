@@ -120,8 +120,10 @@ Parquet reader. `read_arrow_stream()`, `read_arrow()`, and
 Reader capabilities are response-specific. Delta snapshot requests advertise
 `columnmapping` and `timestampntz`; Parquet-response normalization does not
 advertise Delta reader features. `deletionvectors` is intentionally
-unadvertised until exact absolute-path HTTPS deletion-vector resolution has
-end-to-end proof.
+unadvertised. A local opt-in proof covers a query-required absolute HTTPS
+deletion vector through Kernel, but capability restoration still requires a
+genuine provider-signed target with expiry semantics and hosted
+cross-platform evidence.
 
 CDF execution supports explicit inclusive version ranges through the separate
 immutable `SharingChanges` descriptor. Timestamp-bound and open-ended CDF
