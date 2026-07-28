@@ -1,7 +1,7 @@
 # R snapshot request and preparation contract
 
-Status: implementation handoff
-Scope: Delta-format snapshot planning only
+Status: implemented for Delta- and Parquet-format snapshots
+Scope: snapshot planning and R-owned response normalization
 Architecture owner: R
 
 ## Boundary
@@ -16,8 +16,9 @@ R owns the complete `SharingRead` to prepared-snapshot transition:
 6. atomically prepare the synthetic Delta log; and
 7. return a compact Kernel invocation plus safe diagnostics.
 
-This slice does not scan rows. It does not implement CDF or Parquet-response
-normalization. Rust receives only the private prepared table URI, read kind,
+This slice does not scan rows or implement CDF. For a Parquet-format response,
+R validates the Sharing actions and maps them to a private version-zero Delta
+snapshot before handoff. Rust receives only the private prepared table URI, read kind,
 synthetic version, projection, and exact limit. Rust does not receive profiles,
 credentials, request bodies, response headers, page tokens, refresh tokens, or
 Delta Sharing protocol actions.
@@ -54,15 +55,14 @@ refresh implementation.
 The capabilities header is built only from the pinned allowlist:
 
 ```text
-responseformat=delta;
+responseformat=delta,parquet;
 readerfeatures=columnmapping,deletionvectors,timestampntz;
 includeendstreamaction=true
 ```
 
-`auto` advertises only `delta` on Query Table because this execution path is
-Delta Kernel-backed and cannot consume a selected Parquet response. Explicit
-`parquet` is rejected before network I/O. Metadata operations retain their
-separate capability negotiation.
+`auto` advertises both supported formats. Explicit `delta` or `parquet`
+advertises exactly that single format. The response capability and normalized
+protocol/metadata/file actions must all agree on the selected format.
 
 The separate `fileidhash: delta` request header is sent and its response echo
 is required.
@@ -111,6 +111,16 @@ and any terminal `minUrlExpirationTimestamp`. It is checked both immediately
 before synthetic-log publication and again after the atomic write, while
 failure cleanup is still armed, so publication time cannot return a newly
 expired log.
+
+Parquet-format pages additionally require Sharing reader version 1, Parquet
+metadata without format options or reader-sensitive configuration, a
+recursively valid Spark struct schema without case-insensitive name collisions
+or column-mapping metadata, and unique HTTPS file IDs and URLs. Partition keys
+must exactly match declared top-level primitive partition columns and their
+serialized values must be valid for those types; the empty string retains the
+Delta Sharing Parquet protocol's wire null encoding. It is not a generic Delta
+null convention. Optional action versions, total file count, and total size are
+checked against response headers and the completed manifest.
 
 The normative terminal wire form is the published top-level object. The
 current `endStreamAction` wrapper emitted by some server implementations is

@@ -1,7 +1,7 @@
 # Parquet response to Kernel mapping proof
 
-Status: design proof accepted for implementation; no production code in this
-slice
+Status: design proof implemented by the R snapshot planner and synthetic-log
+boundary
 Integration base: `2d9d54443db2db139cdda078f955747281441bd6`
 Upstream audit revision:
 `delta-io/delta-sharing@4b790695e45bc66a7531f0ddd264725718ee2fcc`
@@ -31,7 +31,9 @@ The [official protocol][parquet-actions] requires one `protocol`, `metaData`, or
 `url`, `id`, `partitionValues`, and `size`, and defines optional `stats`,
 `version`, `timestamp`, and `expirationTimestamp`. Its
 [partition serialization][partition-values] defines strings for every
-primitive partition type and the empty string as null.
+primitive partition type and the empty string as null. That empty-string
+convention belongs specifically to the Delta Sharing Parquet wire protocol; it
+is not a generic rule for null values in Delta logs.
 
 The upstream clients establish the semantic obligations, but their standalone
 Parquet readers are not the architecture for this package:
@@ -47,7 +49,11 @@ Parquet readers are not the architecture for this package:
   ([Scala model lines 164-191][scala-model]).
 
 The package can obtain those semantics from Delta Kernel instead. The committed
-test-only fixture proves that the existing native boundary:
+test-only fixture passes through the production snapshot request planner,
+streaming NDJSON decoder, Parquet normalizer, synthetic-log publication, and
+prepared-snapshot diagnostics before entering the existing native boundary.
+It proves that the selected format remains `parquet` and that the native
+boundary:
 
 1. reads a Parquet response-shaped file mapped to an `add` action;
 2. materializes a partition column absent from the physical Parquet file;
@@ -76,7 +82,7 @@ therefore adds no production seam or Rust responsibility.
 | metadata `version`, `size`, `numFiles` | none | Retain as safe R planning/diagnostic state; they do not define Delta actions. |
 | `file.url` | `add.path` | Copy the validated absolute HTTPS URL exactly, including encoded path and query. |
 | `file.id` | private R file identity | Use for duplicate detection and deterministic action ordering; do not add a non-Delta field. |
-| `file.partitionValues` | `add.partitionValues` | Preserve string values exactly, including empty string/null encoding. Require keys to equal the declared partition columns. Kernel reconstructs typed logical columns. |
+| `file.partitionValues` | `add.partitionValues` | Preserve strings exactly, including the Delta Sharing Parquet protocol's empty-string wire encoding for null. This is not a generic Delta null convention. Require keys to equal the declared partition columns. Kernel reconstructs typed logical columns. |
 | `file.size` | `add.size` | Copy a non-negative whole number within the R JSON-safe range. |
 | `file.stats` | `add.stats` | Copy exact UTF-8 JSON only after bounded object validation; omission remains omission. |
 | `file.version`, `timestamp` | private R state only | They identify the provider table version, not Delta file modification time. |
@@ -101,7 +107,8 @@ R must reject before publishing a log or beginning file I/O:
 - schema names that collide under Delta's case-insensitive resolution;
 - partition columns absent from the schema, complex/binary partition types,
   missing/extra partition-value keys, or strings invalid for the declared
-  primitive type (the empty string remains the protocol null);
+  primitive type (the empty string remains specifically the Sharing Parquet
+  protocol's wire null);
 - physical-reader features that cannot be expressed by the fixed synthetic
   protocol, including column mapping metadata/configuration; and
 - expired URLs, inconsistent protocol/metadata/table version across pages, or

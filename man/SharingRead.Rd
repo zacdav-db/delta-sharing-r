@@ -30,9 +30,8 @@ it as a server hint and must also enforce it exactly.}
 best effort and are not exact row filters.}
 
 \item{response_format}{One of \code{"auto"}, \code{"delta"}, or \code{"parquet"}.
-Snapshot execution currently materializes Delta-format responses only;
-explicit or server-selected Parquet responses fail with a typed
-unsupported condition.}
+Snapshot execution supports both protocol formats through the same Delta
+Kernel stream. Parquet-format change data feed remains unsupported.}
 }
 \value{
 A read-only \code{SharingRead} object.

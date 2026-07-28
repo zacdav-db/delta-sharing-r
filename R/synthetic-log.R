@@ -497,7 +497,8 @@
                                        delta_action,
                                        expiration_timestamp = NULL,
                                        version = NULL,
-                                       timestamp = NULL) {
+                                       timestamp = NULL,
+                                       response_format = "delta") {
   state <- new.env(parent = emptyenv())
   state$id <- id
   state$action_type <- action_type
@@ -505,6 +506,7 @@
   state$expiration_timestamp <- expiration_timestamp
   state$version <- version
   state$timestamp <- timestamp
+  state$response_format <- response_format
   lockEnvironment(state, bindings = TRUE)
 
   file <- new.env(parent = emptyenv())
@@ -520,6 +522,9 @@
 ) {
   if (!.snapshot_has_valid_names(value)) {
     .protocol_abort("Snapshot file wrapper must be a JSON object.", operation)
+  }
+  if ("url" %in% names(value)) {
+    return(.normalize_parquet_file_action(value, operation))
   }
   tryCatch(
     {
@@ -651,9 +656,13 @@
   if (
     !inherits(protocol, "delta_sharing_protocol") ||
       !is.list(protocol) ||
-      !identical(protocol$response_format, "delta")
+      !.is_scalar_character(protocol$response_format) ||
+      !protocol$response_format %in% .snapshot_response_formats
   ) {
-    .snapshot_log_abort("Snapshot protocol must use Delta response format.")
+    .snapshot_log_abort("Snapshot protocol uses an invalid response format.")
+  }
+  if (identical(protocol$response_format, "parquet")) {
+    return(.parquet_snapshot_protocol_action(protocol))
   }
   min_reader <- .snapshot_whole_number(
     protocol,
@@ -702,9 +711,13 @@
   if (
     !inherits(metadata, "delta_sharing_metadata") ||
       !is.list(metadata) ||
-      !identical(metadata$response_format, "delta")
+      !.is_scalar_character(metadata$response_format) ||
+      !metadata$response_format %in% .snapshot_response_formats
   ) {
-    .snapshot_log_abort("Snapshot metadata must use Delta response format.")
+    .snapshot_log_abort("Snapshot metadata uses an invalid response format.")
+  }
+  if (identical(metadata$response_format, "parquet")) {
+    return(.parquet_snapshot_metadata_action(metadata)$action)
   }
   id <- .snapshot_required_string(metadata, "id", "Snapshot metadata")
   format <- metadata$format
@@ -786,7 +799,10 @@
   action
 }
 
-.validate_snapshot_files <- function(files, protocol_action) {
+.validate_snapshot_files <- function(files,
+                                     protocol_action,
+                                     metadata_state,
+                                     response_format) {
   if (!is.list(files)) {
     .snapshot_log_abort("`files` must be a list of validated file actions.")
   }
@@ -796,7 +812,17 @@
   if (length(files) == 0L) {
     return(list())
   }
+  if (identical(response_format, "parquet")) {
+    return(.validate_parquet_snapshot_files(files, metadata_state$schema))
+  }
   states <- lapply(files, .snapshot_file_state)
+  if (any(vapply(
+    states,
+    function(state) !identical(state$response_format, "delta"),
+    logical(1)
+  ))) {
+    .snapshot_log_abort("Snapshot response mixes response formats.")
+  }
   ids <- vapply(states, `[[`, character(1), "id")
   types <- vapply(states, `[[`, character(1), "action_type")
   paths <- vapply(
@@ -857,12 +883,24 @@
 
 .snapshot_commit_lines <- function(protocol, metadata, files) {
   protocol_action <- .validate_snapshot_protocol(protocol)
-  metadata_action <- .validate_snapshot_metadata(metadata)
-  file_actions <- .validate_snapshot_files(files, protocol_action)
+  metadata_state <- if (identical(metadata$response_format, "parquet")) {
+    .parquet_snapshot_metadata_action(metadata)
+  } else {
+    list(action = .validate_snapshot_metadata(metadata), schema = NULL)
+  }
+  if (!identical(protocol$response_format, metadata$response_format)) {
+    .snapshot_log_abort("Snapshot response mixes response formats.")
+  }
+  file_actions <- .validate_snapshot_files(
+    files,
+    protocol_action,
+    metadata_state,
+    protocol$response_format
+  )
   actions <- c(
     list(
       list(protocol = protocol_action),
-      list(metaData = metadata_action)
+      list(metaData = metadata_state$action)
     ),
     file_actions
   )

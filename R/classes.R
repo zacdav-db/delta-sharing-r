@@ -243,9 +243,8 @@ SharingTable <- S7::new_class(
 #' @param predicate Optional structured server-side predicate hint. Hints are
 #'   best effort and are not exact row filters.
 #' @param response_format One of `"auto"`, `"delta"`, or `"parquet"`.
-#'   Snapshot execution currently materializes Delta-format responses only;
-#'   explicit or server-selected Parquet responses fail with a typed
-#'   unsupported condition.
+#'   Snapshot execution supports both protocol formats through the same Delta
+#'   Kernel stream. Parquet-format change data feed remains unsupported.
 #' @return A read-only `SharingRead` object.
 #' @export
 SharingRead <- S7::new_class(

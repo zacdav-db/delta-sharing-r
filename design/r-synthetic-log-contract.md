@@ -7,10 +7,10 @@ Branch owner: `codex/r-synthetic-log-vnext`
 ## Scope
 
 This contract covers the R-owned preparation and lifetime of the minimal local
-Delta log used for one Delta-format snapshot response. It starts after the
+Delta log used for one Delta- or Parquet-format snapshot response. It starts after the
 response protocol, metadata, and file wrappers have been incrementally decoded
 and normalized. It does not perform HTTP, URL refresh, public S7 dispatch,
-Kernel invocation, CDF preparation, or Parquet-response normalization.
+Kernel invocation or CDF preparation.
 
 ## Authoritative mapping
 
@@ -51,9 +51,18 @@ prove containment without parsing or owning R semantics.
 
 ## Validation and intentionally closed cases
 
-Preparation accepts Delta response format only. Delta protocol
+Preparation accepts Delta and Parquet snapshot response formats. Delta protocol
 `minReaderVersion` and `minWriterVersion` are required. Metadata must describe
 Parquet files and contain a minimally valid Delta struct schema.
+
+For a Parquet response, Sharing reader version 1 maps to the private fixed
+Delta protocol reader 1/writer 2. Metadata schema and partition-column order
+are preserved, but Sharing-only configuration and table-level values are not
+copied. Each `file.url` becomes an `add.path`; partition values, size, and
+validated stats are preserved; `modificationTime=0` and `dataChange=true` are
+fixed sentinels. File version, timestamp, expiry, and ID remain private R
+planning state. Only snapshot `file` actions are accepted; Parquet CDF is
+rejected before request execution when explicitly selected.
 
 The file-wrapper allowlist follows the current Delta Sharing wrapper. The
 single action must be exactly one `add` or `remove`, using the current

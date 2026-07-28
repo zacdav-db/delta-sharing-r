@@ -224,10 +224,10 @@ read_schema <- S7::new_generic(
 #' finalization release the native scan and private temporary state. Explicit
 #' release is recommended when consumption stops early.
 #'
-#' `SharingRead` is supported for Delta-format responses.
-#' `SharingChanges`, protocol Parquet responses, and any non-`NULL`
-#' `concurrency` value currently fail with typed unsupported conditions before
-#' materialization.
+#' `SharingRead` supports Delta- and Parquet-format snapshot responses through
+#' the same Kernel stream. `SharingChanges` supports Delta-format explicit
+#' version ranges. Parquet-format changes and any non-`NULL` `concurrency`
+#' value fail with typed unsupported conditions before materialization.
 #'
 #' @param read A [SharingRead]. A [SharingChanges] descriptor is accepted by
 #'   dispatch but CDF execution is not yet supported.

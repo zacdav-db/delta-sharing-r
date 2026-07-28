@@ -26,8 +26,8 @@ The stream is single-consumer. Exhaustion, explicit \code{stream$release()}, and
 finalization release the native scan and private temporary state. Explicit
 release is recommended when consumption stops early.
 
-\code{SharingRead} is supported for Delta-format responses.
-\code{SharingChanges}, protocol Parquet responses, and any non-\code{NULL}
-\code{concurrency} value currently fail with typed unsupported conditions before
-materialization.
+\code{SharingRead} supports Delta- and Parquet-format snapshot responses through
+the same Kernel stream. \code{SharingChanges} supports Delta-format explicit
+version ranges. Parquet-format changes and any non-\code{NULL} \code{concurrency}
+value fail with typed unsupported conditions before materialization.
 }

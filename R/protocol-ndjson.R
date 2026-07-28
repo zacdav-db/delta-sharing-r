@@ -558,6 +558,12 @@
     )
   }
   if (identical(known, "protocol")) {
+    if (length(names(value)) != 1L) {
+      .protocol_abort(
+        sprintf("NDJSON line %d contains an invalid protocol wrapper.", line_number),
+        operation
+      )
+    }
     return(.new_ndjson_action(
       "protocol",
       .normalize_protocol_action(value$protocol, operation),
@@ -565,6 +571,12 @@
     ))
   }
   if (identical(known, "metaData")) {
+    if (length(names(value)) != 1L) {
+      .protocol_abort(
+        sprintf("NDJSON line %d contains an invalid metadata wrapper.", line_number),
+        operation
+      )
+    }
     return(.new_ndjson_action(
       "metadata",
       .normalize_metadata_action(value$metaData, operation),
@@ -572,6 +584,12 @@
     ))
   }
   if (identical(known, "file")) {
+    if (length(names(value)) != 1L) {
+      .protocol_abort(
+        sprintf("NDJSON line %d contains an invalid file wrapper.", line_number),
+        operation
+      )
+    }
     return(.new_ndjson_action(
       "file",
       .normalize_snapshot_file_action(value$file, operation),

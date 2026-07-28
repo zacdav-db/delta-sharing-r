@@ -71,14 +71,9 @@ test_that("snapshot requests preserve raw identifiers and current query fields",
   expect_identical(request$headers$fileidhash, "delta")
   expect_match(
     request$headers[["delta-sharing-capabilities"]],
-    "responseformat=delta",
+    "responseformat=delta,parquet",
     fixed = TRUE
   )
-  expect_false(grepl(
-    "responseformat=delta,parquet",
-    request$headers[["delta-sharing-capabilities"]],
-    fixed = TRUE
-  ))
   expect_match(
     request$headers[["delta-sharing-capabilities"]],
     "includeendstreamaction=true",
@@ -128,7 +123,7 @@ test_that("latest and paginated requests follow the current provider wire model"
   ))
 })
 
-test_that("snapshot planning rejects invalid hints and Parquet before I/O", {
+test_that("snapshot planning rejects invalid hints and negotiates Parquet", {
   invalid_predicates <- list(
     list(1, 2),
     structure(list(op = "equal", op = "other"), names = c("op", "op")),
@@ -145,20 +140,14 @@ test_that("snapshot planning rejects invalid hints and Parquet before I/O", {
     )
   }
 
-  called <- FALSE
-  condition <- expect_error(
-    delta.sharing:::.prepare_snapshot_read(
-      sharing_read(test_table(), response_format = "parquet"),
-      fetch = function(request) {
-        called <<- TRUE
-        stop("must not run")
-      }
-    ),
-    class = "delta_sharing_unsupported_error"
+  parquet_request <- delta.sharing:::.plan_snapshot_request(
+    sharing_read(test_table(), response_format = "parquet")
   )
-  expect_false(called)
-  expect_identical(condition$response_format, "parquet")
-  expect_identical(condition$feature, "parquet_response")
+  expect_match(
+    parquet_request$headers[["delta-sharing-capabilities"]],
+    "responseformat=parquet;",
+    fixed = TRUE
+  )
 })
 
 test_that("snapshot planning helpers enforce bounded canonical controls", {
@@ -190,9 +179,10 @@ test_that("snapshot planning helpers enforce bounded canonical controls", {
     delta.sharing:::.snapshot_page_token("bad\r\nprivate-token"),
     class = "delta_sharing_protocol_error"
   )
-  expect_error(
+  expect_match(
     delta.sharing:::.snapshot_query_capabilities("parquet"),
-    class = "delta_sharing_unsupported_error"
+    "responseformat=parquet;",
+    fixed = TRUE
   )
 })
 

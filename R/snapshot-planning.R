@@ -27,14 +27,6 @@
       type = "validation"
     )
   }
-  if (identical(read@response_format, "parquet")) {
-    .snapshot_planning_abort(
-      "Parquet response normalization is not available in the snapshot planner.",
-      type = "unsupported",
-      response_format = "parquet",
-      feature = "parquet_response"
-    )
-  }
   read
 }
 
@@ -145,18 +137,9 @@
 }
 
 .snapshot_query_capabilities <- function(response_format) {
-  # Query Table materialization is Delta Kernel-only in vNext. `auto` therefore
-  # means the only response format this execution path can consume.
   response_format <- .normalize_response_format(response_format)
-  if (identical(response_format, "parquet")) {
-    .snapshot_planning_abort(
-      "Parquet snapshot responses are not supported.",
-      type = "unsupported",
-      response_format = "parquet"
-    )
-  }
   paste0(
-    .snapshot_capability_header("delta"),
+    .snapshot_capability_header(response_format),
     ";includeendstreamaction=true"
   )
 }
@@ -325,14 +308,7 @@ print.delta_sharing_snapshot_request <- function(x, ...) {
         "The snapshot response selected an invalid response format."
       )
     }
-    if (!identical(formats, "delta")) {
-      .snapshot_planning_abort(
-        "The server selected a Parquet response that this planner cannot normalize.",
-        type = "unsupported",
-        response_format = "parquet",
-        feature = "parquet_response"
-      )
-    }
+    capabilities$responseformat <- formats
   }
 
   features <- capabilities$readerfeatures
@@ -534,13 +510,36 @@ print.delta_sharing_snapshot_request <- function(x, ...) {
       "The snapshot response is missing protocol or metadata."
     )
   }
-  if (!identical(protocol$response_format, "delta") ||
-      !identical(metadata$response_format, "delta")) {
+  if (!identical(protocol$response_format, metadata$response_format)) {
     .snapshot_planning_abort(
-      "The server selected a Parquet response that this planner cannot normalize.",
-      type = "unsupported",
-      response_format = "parquet",
-      feature = "parquet_response"
+      "The snapshot response uses inconsistent response formats."
+    )
+  }
+  response_format <- protocol$response_format
+  selected_format <- header_state$capabilities$responseformat
+  if (!is.null(selected_format) &&
+      !identical(selected_format, response_format)) {
+    .snapshot_planning_abort(
+      "The snapshot response format does not match the selected capability."
+    )
+  }
+  file_formats <- vapply(
+    files,
+    function(file) .snapshot_file_state(file)$response_format,
+    character(1)
+  )
+  if (length(file_formats) > 0L &&
+      any(file_formats != response_format)) {
+    .snapshot_planning_abort(
+      "The snapshot response mixes file response formats."
+    )
+  }
+  if (identical(response_format, "parquet")) {
+    .validate_parquet_response_versions(
+      protocol,
+      metadata,
+      files,
+      header_state$table_version
     )
   }
   terminal_required <- identical(
@@ -568,6 +567,7 @@ print.delta_sharing_snapshot_request <- function(x, ...) {
       terminal,
       operation = .snapshot_query_operation
     ),
+    response_format = response_format,
     table_version = header_state$table_version,
     capabilities = header_state$capabilities,
     chunk_count = chunk_count
@@ -820,6 +820,12 @@ print.delta_sharing_prepared_snapshot <- function(x, ...) {
       protocol <- page$protocol
       metadata <- page$metadata
       table_version <- page$table_version
+      if (!identical(read@response_format, "auto") &&
+          !identical(read@response_format, page$response_format)) {
+        .snapshot_planning_abort(
+          "The server selected a different snapshot response format than requested."
+        )
+      }
       if (!is.null(read@version) &&
           !identical(read@version, table_version)) {
         .snapshot_planning_abort(
@@ -894,6 +900,9 @@ print.delta_sharing_prepared_snapshot <- function(x, ...) {
       use.names = FALSE
     )
   }
+  if (identical(protocol$response_format, "parquet")) {
+    .validate_parquet_response_totals(metadata, files)
+  }
   guard <- .prepare_snapshot_log(
     protocol = protocol,
     metadata = metadata,
@@ -918,7 +927,7 @@ print.delta_sharing_prepared_snapshot <- function(x, ...) {
     exact_limit = read@limit
   )
   diagnostics <- list(
-    response_format = "delta",
+    response_format = protocol$response_format,
     table_version = table_version,
     page_count = as.integer(page_count),
     file_count = as.integer(file_count),

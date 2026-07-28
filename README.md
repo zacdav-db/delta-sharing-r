@@ -100,11 +100,13 @@ behind the client's opaque R context and are never descriptor properties.
 
 ## Current scope
 
-Snapshot materialization currently supports `SharingRead` with Delta-format
-Query Table responses, including latest, version, and timestamp reads,
-projection, exact limits, bounded Arrow batches, and best-effort predicate
-hints. `read_arrow_stream()`, `read_arrow()`, and `read_data_frame()` all
-consume the same Delta Kernel Arrow stream.
+Snapshot materialization supports `SharingRead` with Delta- and
+Parquet-format Query Table responses, including latest, version, and timestamp
+reads, projection, exact limits, bounded Arrow batches, and best-effort
+predicate hints. R normalizes protocol Parquet actions into the same private
+Kernel-readable log used by Delta responses; there is no second downloader or
+Parquet reader. `read_arrow_stream()`, `read_arrow()`, and
+`read_data_frame()` all consume the same Delta Kernel Arrow stream.
 
 CDF execution supports explicit inclusive version ranges through the separate
 immutable `SharingChanges` descriptor. Timestamp-bound and open-ended CDF
@@ -113,9 +115,6 @@ provider versions can be resolved exactly.
 
 The following work remains before release readiness:
 
-- Protocol Parquet responses are not materialized. An explicit
-  `response_format = "parquet"` or a Parquet server selection raises a typed
-  unsupported condition.
 - `batch_size` is supported; any non-`NULL` `concurrency` value is explicitly
   unsupported.
 - Projected `read_schema()` is not implemented.
