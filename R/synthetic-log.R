@@ -445,11 +445,15 @@
   action
 }
 
-.new_private_snapshot_file <- function(id, action_type, delta_action) {
+.new_private_snapshot_file <- function(id,
+                                       action_type,
+                                       delta_action,
+                                       expiration_timestamp = NULL) {
   state <- new.env(parent = emptyenv())
   state$id <- id
   state$action_type <- action_type
   state$delta_action <- delta_action
+  state$expiration_timestamp <- expiration_timestamp
   lockEnvironment(state, bindings = TRUE)
 
   file <- new.env(parent = emptyenv())
@@ -493,7 +497,7 @@
           "Snapshot file wrapper"
         )
       }
-      for (field in c("version", "timestamp", "expirationTimestamp", "size")) {
+      for (field in c("version", "timestamp", "size")) {
         .snapshot_whole_number(
           value,
           field,
@@ -502,6 +506,12 @@
           nonnegative = !identical(field, "timestamp")
         )
       }
+      expiration_timestamp <- .snapshot_whole_number(
+        value,
+        "expirationTimestamp",
+        "Snapshot file wrapper",
+        required = FALSE
+      )
       single <- if ("deltaSingleAction" %in% names(value)) {
         value$deltaSingleAction
       } else {
@@ -532,7 +542,8 @@
       .new_private_snapshot_file(
         id,
         action_type,
-        stats::setNames(list(action), action_type)
+        stats::setNames(list(action), action_type),
+        expiration_timestamp = expiration_timestamp
       )
     },
     delta_sharing_error = function(cnd) {
@@ -564,6 +575,10 @@
     )
   }
   file$state
+}
+
+.snapshot_file_expiration_timestamp <- function(file) {
+  .snapshot_file_state(file)$expiration_timestamp
 }
 
 .validate_snapshot_protocol <- function(protocol) {
@@ -849,8 +864,10 @@
     function(value) {
       state <- value$state
       if (!isTRUE(state$released)) {
-        .cleanup_snapshot_root(state$root)
-        state$released <- TRUE
+        removed <- .cleanup_snapshot_root(state$root)
+        if (isTRUE(removed)) {
+          state$released <- TRUE
+        }
       }
       invisible(NULL)
     },
@@ -910,14 +927,20 @@
   paste0("file://", encoded)
 }
 
-.release_snapshot_log <- function(guard) {
+.release_snapshot_log <- function(
+  guard,
+  cleanup = .cleanup_snapshot_root
+) {
   state <- .validate_snapshot_log_guard(guard)
+  if (!is.function(cleanup)) {
+    stop("`cleanup` must be a function.", call. = FALSE)
+  }
   if (!isTRUE(state$released)) {
-    removed <- .cleanup_snapshot_root(state$root)
-    state$released <- TRUE
-    if (!removed) {
+    removed <- cleanup(state$root)
+    if (!isTRUE(removed)) {
       .snapshot_log_abort("Prepared snapshot log could not be released.")
     }
+    state$released <- TRUE
   }
   invisible(TRUE)
 }

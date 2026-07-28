@@ -104,6 +104,114 @@
   opaque
 }
 
+.new_private_end_stream <- function(next_page_token,
+                                    refresh_token,
+                                    min_url_expiration_timestamp) {
+  state <- new.env(parent = emptyenv())
+  state$next_page_token <- next_page_token
+  state$refresh_token <- refresh_token
+  state$min_url_expiration_timestamp <- min_url_expiration_timestamp
+  lockEnvironment(state, bindings = TRUE)
+
+  action <- new.env(parent = emptyenv())
+  action$state <- state
+  class(action) <- "delta_sharing_private_end_stream"
+  lockEnvironment(action, bindings = TRUE)
+  action
+}
+
+.end_stream_state <- function(action, operation = "query_table") {
+  if (!inherits(action, "delta_sharing_private_end_stream") ||
+      !is.environment(action) ||
+      !is.environment(action$state)) {
+    .protocol_abort(
+      "The response contains an invalid terminal action.",
+      operation
+    )
+  }
+  action$state
+}
+
+.normalize_end_stream_action <- function(value, operation) {
+  value <- .require_json_object(value, "End stream action", operation)
+  allowed <- c(
+    "refreshToken",
+    "nextPageToken",
+    "minUrlExpirationTimestamp",
+    "errorMessage",
+    "httpStatusErrorCode"
+  )
+  if (length(setdiff(names(value), allowed)) > 0L) {
+    .protocol_abort(
+      "End stream action contains unsupported fields.",
+      operation
+    )
+  }
+
+  token <- function(name) {
+    if (!.json_has(value, name) || is.null(value[[name]]) ||
+        identical(value[[name]], "")) {
+      return(NULL)
+    }
+    candidate <- value[[name]]
+    if (!.is_scalar_character(candidate) ||
+        grepl("[\r\n]", candidate) ||
+        nchar(candidate, type = "bytes") > .ndjson_default_max_line_bytes) {
+      .protocol_abort(
+        sprintf("End stream field `%s` is invalid.", name),
+        operation
+      )
+    }
+    candidate
+  }
+
+  status <- .wire_integer(
+    value,
+    "httpStatusErrorCode",
+    operation,
+    required = FALSE,
+    nonnegative = TRUE,
+    maximum = 599
+  )
+  if (!is.null(status) && status < 100) {
+    .protocol_abort(
+      "End stream field `httpStatusErrorCode` is invalid.",
+      operation
+    )
+  }
+  if (.json_has(value, "errorMessage") &&
+      !is.null(value$errorMessage)) {
+    if (!is.character(value$errorMessage) ||
+        length(value$errorMessage) != 1L ||
+        is.na(value$errorMessage)) {
+      .protocol_abort(
+        "End stream field `errorMessage` is invalid.",
+        operation
+      )
+    }
+    .abort_delta_sharing(
+      "The Delta Sharing server reported a streaming error.",
+      type = "protocol",
+      operation = operation,
+      status = status
+    )
+  }
+
+  expiration <- .wire_integer(
+    value,
+    "minUrlExpirationTimestamp",
+    operation,
+    required = FALSE,
+    nonnegative = TRUE,
+    maximum = 2^53
+  )
+  .new_private_end_stream(
+    next_page_token = token("nextPageToken"),
+    refresh_token = token("refreshToken"),
+    min_url_expiration_timestamp = expiration
+  )
+}
+
 .new_ndjson_action <- function(type, value, line_number) {
   structure(
     list(
@@ -435,7 +543,10 @@
     )
   }
 
-  known <- intersect(c("protocol", "metaData", "file"), names(value))
+  known <- intersect(
+    c("protocol", "metaData", "file", "endStreamAction"),
+    names(value)
+  )
   if (length(known) > 1L) {
     .protocol_abort(
       sprintf("NDJSON line %d contains multiple recognized actions.", line_number),
@@ -463,23 +574,11 @@
       line_number
     ))
   }
-
-  end_stream_fields <- c(
-    "refreshToken",
-    "nextPageToken",
-    "minUrlExpirationTimestamp",
-    "errorMessage"
-  )
-  if (any(end_stream_fields %in% names(value))) {
-    if (.json_has(value, "errorMessage") &&
-        !is.null(value$errorMessage) &&
-        (!is.character(value$errorMessage) ||
-          length(value$errorMessage) != 1L ||
-          is.na(value$errorMessage) ||
-          nzchar(value$errorMessage))) {
+  if (identical(known, "endStreamAction")) {
+    if (length(names(value)) != 1L) {
       .protocol_abort(
         sprintf(
-          "Server reported a streaming error at NDJSON line %d.",
+          "NDJSON line %d contains an invalid terminal action.",
           line_number
         ),
         operation
@@ -487,7 +586,22 @@
     }
     return(.new_ndjson_action(
       "end_stream",
-      .new_opaque_json(value),
+      .normalize_end_stream_action(value$endStreamAction, operation),
+      line_number
+    ))
+  }
+
+  end_stream_fields <- c(
+    "refreshToken",
+    "nextPageToken",
+    "minUrlExpirationTimestamp",
+    "errorMessage",
+    "httpStatusErrorCode"
+  )
+  if (any(end_stream_fields %in% names(value))) {
+    return(.new_ndjson_action(
+      "end_stream",
+      .normalize_end_stream_action(value, operation),
       line_number
     ))
   }

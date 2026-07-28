@@ -55,6 +55,13 @@ test_that("Delta snapshot wrappers normalize into private file state", {
   )
   expect_identical(add$id, "active-a")
   expect_identical(add$action_type, "add")
+  expect_identical(add$expiration_timestamp, 1700003600000)
+  expect_identical(
+    delta.sharing:::.snapshot_file_expiration_timestamp(
+      components$files[[2L]]
+    ),
+    1700003600000
+  )
   expect_identical(
     add$delta_action$add$deletionVector$storageType,
     "p"
@@ -254,6 +261,55 @@ test_that("explicit release is deterministic and idempotent", {
     class = "delta_sharing_protocol_error"
   )
   expect_match(capture.output(print(guard)), "released")
+})
+
+test_that("failed release remains retryable and the finalizer stays armed", {
+  components <- snapshot_fixture_components()
+  guard <- delta.sharing:::.prepare_snapshot_log(
+    components$protocol,
+    components$metadata,
+    components$files
+  )
+  root <- guard$state$root
+  cleanup_attempts <- 0L
+
+  expect_error(
+    delta.sharing:::.release_snapshot_log(
+      guard,
+      cleanup = function(path) {
+        cleanup_attempts <<- cleanup_attempts + 1L
+        FALSE
+      }
+    ),
+    "could not be released",
+    class = "delta_sharing_protocol_error"
+  )
+  expect_identical(cleanup_attempts, 1L)
+  expect_false(guard$state$released)
+  expect_true(dir.exists(root))
+  expect_true(delta.sharing:::.release_snapshot_log(guard))
+  expect_true(guard$state$released)
+  expect_false(file.exists(root))
+
+  finalizer_root <- local({
+    finalizer_guard <- delta.sharing:::.prepare_snapshot_log(
+      components$protocol,
+      components$metadata,
+      components$files
+    )
+    root <- finalizer_guard$state$root
+    expect_error(
+      delta.sharing:::.release_snapshot_log(
+        finalizer_guard,
+        cleanup = function(path) FALSE
+      ),
+      class = "delta_sharing_protocol_error"
+    )
+    expect_false(finalizer_guard$state$released)
+    root
+  })
+  gc()
+  expect_false(file.exists(finalizer_root))
 })
 
 test_that("the lifetime finalizer removes an abandoned private root", {

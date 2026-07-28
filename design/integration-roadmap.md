@@ -199,13 +199,17 @@ and tested without row reading.
 
 ### Phase 3 — Delta Kernel snapshot stream
 
-- [ ] Validate `SharingRead` in R before native invocation.
-- [ ] Negotiate capabilities and response format in R from a tested allowlist.
-- [ ] Parse response headers and NDJSON incrementally in R.
+- [x] Validate `SharingRead` in R before native invocation.
+- [x] Negotiate capabilities and response format in R from a tested allowlist.
+- [x] Parse response headers and NDJSON incrementally in R.
 - [x] Build an atomic synthetic Delta log in R.
 - [ ] Pass only a compact validated scan invocation and prepared log to Rust.
-- [ ] Execute projection and scan semantics through Delta Kernel.
-- [ ] Enforce exact limits across batch boundaries.
+- [ ] Record decoded-action preparation time and peak R memory on
+  representative large manifests. If retaining bounded validated actions is
+  material, replace the list with a permission-restricted R staging sink
+  before G3; this is not a Rust-scope exception.
+- [x] Execute projection and scan semantics through Delta Kernel.
+- [x] Enforce exact limits across batch boundaries.
 - [ ] Return a lazy, bounded, single-consumer Arrow C Stream.
 - [ ] Cover empty tables, partitions, nested types, timestamps, column mapping,
   deletion vectors, time travel, malformed input, and mid-stream failure.
@@ -338,11 +342,13 @@ or main-line integration.
 | 2 | Discovery/metadata planning (`94c4b8f`, `776bd16`, `01cef8b`) | Planning integrated | Safe route planning, incremental NDJSON, metadata projections, current `GET .../version` contract |
 | 2 | Public discovery/metadata execution (`e149544`) | Integrated | Raw-segment transport alignment, authenticated callbacks, pagination, bounded parsing, unload reset |
 | 3 | R snapshot synthetic log (`497a4f9`) | Integrated | Atomic 0700/0600 preparation, private signed-URL state, deterministic release/finalizer, Kernel URI |
-| 3 | Snapshot request and Kernel execution | Handoffs in progress | Non-buffered R query planning and first real Kernel scan |
+| 3 | R snapshot request/planning (`0b1a709`) | Integrated | Pull-only Query Table transport, bounded incremental NDJSON, pagination consistency, expiry enforcement, and prepared-log invocation |
+| 3 | Kernel snapshot execution (`cc71c58`) | Integrated internally | Real Kernel Snapshot/Scan, projection, exact limits, bounded Arrow batches, and prepared-log lifecycle; public dispatch and platform proof remain open |
 | 4–7 | Materializers, CDF, Parquet normalization, hardening | Not started or not yet integrated | Completion gates remain mandatory |
 
-Current integration evidence after `497a4f9`: 1,700 passing expectations,
-87.55% measured package coverage, 15 passing Rust tests with strict clippy, and
-a clean combined native source install plus installed R test suite on macOS
-arm64. The final 90% R coverage, 85% Rust coverage, cross-platform,
-performance, offline packaging, and lifecycle gates remain open.
+Current integration evidence: the R planning and native execution handoffs each
+pass built-source package checks on macOS arm64, and the integrated native tree
+passes strict clippy plus 28 Rust tests. The last measured R line coverage is
+87.55%; an exact integrated package/coverage run follows public stream wiring.
+The final 90% R coverage, 85% Rust coverage, cross-platform, performance,
+offline packaging, binary-size, and lifecycle gates remain open.
