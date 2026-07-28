@@ -88,9 +88,26 @@ and deletion-vector fields fail closed until the mapping is reviewed.
 All actions are validated and encoded before filesystem publication. R creates
 a mode-0700 private root, writes a package ownership marker and commit with
 mode 0600, closes the files, and renames the staging table into place on the
-same filesystem. A failure at any point recursively removes the exact
-generated root and raises a fixed, typed condition that does not copy an input
-URL, location, JSON body, or underlying error text.
+same filesystem. On Unix, a caller-supplied temporary parent is accepted only
+when it is owned by the R session without group/world write access, or when it
+is a root/session-owned sticky directory that protects a session-owned child
+from other users.
+Non-sticky group/world-writable parents and symlink parents fail before root
+creation. The default session-private `tempdir()` follows the same checks.
+
+Every R-side recursive root removal carries a locked authorization record. It
+revalidates the canonical generated name, parent, root owner, mode, package
+marker, and marker metadata. After publication it also requires the recorded
+root change time, so a renamed/replaced directory or symlink is abandoned
+rather than traversed. During construction the root necessarily changes as
+staged entries are added and removed, so the stable marker metadata plus the
+safe-parent and mode-0700 ownership boundary provide the authorization.
+Same-UID processes are not treated as a separate secrecy boundary: they can
+already mutate the R session's private files. Even so, ordinary same-UID
+replacement is rejected after marker capture and after publication. A failure
+at any point removes only an authorized generated root and raises a fixed,
+typed condition that does not copy an input URL, location, JSON body, or
+underlying error text.
 
 Presigned data and DV URLs exist only in locked private action state and the
 private commit file. The guard's print method reports only active/released
@@ -107,6 +124,13 @@ retried and then retained as a capability-checked process-local pending
 cleanup. Later native calls and `.onUnload` retry after stable-identity and
 exact-stage revalidation. A changed or replaced root is abandoned rather than
 deleted.
+
+Windows keeps the bounded existing path checks (absolute generated name,
+non-symlink/reparse-path observations available to R, recorded metadata, and
+the package marker), but R mode bits are not an ACL proof. Windows ACL and
+reparse-point behavior therefore remains a hosted cross-platform gate; this
+contract makes no unsupported claim that `Sys.chmod()` creates a Unix-like
+private ACL.
 
 ## Remaining integration proof
 

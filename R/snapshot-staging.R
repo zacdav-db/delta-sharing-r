@@ -70,7 +70,10 @@
 .release_snapshot_stage <- function(stage) {
   state <- .snapshot_stage_state(stage)
   if (!isTRUE(state$released) && !isTRUE(state$transferred)) {
-    removed <- .cleanup_snapshot_root(state$root)
+    removed <- .cleanup_snapshot_root(
+      state$root,
+      state$root_identity
+    )
     if (!isTRUE(removed)) {
       .snapshot_stage_abort("Snapshot staging sink could not be released.")
     }
@@ -85,17 +88,19 @@
 ) {
   parent <- .validate_snapshot_temp_parent(temp_parent)
   run_files <- .snapshot_stage_positive_integer(run_files, "run_files")
-  root <- tempfile(".delta-sharing-snapshot-", tmpdir = parent)
-  if (!dir.create(root, mode = "0700", showWarnings = FALSE)) {
-    .snapshot_stage_abort("Snapshot staging root could not be created.")
-  }
+  private_root <- .snapshot_create_private_root(
+    parent,
+    .snapshot_stage_abort,
+    "Snapshot staging root could not be created."
+  )
+  root <- private_root$root
+  root_identity <- private_root$identity
   keep <- FALSE
   on.exit({
     if (!keep) {
-      .cleanup_snapshot_root(root)
+      .cleanup_snapshot_root(root, root_identity)
     }
   }, add = TRUE)
-  .snapshot_stage_secure_directory(root)
 
   marker <- file.path(root, .snapshot_log_marker_name)
   .write_snapshot_commit(marker, .snapshot_log_marker_value)
@@ -103,6 +108,11 @@
     .snapshot_stage_abort("Snapshot staging marker was not written.")
   }
   .snapshot_stage_secure_file(marker)
+  root_identity <- .snapshot_new_root_identity(
+    root,
+    "construction",
+    .snapshot_stage_abort
+  )
 
   runs <- file.path(root, ".runs")
   if (!dir.create(runs, mode = "0700", showWarnings = FALSE)) {
@@ -112,6 +122,7 @@
 
   state <- new.env(parent = emptyenv())
   state$root <- root
+  state$root_identity <- root_identity
   state$runs <- runs
   state$run_files <- run_files
   state$run_count <- 0L
@@ -134,7 +145,10 @@
     function(value) {
       state <- value$state
       if (!isTRUE(state$released) && !isTRUE(state$transferred)) {
-        removed <- .cleanup_snapshot_root(state$root)
+        removed <- .cleanup_snapshot_root(
+          state$root,
+          state$root_identity
+        )
         if (isTRUE(removed)) {
           state$released <- TRUE
         }
@@ -482,10 +496,30 @@
 
 .snapshot_stage_remove_work <- function(state) {
   for (directory in c(state$runs, file.path(state$root, ".merge"))) {
-    if (file.exists(directory)) {
+    if (!.snapshot_temp_root_is_safe(
+      state$root,
+      state$root_identity
+    )) {
+      .snapshot_stage_abort("Snapshot staging root identity changed.")
+    }
+    if (.snapshot_path_exists(directory)) {
+      if (
+        !dir.exists(directory) ||
+          !identical(Sys.readlink(directory), "") ||
+          !identical(
+            dirname(normalizePath(
+              directory,
+              winslash = "/",
+              mustWork = TRUE
+            )),
+            state$root
+          )
+      ) {
+        .snapshot_stage_abort("Snapshot staging work directory is invalid.")
+      }
       unlink(directory, recursive = TRUE, force = TRUE)
     }
-    if (file.exists(directory)) {
+    if (.snapshot_path_exists(directory)) {
       .snapshot_stage_abort("Snapshot staging work could not be removed.")
     }
   }
@@ -561,8 +595,18 @@
   if (!file.rename(staging, table_path)) {
     .snapshot_stage_abort("Snapshot log could not be published atomically.")
   }
+  root_identity <- .snapshot_publish_root_identity(
+    state$root,
+    state$root_identity,
+    .snapshot_stage_abort
+  )
   state$transferred <- TRUE
-  .new_snapshot_log_guard(state$root, table_path, state$file_count)
+  .new_snapshot_log_guard(
+    state$root,
+    table_path,
+    state$file_count,
+    root_identity = root_identity
+  )
 }
 
 .publish_snapshot_stage <- function(

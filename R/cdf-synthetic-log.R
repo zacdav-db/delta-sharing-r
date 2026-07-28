@@ -288,20 +288,23 @@
     .validate_snapshot_temp_parent(temp_parent),
     delta_sharing_error = function(condition) {
       .cdf_log_abort(
-        "`temp_parent` must be an existing non-symlink directory.",
+        "`temp_parent` must be one safe existing directory.",
         type = "validation"
       )
     }
   )
-  root <- tempfile(".delta-sharing-snapshot-", tmpdir = parent)
-  if (!dir.create(root, mode = "0700", showWarnings = FALSE)) {
-    .cdf_log_abort("CDF temporary root could not be created.")
-  }
+  private_root <- .snapshot_create_private_root(
+    parent,
+    .cdf_log_abort,
+    "CDF temporary root could not be created."
+  )
+  root <- private_root$root
+  root_identity <- private_root$identity
   published <- FALSE
   stage <- "ownership marker"
   on.exit({
     if (!published) {
-      .cleanup_snapshot_root(root)
+      .cleanup_snapshot_root(root, root_identity)
     }
   }, add = TRUE)
 
@@ -311,6 +314,11 @@
       marker <- file.path(root, .snapshot_log_marker_name)
       .write_snapshot_commit(marker, .snapshot_log_marker_value)
       .cdf_secure_file(marker, "CDF ownership marker")
+      root_identity <- .snapshot_new_root_identity(
+        root,
+        "construction",
+        .cdf_log_abort
+      )
 
       staging <- file.path(root, ".staging")
       log_dir <- file.path(staging, "_delta_log")
@@ -366,13 +374,19 @@
       if (!file.rename(staging, table_path)) {
         .cdf_log_abort("CDF log could not be published atomically.")
       }
-      published <- TRUE
+      root_identity <- .snapshot_publish_root_identity(
+        root,
+        root_identity,
+        .cdf_log_abort
+      )
       stage <- "prepared guard"
       guard <- .new_snapshot_log_guard(
         root,
         table_path,
-        plan$file_count
+        plan$file_count,
+        root_identity = root_identity
       )
+      published <- TRUE
       guard_state <- guard$state
       guard_state$read_kind <- "cdf"
       guard_state$start_version <- plan$range$start

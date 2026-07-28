@@ -927,44 +927,272 @@
   invisible(path)
 }
 
+.snapshot_temp_parent_mode_is_safe <- function(uid, session_uid, mode) {
+  if (anyNA(c(uid, session_uid, mode))) {
+    return(FALSE)
+  }
+  owned <- isTRUE(uid == session_uid)
+  writable_by_others <- bitwAnd(mode, strtoi("22", base = 8L)) != 0L
+  sticky <- bitwAnd(mode, strtoi("1000", base = 8L)) != 0L
+  trusted_sticky_owner <- owned || isTRUE(uid == 0)
+  (owned && !writable_by_others) || (sticky && trusted_sticky_owner)
+}
+
 .validate_snapshot_temp_parent <- function(temp_parent) {
   if (
     !.is_scalar_character(temp_parent) ||
       !dir.exists(temp_parent) ||
-      nzchar(Sys.readlink(temp_parent))
+      !identical(Sys.readlink(temp_parent), "")
   ) {
     .snapshot_log_abort(
       "`temp_parent` must be an existing non-symlink directory.",
       type = "validation"
     )
   }
-  normalizePath(temp_parent, winslash = "/", mustWork = TRUE)
+  parent <- normalizePath(temp_parent, winslash = "/", mustWork = TRUE)
+  if (.Platform$OS.type != "windows") {
+    info <- file.info(parent, extra_cols = TRUE)
+    session_info <- file.info(
+      normalizePath(tempdir(), winslash = "/", mustWork = TRUE),
+      extra_cols = TRUE
+    )
+    mode <- as.integer(info$mode[[1L]])
+    uid <- unname(info$uid[[1L]])
+    session_uid <- unname(session_info$uid[[1L]])
+    if (!.snapshot_temp_parent_mode_is_safe(uid, session_uid, mode)) {
+      .snapshot_log_abort(
+        paste0(
+          "`temp_parent` must be owned by this R session without group/world ",
+          "write access, or be a trusted sticky directory."
+        ),
+        type = "validation"
+      )
+    }
+  }
+  parent
 }
 
-.snapshot_temp_root_is_safe <- function(root) {
-  if (!.is_scalar_character(root)) {
+.snapshot_path_exists <- function(path) {
+  isTRUE(file.exists(path)) || (
+    .is_scalar_character(path) &&
+      !is.na(Sys.readlink(path)) &&
+      nzchar(Sys.readlink(path))
+  )
+}
+
+.snapshot_private_root_metadata <- function(root) {
+  if (
+    !.is_scalar_character(root) ||
+      !dir.exists(root) ||
+      !identical(Sys.readlink(root), "") ||
+      !startsWith(basename(root), ".delta-sharing-snapshot-")
+  ) {
+    return(NULL)
+  }
+  canonical <- tryCatch(
+    normalizePath(root, winslash = "/", mustWork = TRUE),
+    error = function(condition) NULL
+  )
+  if (is.null(canonical) || !identical(canonical, root)) {
+    return(NULL)
+  }
+  info <- file.info(root, extra_cols = TRUE)
+  if (!isTRUE(info$isdir[[1L]])) {
+    return(NULL)
+  }
+  mode <- as.integer(info$mode[[1L]])
+  uid <- unname(info$uid[[1L]])
+  gid <- unname(info$gid[[1L]])
+  if (.Platform$OS.type != "windows") {
+    session_uid <- unname(file.info(
+      normalizePath(tempdir(), winslash = "/", mustWork = TRUE),
+      extra_cols = TRUE
+    )$uid[[1L]])
+    if (
+      is.na(mode) ||
+        bitwAnd(mode, strtoi("77", base = 8L)) != 0L ||
+        is.na(uid) ||
+        is.na(session_uid) ||
+        !identical(uid, session_uid)
+    ) {
+      return(NULL)
+    }
+  }
+  list(
+    path = canonical,
+    parent = dirname(canonical),
+    mode = mode,
+    uid = uid,
+    gid = gid,
+    ctime = as.numeric(info$ctime[[1L]])
+  )
+}
+
+.snapshot_marker_metadata <- function(root) {
+  marker <- file.path(root, .snapshot_log_marker_name)
+  if (
+    !file.exists(marker) ||
+      dir.exists(marker) ||
+      !identical(Sys.readlink(marker), "")
+  ) {
+    return(NULL)
+  }
+  value <- tryCatch(
+    readLines(marker, warn = FALSE, encoding = "UTF-8"),
+    error = function(condition) NULL
+  )
+  if (!identical(value, .snapshot_log_marker_value)) {
+    return(NULL)
+  }
+  info <- file.info(marker, extra_cols = TRUE)
+  list(
+    mode = as.integer(info$mode[[1L]]),
+    uid = unname(info$uid[[1L]]),
+    ctime = as.numeric(info$ctime[[1L]])
+  )
+}
+
+.snapshot_new_root_identity <- function(root, phase, abort) {
+  metadata <- .snapshot_private_root_metadata(root)
+  if (is.null(metadata)) {
+    abort("Snapshot temporary root could not be secured.")
+  }
+  identity <- new.env(parent = emptyenv())
+  identity$phase <- phase
+  identity$path <- metadata$path
+  identity$parent <- metadata$parent
+  identity$mode <- metadata$mode
+  identity$uid <- metadata$uid
+  identity$gid <- metadata$gid
+
+  if (identical(phase, "construction")) {
+    identity$root_ctime <- NULL
+    identity$marker <- .snapshot_marker_metadata(root)
+  } else if (identical(phase, "published")) {
+    marker <- .snapshot_marker_metadata(root)
+    if (is.null(marker)) {
+      abort("Snapshot ownership marker is invalid.")
+    }
+    identity$root_ctime <- metadata$ctime
+    identity$marker <- marker
+  } else {
+    abort("Snapshot cleanup identity phase is invalid.")
+  }
+  class(identity) <- "delta_sharing_snapshot_root_identity"
+  lockEnvironment(identity, bindings = TRUE)
+  identity
+}
+
+.snapshot_create_private_root <- function(parent, abort, failure_message) {
+  root <- tempfile(".delta-sharing-snapshot-", tmpdir = parent)
+  if (!dir.create(root, mode = "0700", showWarnings = FALSE)) {
+    abort(failure_message)
+  }
+  secured <- suppressWarnings(Sys.chmod(root, mode = "0700"))
+  if (.Platform$OS.type != "windows" && !isTRUE(secured)) {
+    unlink(root, recursive = FALSE, force = TRUE)
+    abort("Snapshot temporary root could not be secured.")
+  }
+  identity <- tryCatch(
+    .snapshot_new_root_identity(root, "construction", abort),
+    error = function(condition) {
+      unlink(root, recursive = FALSE, force = TRUE)
+      stop(condition)
+    }
+  )
+  list(root = root, identity = identity)
+}
+
+.snapshot_temp_root_is_safe <- function(root, identity) {
+  if (
+    !.is_scalar_character(root) ||
+      !inherits(identity, "delta_sharing_snapshot_root_identity") ||
+      !is.environment(identity) ||
+      !identical(root, identity$path)
+  ) {
     return(FALSE)
   }
-  base <- basename(root)
-  parent <- dirname(root)
-  startsWith(base, ".delta-sharing-snapshot-") &&
-    dir.exists(parent) &&
-    identical(
-      normalizePath(parent, winslash = "/", mustWork = TRUE),
-      parent
+  metadata <- .snapshot_private_root_metadata(root)
+  if (
+    is.null(metadata) ||
+      !identical(metadata$path, identity$path) ||
+      !identical(metadata$parent, identity$parent) ||
+      !identical(metadata$mode, identity$mode) ||
+      !identical(metadata$uid, identity$uid) ||
+      !identical(metadata$gid, identity$gid)
+  ) {
+    return(FALSE)
+  }
+  if (identical(identity$phase, "construction")) {
+    return(
+      is.null(identity$marker) ||
+        identical(.snapshot_marker_metadata(root), identity$marker)
     )
+  }
+  if (!identical(identity$phase, "published")) {
+    return(FALSE)
+  }
+  if (
+    !identical(metadata$ctime, identity$root_ctime) ||
+      !identical(.snapshot_marker_metadata(root), identity$marker)
+  ) {
+    return(FALSE)
+  }
+  TRUE
 }
 
-.cleanup_snapshot_root <- function(root) {
-  if (.snapshot_temp_root_is_safe(root) && file.exists(root)) {
+.snapshot_publish_root_identity <- function(
+  root,
+  identity,
+  abort,
+  record_identity = .snapshot_new_root_identity
+) {
+  if (!.snapshot_temp_root_is_safe(root, identity)) {
+    abort("Snapshot temporary root identity changed before publication.")
+  }
+  record_identity(root, "published", abort)
+}
+
+.cleanup_snapshot_root <- function(root, identity) {
+  if (!.snapshot_path_exists(root)) {
+    return(invisible(TRUE))
+  }
+  if (.snapshot_temp_root_is_safe(root, identity)) {
     unlink(root, recursive = TRUE, force = TRUE)
   }
-  invisible(!file.exists(root))
+  invisible(!.snapshot_path_exists(root))
 }
 
-.new_snapshot_log_guard <- function(root, table_path, file_count) {
+.new_snapshot_log_guard <- function(
+  root,
+  table_path,
+  file_count,
+  root_identity = NULL
+) {
+  if (
+    .is_scalar_character(root) &&
+      dir.exists(root) &&
+      identical(Sys.readlink(root), "")
+  ) {
+    root <- normalizePath(root, winslash = "/", mustWork = TRUE)
+  }
+  if (
+    .is_scalar_character(table_path) &&
+      dir.exists(table_path) &&
+      identical(Sys.readlink(table_path), "")
+  ) {
+    table_path <- normalizePath(table_path, winslash = "/", mustWork = TRUE)
+  }
+  if (is.null(root_identity)) {
+    root_identity <- .snapshot_new_root_identity(
+      root,
+      "published",
+      .snapshot_log_abort
+    )
+  }
   state <- new.env(parent = emptyenv())
   state$root <- root
+  state$root_identity <- root_identity
   state$table_path <- table_path
   state$file_count <- as.integer(file_count)
   state$released <- FALSE
@@ -978,7 +1206,10 @@
     function(value) {
       state <- value$state
       if (!isTRUE(state$released)) {
-        removed <- .cleanup_snapshot_root(state$root)
+        removed <- .cleanup_snapshot_root(
+          state$root,
+          state$root_identity
+        )
         if (isTRUE(removed)) {
           state$released <- TRUE
         }
@@ -1043,14 +1274,18 @@
 
 .release_snapshot_log <- function(
   guard,
-  cleanup = .cleanup_snapshot_root
+  cleanup = NULL
 ) {
   state <- .validate_snapshot_log_guard(guard)
-  if (!is.function(cleanup)) {
+  if (!is.null(cleanup) && !is.function(cleanup)) {
     stop("`cleanup` must be a function.", call. = FALSE)
   }
   if (!isTRUE(state$released)) {
-    removed <- cleanup(state$root)
+    removed <- if (is.null(cleanup)) {
+      .cleanup_snapshot_root(state$root, state$root_identity)
+    } else {
+      cleanup(state$root)
+    }
     if (!isTRUE(removed)) {
       .snapshot_log_abort("Prepared snapshot log could not be released.")
     }
@@ -1089,15 +1324,18 @@ print.delta_sharing_snapshot_log <- function(x, ...) {
   }
   lines <- .snapshot_commit_lines(protocol, metadata, files)
   parent <- .validate_snapshot_temp_parent(temp_parent)
-  root <- tempfile(".delta-sharing-snapshot-", tmpdir = parent)
-  if (!dir.create(root, mode = "0700", showWarnings = FALSE)) {
-    .snapshot_log_abort("Snapshot temporary root could not be created.")
-  }
+  private_root <- .snapshot_create_private_root(
+    parent,
+    .snapshot_log_abort,
+    "Snapshot temporary root could not be created."
+  )
+  root <- private_root$root
+  root_identity <- private_root$identity
   published <- FALSE
   on.exit(
     {
       if (!published) {
-        .cleanup_snapshot_root(root)
+        .cleanup_snapshot_root(root, root_identity)
       }
     },
     add = TRUE
@@ -1114,6 +1352,11 @@ print.delta_sharing_snapshot_log <- function(x, ...) {
       if (.Platform$OS.type != "windows" && !isTRUE(marker_permissions)) {
         .snapshot_log_abort("Snapshot ownership marker could not be secured.")
       }
+      root_identity <- .snapshot_new_root_identity(
+        root,
+        "construction",
+        .snapshot_log_abort
+      )
 
       staging <- file.path(root, ".staging")
       log_dir <- file.path(staging, "_delta_log")
@@ -1133,8 +1376,18 @@ print.delta_sharing_snapshot_log <- function(x, ...) {
       if (!file.rename(staging, table_path)) {
         .snapshot_log_abort("Snapshot log could not be published atomically.")
       }
+      root_identity <- .snapshot_publish_root_identity(
+        root,
+        root_identity,
+        .snapshot_log_abort
+      )
       published <- TRUE
-      .new_snapshot_log_guard(root, table_path, length(files))
+      .new_snapshot_log_guard(
+        root,
+        table_path,
+        length(files),
+        root_identity = root_identity
+      )
     },
     error = function(cnd) {
       if (inherits(cnd, "delta_sharing_error")) {
