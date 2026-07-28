@@ -221,12 +221,12 @@ meets the stream thresholds in the design plan.
 
 ### Phase 4 — materializers, consumers, and diagnostics
 
-- [ ] Implement `read_arrow()` as an optional eager `{arrow}` adapter.
-- [ ] Implement `read_data_frame()` and `as.data.frame()`.
-- [ ] Prove every adapter consumes the same Arrow stream path.
+- [x] Implement `read_arrow()` as an optional eager `{arrow}` adapter.
+- [x] Implement `read_data_frame()` and `as.data.frame()`.
+- [x] Prove every adapter consumes the same Arrow stream path.
 - [ ] Add DuckDB registration/composition coverage.
 - [ ] Expose stable, redacted read diagnostics.
-- [ ] Document eager-memory cost and explicit stream release.
+- [x] Document eager-memory cost and explicit stream release.
 
 Exit gate G4: Arrow, data-frame, and downstream-consumer fixture results and
 schemas agree, with no IPC or full-table R-vector conversion in the stream path.

@@ -1,7 +1,8 @@
 # R control-plane execution wiring contract
 
-Status: implemented Phase 2 control plane and initial Phase 3 snapshot stream
-Branch owner: `codex/public-read-wiring-vnext`
+Status: implemented Phase 2 control plane, Phase 3 snapshot stream, and Phase 4
+eager materializers
+Branch owner: `codex/r-materializers-vnext`
 
 This contract connects the immutable S7 client/table descriptors to the
 R-owned authenticated HTTP, pagination, JSON/NDJSON, and safe-projection
@@ -14,7 +15,9 @@ parallel reader implementation.
 
 - `list_shares`, `list_schemas`, and `list_tables`;
 - `table_version`, `table_protocol`, `table_metadata`, and `table_schema`; and
-- `read_arrow_stream` for `SharingRead`.
+- `read_arrow_stream` for `SharingRead`;
+- `data_frame_from_stream` for eager base data frames; and
+- `arrow_from_stream` for eager Arrow tables when `{arrow}` is installed.
 
 Package load installs this set through `.set_execution_callbacks()`. The
 callback interface and captured transport hooks remain package-private R
@@ -31,6 +34,32 @@ invocation. R cleanup stays armed through native construction and the prepared
 state is marked released only after native code confirms cleanup ownership.
 The returned Arrow C Stream owns the temporary root through exhaustion,
 explicit release, or finalization.
+
+## Eager materializer boundary
+
+`read_arrow()` and `read_data_frame()` first obtain exactly one stream through
+the public `read_arrow_stream()` execution callback. Their materializer
+callbacks receive only that stream; they cannot plan a request, open HTTP, or
+start another Kernel scan.
+
+When `{arrow}` is installed, `read_arrow()` transfers the Arrow C Stream into
+an Arrow record-batch reader and eagerly reads an Arrow table. This direct C
+Stream import preserves Arrow field order and nested, temporal, and decimal
+types without IPC or an intermediate full-table conversion to R vectors. When
+`{arrow}` is unavailable, the callback is absent and the existing public
+preflight raises a typed `read_arrow`/`arrow_package` unsupported condition
+before snapshot HTTP or Kernel work begins.
+
+`read_data_frame()` infers the record prototype from the stream schema and uses
+`nanoarrow::convert_array_stream()` across zero, one, or many batches. This is
+the one intentional full-table R-vector conversion. It is eager and therefore
+requires the complete result to fit in R memory; large reads should consume
+`read_arrow_stream()` directly.
+
+Both adapters release the source stream deterministically after success and on
+dependency, import, conversion, or mid-stream failure. After Arrow accepts the
+C Stream, the record-batch reader owns it and is closed deterministically after
+the table has been materialized.
 
 ## Discovery execution
 
@@ -70,5 +99,5 @@ I/O. `batch_size` is bounded before planning. Every non-NULL `concurrency` is
 explicitly rejected until that option reaches the compact native invocation;
 it is never silently ignored.
 
-The callback set still excludes `read_schema`, CDF planning, eager Arrow/data
-frame adapters, and public diagnostics.
+The callback set still excludes `read_schema`, CDF planning, and public
+diagnostics.

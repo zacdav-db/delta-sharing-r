@@ -201,7 +201,10 @@ read_arrow_stream <- S7::new_generic("read_arrow_stream", "read")
 #' Read an Arrow table
 #'
 #' The optional eager adapter consumes the exact stream returned by
-#' [read_arrow_stream()]; it cannot implement a second reader.
+#' [read_arrow_stream()]; it cannot implement a second reader. The adapter
+#' requires the optional `{arrow}` package and imports the Arrow C Stream
+#' directly without an IPC or R-vector round trip. Stream ownership is released
+#' after complete materialization or an adapter error.
 #'
 #' @inheritParams read_arrow_stream
 #' @return An eager Arrow table.
@@ -210,8 +213,11 @@ read_arrow <- S7::new_generic("read_arrow", "read")
 
 #' Read a data frame
 #'
-#' This eager adapter consumes the native Arrow stream and therefore requires
-#' the result to fit in memory.
+#' This eager adapter consumes the exact stream returned by
+#' [read_arrow_stream()] through `{nanoarrow}`. It allocates all result columns
+#' and rows in R memory, so use the lazy stream interface when the full result
+#' may not fit comfortably in memory. Stream ownership is released after
+#' complete materialization or an adapter error.
 #'
 #' @inheritParams read_arrow_stream
 #' @return A base data frame.

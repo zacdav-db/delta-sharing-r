@@ -246,7 +246,10 @@
   max_attempts = 5L,
   metadata_chunk_bytes = .http_read_chunk_bytes,
   snapshot_temp_parent = tempdir(),
-  native_stream_factory = .native_snapshot_stream
+  native_stream_factory = .native_snapshot_stream,
+  arrow_available = .arrow_package_available,
+  arrow_reader_factory = .arrow_reader_from_stream,
+  data_frame_converter = .nanoarrow_data_frame_from_stream
 ) {
   transport <- .normalize_http_transport(transport)
   snapshot_transport <- .normalize_snapshot_stream_transport(
@@ -255,7 +258,10 @@
   if (!is.function(clock) ||
       !is.function(sleeper) ||
       !is.function(random) ||
-      !is.function(native_stream_factory)) {
+      !is.function(native_stream_factory) ||
+      !is.function(arrow_available) ||
+      !is.function(arrow_reader_factory) ||
+      !is.function(data_frame_converter)) {
     stop("Execution control hooks must be functions.", call. = FALSE)
   }
   snapshot_temp_parent <- .validate_snapshot_temp_parent(
@@ -284,6 +290,7 @@
   }
   max_attempts <- as.integer(max_attempts)
   metadata_chunk_bytes <- as.integer(metadata_chunk_bytes)
+  arrow_is_available <- isTRUE(arrow_available())
 
   discovery_fetcher <- function(client, operation) {
     .new_discovery_http_fetcher(
@@ -312,7 +319,7 @@
     }
   }
 
-  list(
+  callbacks <- list(
     list_shares = function(client) {
       .collect_share_records(
         discovery_fetcher(client, "list_shares")
@@ -376,6 +383,22 @@
         temp_parent = snapshot_temp_parent,
         native_stream_factory = native_stream_factory
       )
+    },
+    data_frame_from_stream = function(stream) {
+      .materialize_data_frame_stream(
+        stream,
+        converter = data_frame_converter
+      )
     }
   )
+  if (arrow_is_available) {
+    callbacks$arrow_from_stream <- function(stream) {
+      .materialize_arrow_stream(
+        stream,
+        arrow_available = function() TRUE,
+        reader_factory = arrow_reader_factory
+      )
+    }
+  }
+  callbacks
 }

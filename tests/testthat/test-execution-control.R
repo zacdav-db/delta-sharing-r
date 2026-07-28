@@ -57,7 +57,11 @@ test_that("production callbacks preserve R control-plane ownership and unload cl
       "table_protocol",
       "table_metadata",
       "table_schema",
-      "read_arrow_stream"
+      "read_arrow_stream",
+      "data_frame_from_stream",
+      if (requireNamespace("arrow", quietly = TRUE)) {
+        "arrow_from_stream"
+      }
     )
   )
   expect_false(any(c(
@@ -74,6 +78,27 @@ test_that("production callbacks preserve R control-plane ownership and unload cl
 
   delta.sharing:::.onUnload()
   expect_null(delta.sharing:::.execution_state$interface)
+})
+
+test_that("Arrow production callback follows the optional dependency seam", {
+  transport <- delta.sharing:::.fake_http_transport(function(request) {
+    list(status = 200L, body = list(items = list()))
+  })
+
+  absent <- delta.sharing:::.new_control_execution_callbacks(
+    transport = transport,
+    arrow_available = function() FALSE
+  )
+  present <- delta.sharing:::.new_control_execution_callbacks(
+    transport = transport,
+    arrow_available = function() TRUE,
+    arrow_reader_factory = function(stream) NULL
+  )
+
+  expect_false("arrow_from_stream" %in% names(absent))
+  expect_true("arrow_from_stream" %in% names(present))
+  expect_true("data_frame_from_stream" %in% names(absent))
+  expect_true("data_frame_from_stream" %in% names(present))
 })
 
 test_that("HTTP execution paginates and fans out raw provider identifiers", {

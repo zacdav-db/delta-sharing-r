@@ -87,6 +87,14 @@
   callback <- if (is.null(interface)) NULL else interface[[operation]]
 
   if (is.null(callback)) {
+    if (identical(operation, "arrow_from_stream")) {
+      .abort_delta_sharing(
+        "The optional package `{arrow}` is required for `read_arrow()`.",
+        type = "unsupported",
+        operation = "read_arrow",
+        feature = "arrow_package"
+      )
+    }
     type <- if (identical(operation, "read_arrow_stream")) {
       "native_unavailable"
     } else {

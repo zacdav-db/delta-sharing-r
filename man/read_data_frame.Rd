@@ -15,6 +15,9 @@ read_data_frame(read, ...)
 A base data frame.
 }
 \description{
-This eager adapter consumes the native Arrow stream and therefore requires
-the result to fit in memory.
+This eager adapter consumes the exact stream returned by
+\code{\link[=read_arrow_stream]{read_arrow_stream()}} through \code{{nanoarrow}}. It allocates all result columns
+and rows in R memory, so use the lazy stream interface when the full result
+may not fit comfortably in memory. Stream ownership is released after
+complete materialization or an adapter error.
 }

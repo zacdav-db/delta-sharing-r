@@ -16,5 +16,8 @@ An eager Arrow table.
 }
 \description{
 The optional eager adapter consumes the exact stream returned by
-\code{\link[=read_arrow_stream]{read_arrow_stream()}}; it cannot implement a second reader.
+\code{\link[=read_arrow_stream]{read_arrow_stream()}}; it cannot implement a second reader. The adapter
+requires the optional \code{{arrow}} package and imports the Arrow C Stream
+directly without an IPC or R-vector round trip. Stream ownership is released
+after complete materialization or an adapter error.
 }
