@@ -1,20 +1,27 @@
 # Delta Sharing R vNext: requirements and implementation plan
 
-Status: design draft  
-Branch: `codex/delta-kernel-vnext-design`  
+Status: accepted architecture; execution tracked in `integration-roadmap.md`
+Branch: `codex/delta-kernel-s7-overhaul`
 Target package line: `delta.sharing` 0.2.x  
 Date: 2026-07-28
 
-This document is intentionally a plan, not an implementation. No production
-package code has been changed on this branch yet.
+This document describes the target architecture. The phase checklist,
+integration rules, and completion gates live in `integration-roadmap.md`; the
+canonical public interface lives in `s7-interface-naming-matrix.md`.
+
+vNext is a clean break from prior package releases. The existing R6
+implementation informs useful client/table/read terminology only. It is not a
+public contract or a behavioral baseline, and vNext includes no aliases,
+wrappers, deprecation layers, migration warnings, or prior-version parity
+tests.
 
 ## 1. Executive recommendation
 
 Rebuild the package around an Arrow-native, Rust-owned streaming core:
 
-1. A small functional R API creates immutable client, table, snapshot, and
+1. A small functional R API creates immutable client, table, read, and
    change-feed specifications.
-2. S7 is the preferred representation for those specifications because it
+2. S7 is the representation for those specifications because it
    provides formal classes, validation, generics, and S3 interoperability.
 3. Rust owns HTTP, authentication, Delta Sharing protocol parsing, temporary
    Delta log construction, Delta Kernel execution, concurrency, cancellation,
@@ -33,10 +40,9 @@ scaffolding. Arrow data itself must cross the boundary through the stable Arrow
 C Data/C Stream ABI, not through R vectors, an Arrow C++ ABI, or per-batch
 serialization.
 
-S7 adoption should have a short, explicit exit ramp: keep the public API
-functional and run a small packaging/lifetime spike first. If S7 creates an
-unacceptable compatibility or packaging problem, the same functions can return
-thin S3 objects without changing the user-facing call signatures.
+S7 adoption still requires a packaging/lifetime proof on every target platform,
+but the proof is an implementation gate rather than an object-system selection
+exercise.
 
 ## 2. What informs this design
 
@@ -75,7 +81,8 @@ establishes the right conceptual shape:
 - pandas/data frames are adapters, not the only internal representation;
 - snapshot and CDF implementations should be staged separately;
 - shared scan setup should be factored out of individual materializers;
-- Arrow and legacy outputs should be tested for parity from the same fixtures;
+- Delta and Parquet response-format outputs should be tested for parity from
+  the same fixtures;
 - schema order, partition columns, casing, timestamps, limits, and temporary
   resource lifetimes require explicit tests.
 
@@ -93,7 +100,7 @@ instead of copying Python method syntax mechanically.
 - Table version, metadata, and protocol queries.
 - Snapshot reads by latest version, explicit version, or timestamp.
 - Change Data Feed reads by version or timestamp range.
-- Delta and legacy Parquet response formats.
+- Delta and Parquet response formats.
 - Delta Kernel-backed delta-format scans.
 - Projection, exact client-side limit enforcement, and server predicate hints.
 - Arrow C Stream, optional `{arrow}` table, and data-frame materializers.
@@ -161,9 +168,9 @@ instead of copying Python method syntax mechanically.
   predicate after kernel/file pruning.
 - **FR-SNAP-07** `response_format = "auto"` negotiates
   `delta,parquet`, preferring delta when required for advanced features.
-- **FR-SNAP-08** Explicit `response_format = "delta"` accepts a legacy Parquet
-  response for protocol compatibility, but reports the actual chosen format in
-  diagnostics.
+- **FR-SNAP-08** Explicit `response_format = "delta"` may accept a protocol
+  Parquet response when the server selects it, but reports the actual chosen
+  format in diagnostics.
 - **FR-SNAP-09** Empty tables return a zero-batch stream with the correct
   logical Arrow schema.
 
@@ -183,16 +190,16 @@ instead of copying Python method syntax mechanically.
 
 ### Materialization and interoperability
 
-- **FR-MAT-01** `to_arrow_stream()` is the primary, always-available row
+- **FR-MAT-01** `read_arrow_stream()` is the primary, always-available row
   materializer and returns a `nanoarrow_array_stream`.
 - **FR-MAT-02** The stream is lazy, bounded, single-consumer, explicitly
   releasable, and safe when abandoned early or garbage-collected.
-- **FR-MAT-03** `to_arrow_table()` is available when `{arrow}` is installed and
+- **FR-MAT-03** `read_arrow()` is available when `{arrow}` is installed and
   consumes the C Stream without an IPC or R-vector round trip.
-- **FR-MAT-04** `to_data_frame()` and `as.data.frame()` are eager convenience
+- **FR-MAT-04** `read_data_frame()` and `as.data.frame()` are eager convenience
   adapters and clearly document their memory cost.
-- **FR-MAT-05** A table handle can be materialized directly as shorthand for
-  its latest snapshot.
+- **FR-MAT-05** Materializers require an explicit read descriptor;
+  `sharing_read(table)` is the concise latest-snapshot form.
 - **FR-MAT-06** Schema, field order, nullability, nested types, decimals, binary,
   dates, `timestamp[us, UTC]`, timestamp-without-timezone, partition values, and
   column mapping are preserved according to Delta Kernel semantics.
@@ -201,18 +208,18 @@ instead of copying Python method syntax mechanically.
 - **FR-MAT-08** Releasing a stream cancels outstanding work and releases its
   temporary log, HTTP requests, Arrow buffers, and kernel objects.
 
-### Diagnostics and compatibility
+### Diagnostics and clean-break policy
 
 - **FR-DIAG-01** Expose the selected response format, table version, projected
   schema, files considered/read/skipped, rows/batches emitted, bytes read,
   retries, elapsed stages, and effective concurrency.
 - **FR-DIAG-02** Diagnostics never contain signed URLs or credentials.
-- **FR-COMP-01** Keep `sharing_client()` as a soft-deprecated constructor alias.
-- **FR-COMP-02** Keep URL parsing helpers only as compatibility wrappers; the
-  new API must not require callers to concatenate a profile path and table name.
-- **FR-COMP-03** Because the package is pre-1.0, do not preserve the mutable R6
-  method surface at the cost of the new architecture. Provide a migration guide
-  and one release of focused warnings instead.
+- **FR-BREAK-01** The canonical interface is the one recorded in
+  `s7-interface-naming-matrix.md`.
+- **FR-BREAK-02** Do not export prior R6 classes, setters, URL-concatenation
+  helpers, constructor aliases, or transition wrappers.
+- **FR-BREAK-03** Do not add deprecation warnings, migration behavior, or tests
+  whose only purpose is reproducing an earlier package release.
 
 ## 5. Non-functional requirements
 
@@ -273,39 +280,44 @@ The API is functional first. S7 classes provide validation and dispatch, but
 users do not need to manipulate properties with `@`.
 
 ```r
-client <- delta_client("recipient.share")
-orders <- delta_table(client, "sales.default.orders")
+client <- sharing_client("recipient.share")
+orders <- sharing_table(
+  client,
+  share = "sales",
+  schema = "default",
+  table = "orders"
+)
 
-latest <- delta_snapshot(
+latest <- sharing_read(
   orders,
   columns = c("order_id", "ordered_at", "amount"),
   limit = 1e6,
   response_format = "auto"
 )
 
-stream <- to_arrow_stream(latest)
-arrow_table <- to_arrow_table(latest)
-data <- to_data_frame(latest)
+stream <- read_arrow_stream(latest)
+arrow_table <- read_arrow(latest)
+data <- read_data_frame(latest)
 
-cdf <- delta_changes(
+cdf <- sharing_changes(
   orders,
   starting_version = 120L,
   ending_version = 125L
 )
-cdf_stream <- to_arrow_stream(cdf)
+cdf_stream <- read_arrow_stream(cdf)
 ```
 
 The complete annotated mock is in `design/api-mock.R`.
 
 ### Proposed classes
 
-- `DeltaProfile`: validated non-secret profile metadata and an internal
+- `SharingProfile`: validated non-secret profile metadata and an internal
   credential source.
-- `DeltaClient`: endpoint plus an authenticated Rust client handle.
-- `DeltaTable`: client reference plus structured table identifier.
-- `DeltaRead`: common parent for materializable read specifications.
-- `DeltaSnapshot`: projection, predicates, limit, time travel, response format.
-- `DeltaChanges`: CDF range, projection, response format.
+- `SharingClient`: endpoint plus an authenticated Rust client handle.
+- `SharingTable`: client reference plus structured table identifier.
+- `SharingRead`: projection, predicates, limit, time travel, response format.
+- `SharingChanges`: CDF range, projection, response format.
+- `SharingReadDiagnostics`: immutable safe snapshot of stream diagnostics.
 
 The objects should be cheap descriptors. The only stateful user-visible object
 is the returned nanoarrow stream.
@@ -324,7 +336,7 @@ is the returned nanoarrow stream.
 | Risk of dependency churn | Low | Low | Moderate |
 | Hot-path performance impact | Negligible | Negligible | Negligible |
 
-### Recommendation
+### Decision
 
 Use S7 for immutable high-level descriptors and external generics, with S3
 methods for base interoperability such as `print()` and `as.data.frame()`.
@@ -336,24 +348,23 @@ Do not continue with R6 as the primary public API. R6 fits a mutable client but
 encourages query options and materialization state to accumulate on one object,
 which is precisely the coupling the Python work is removing.
 
-Do not expose bare S3 as the first choice because snapshot and CDF specifications
-have enough invariants that formal construction is valuable. Keep the
-functional API independent of S7 so an S3 fallback remains possible.
+Do not expose bare S3 because snapshot and CDF specifications have enough
+invariants that formal construction is valuable. S3 methods remain appropriate
+for established external generics such as `print()` and `as.data.frame()`.
 
-### Required decision spike
+### Required implementation proof
 
 Before production implementation:
 
-1. Define the six empty classes and generics in S7.
-2. Wrap a dummy Rust external pointer in `DeltaClient`.
+1. Define the public classes and generics in S7.
+2. Wrap a dummy Rust external pointer in `SharingClient`.
 3. Verify package load/unload, documentation generation, `R CMD check`,
    garbage collection, and S3 `print()`/`as.data.frame()` registration on the
    minimum supported R.
-4. Repeat only the public calls with thin S3 objects.
-5. Accept S7 if it adds no material binary, lifecycle, or minimum-R problem.
+4. Verify the same lifecycle cases on macOS, Linux, and Windows.
 
-This spike is time-boxed to two engineering days and produces an ADR. It is not
-permission to begin the full reader.
+This proof is a Phase 1 gate. It is not permission to begin the full reader
+before lifecycle failures are resolved.
 
 ## 8. Target architecture
 
@@ -391,7 +402,7 @@ flowchart LR
 - translating R arguments into compact Rust request specifications;
 - allocating a nanoarrow stream destination;
 - optional adapters to `{arrow}` and base data frames;
-- structured R conditions and migration warnings.
+- structured R conditions.
 
 R must not parse large NDJSON responses, enumerate Parquet files into tibbles,
 download data files, or transform record batches column by column.
@@ -479,10 +490,10 @@ The synthetic log is a pragmatic first implementation and follows the protocol
 design and current Python connector. A custom in-memory kernel engine is not
 justified until measurement shows temporary log I/O is material.
 
-### Legacy Parquet flow
+### Protocol Parquet response flow
 
-Legacy servers can return Parquet-format actions. That path still belongs in
-Rust and still returns the same Arrow stream:
+Servers can return Parquet-format actions. That path still belongs in Rust and
+still returns the same Arrow stream:
 
 1. Parse metadata and file actions incrementally.
 2. Open signed URLs directly through the Rust object-store/Parquet stack.
@@ -490,7 +501,8 @@ Rust and still returns the same Arrow stream:
 4. Apply projection, exact limit, and any exact residual filter.
 5. Emit record batches through the same C Stream boundary.
 
-This is a compatibility path, not a second public reader architecture.
+This is a supported Delta Sharing response format, not a second public reader
+architecture and not a prior-package compatibility path.
 
 ### Change Data Feed flow
 
@@ -599,7 +611,6 @@ to an opaque string early.
 - optional `{arrow}` behavior;
 - `as.data.frame()` behavior and memory warning documentation;
 - structured condition classes;
-- compatibility aliases and migration warnings;
 - stream release and garbage collection.
 
 ### Protocol and kernel fixtures
@@ -628,8 +639,6 @@ outputs:
 ### Parity and conformance
 
 - Compare output against the Python connector for shared fixtures.
-- Compare new R data-frame output with the legacy R package where the legacy
-  implementation is correct.
 - Run Delta Kernel acceptance fixtures relevant to reads.
 - Assert Arrow schemas directly; data-frame equality alone is insufficient.
 - Test a downstream DuckDB Arrow registration without copying through a data
@@ -679,8 +688,7 @@ Compare:
 2. new R nanoarrow stream;
 3. new R `{arrow}` table;
 4. new R data frame;
-5. current R package;
-6. Python Arrow reader on the same branch/fixture.
+5. Python Arrow reader on the same protocol fixture.
 
 Controlled microbenchmarks should gate regressions. Noisy cloud/object-store
 benchmarks should publish trend artifacts and require review rather than fail
@@ -692,13 +700,13 @@ every pull request.
 
 - Repair package metadata and license.
 - Record minimum R/Rust/platform decisions.
-- Complete the S7-versus-S3 decision spike.
+- Prove S7 packaging, dispatch, and lifecycle behavior on target platforms.
 - Complete a Rust-to-nanoarrow one-batch/empty/error stream spike.
 - Add CI and package/Rust formatting and linting.
 - Produce ADRs before reader implementation.
 
 Exit: package checks cleanly; C Stream lifetime tests pass on all primary
-platforms; object-system ADR accepted.
+platforms; the accepted S7 interface passes its package proof.
 
 ### Phase 1: profile, client, and discovery
 
@@ -725,7 +733,6 @@ Exit: snapshot stream meets correctness and performance gates.
 - Add optional `{arrow}` table and base data-frame adapters.
 - Add DuckDB composition example.
 - Add metrics/diagnostics.
-- Add current-R migration wrappers.
 
 Exit: one scan path powers every materializer and examples.
 
@@ -737,20 +744,21 @@ Exit: one scan path powers every materializer and examples.
 
 Exit: supported CDF fixtures pass across all materializers and platforms.
 
-### Phase 5: legacy Parquet response
+### Phase 5: protocol Parquet response
 
-- Add direct Rust Parquet compatibility reader.
+- Add the direct Rust Parquet response-format reader.
 - Reconstruct partition values and schema normalization.
 - Prove parity with the delta-format path where both are available.
 
-Exit: old servers work without restoring the old download-to-directory design.
+Exit: supported servers that select Parquet work without restoring the old
+download-to-directory design.
 
 ### Phase 6: hardening and release
 
 - Finish security review, dependency audit, notices, and vendoring.
 - Run full conformance and benchmark suites.
 - Build/test binaries.
-- Publish migration guide and vignettes.
+- Publish vNext reference documentation and vignettes.
 - Release 0.2.0 as an explicit pre-1.0 architectural rewrite.
 
 ## 16. Proposed commit/PR boundaries
@@ -758,15 +766,15 @@ Exit: old servers work without restoring the old download-to-directory design.
 Keep reviews small and preserve the lesson from the Python PR:
 
 1. Package metadata, test/CI skeleton, and ADRs.
-2. S7/S3 public descriptors and discovery API.
+2. S7 public descriptors and discovery API.
 3. Rust auth/protocol client.
 4. Arrow C Stream bridge and lifecycle tests.
 5. Delta Kernel snapshot adapter.
 6. Snapshot materializers and parity tests.
 7. Diagnostics and benchmarks.
 8. CDF planner and stream.
-9. Legacy Parquet compatibility path.
-10. Docs, migration, and release packaging.
+9. Protocol Parquet response path.
+10. Docs and release packaging.
 
 Do not mix snapshot and CDF implementations in one review.
 
@@ -774,7 +782,7 @@ Do not mix snapshot and CDF implementations in one review.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| S7 changes before reaching long-term stability | Public object compatibility | Functional API first; time-boxed spike; S3 fallback |
+| S7 changes before reaching long-term stability | Public API churn | Pin a tested S7 release; keep normal use behind exported functions |
 | Delta Kernel 0.x API churn | Frequent Rust breakage | Pin minor version; isolate adapter; upgrade only with full suite |
 | Arrow/Rust version mismatch | Build or memory errors | Cross only the stable Arrow C ABI; never link to Arrow R C++ |
 | Stream lifetime bug | Crash or use-after-free | Single owner, release callbacks, early-drop/GC/error tests |
@@ -789,15 +797,14 @@ Do not mix snapshot and CDF implementations in one review.
 
 Recommended defaults are in parentheses:
 
-1. Public object system: S7 after spike, with S3 fallback (**S7**).
+1. Public object system (**S7, accepted**).
 2. Functional API versus R6 method chaining (**functional**).
 3. Rust bridge: extendr/rextendr versus savvy/direct C (**extendr plus a narrow
    Arrow C ABI function**).
 4. Minimum R version (**R 4.3**, unless a target Databricks Runtime requires
    4.2; the functional API can support either).
 5. Distribution: GitHub/R-universe binaries first, then CRAN (**staged**).
-6. Backward compatibility: migration wrappers, not an R6 façade
-   (**wrappers only**).
+6. Prior package compatibility (**none, accepted**).
 7. Automatic format preference (**negotiate delta,parquet and let the server
    choose, with advanced features forcing delta**).
 
@@ -814,4 +821,3 @@ Recommended defaults are in parentheses:
 - [S7 overview](https://rconsortium.github.io/S7/)
 - [Using S7 in a package](https://rconsortium.github.io/S7/articles/packages.html)
 - [Using Rust in an R package with rextendr](https://extendr.github.io/rextendr/articles/package.html)
-

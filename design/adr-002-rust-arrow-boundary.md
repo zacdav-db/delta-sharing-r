@@ -1,8 +1,8 @@
 # ADR 002: Rust, Delta Kernel, and Arrow boundary
 
-Status: proposed  
+Status: Rust/Kernel/Arrow contract accepted; binding proof pending
 Decision owner: package maintainer  
-Decision required before: snapshot reader implementation
+Decision date: 2026-07-28
 
 ## Context
 
@@ -14,7 +14,7 @@ copies and version coupling.
 Delta Kernel currently has a pre-1.0 Rust API and selects a specific Arrow Rust
 version. The R `{arrow}` package can have a different release cadence.
 
-## Proposed decision
+## Accepted contract and proposed binding
 
 - Integrate Rust package code with `extendr`; use `rextendr` only as a
   development/scaffolding tool.
@@ -24,6 +24,11 @@ version. The R `{arrow}` package can have a different release cadence.
 - Export that reader as an `FFI_ArrowArrayStream`.
 - Move the stream into a nanoarrow-allocated R external pointer.
 - Import into `{arrow}` or other engines only through the Arrow C Stream ABI.
+
+Rust-owned mutable state, Delta Kernel isolation, and the Arrow C Stream
+boundary are accepted. The specialist foundation must still prove that
+extendr/rextendr satisfies packaging and lifecycle requirements before the
+binding choice is treated as complete.
 
 ## Why extendr
 
@@ -92,4 +97,3 @@ The spike must demonstrate, on macOS, Linux, and Windows:
 7. `{arrow}` import without IPC;
 8. no leaked buffers or temporary directories;
 9. panic containment at the native boundary.
-

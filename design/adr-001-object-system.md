@@ -1,8 +1,8 @@
 # ADR 001: R object system for vNext
 
-Status: proposed  
+Status: accepted
 Decision owner: package maintainer  
-Decision required before: Phase 1
+Decision date: 2026-07-28
 
 ## Context
 
@@ -21,7 +21,7 @@ state leaks into user objects.
 
 Advantages:
 
-- familiar `client$table()$snapshot()$to_arrow()` chaining;
+- familiar client/table/read terminology;
 - natural reference semantics and private fields;
 - straightforward external-pointer ownership.
 
@@ -66,38 +66,45 @@ Costs:
 - it does not provide true private properties, so it should not be asked to
   encapsulate mutable native execution state.
 
-## Proposed decision
+## Decision
 
 Use S7 for high-level value-like descriptors and functional generics. Keep
 mutable execution state in Rust external pointers and nanoarrow streams. Add S3
 methods only for established external generics such as `print()` and
 `as.data.frame()`.
 
-The exported functions—not direct property access—are the compatibility
-contract. They should be written so their return representation can become a
-thin S3 object if the decision spike rejects S7.
+The exported functions—not direct property access—are the public contract.
+There is no S3 fallback and no requirement to preserve the prior R6 surface.
+The canonical names are recorded in `s7-interface-naming-matrix.md`.
 
 ## Guardrails
 
 - Users never need `@` for normal work.
 - Query configuration returns a new object; it does not mutate table/client
   state.
-- `DeltaClient` may contain a validated external pointer, but scan state never
+- `SharingClient` may contain a validated external pointer, but scan state never
   lives in an S7 property.
 - The stateful stream is the standard nanoarrow external-pointer class.
 - Serialization of clients/streams is unsupported and fails clearly.
 - S7's experimental environment base class is not used.
-- A two-day cross-platform package/lifetime spike precedes implementation.
+- Cross-platform package and lifetime proofs are required before reader
+  implementation.
 
 ## Consequences
 
 The API will look more like idiomatic R:
 
 ```r
-orders <- delta_table(client, "sales.default.orders")
-read <- delta_snapshot(orders, version = 42L)
-stream <- to_arrow_stream(read)
+orders <- sharing_table(
+  client,
+  share = "sales",
+  schema = "default",
+  table = "orders"
+)
+read <- sharing_read(orders, version = 42L)
+stream <- read_arrow_stream(read)
 ```
 
 It will not attempt to mimic Python syntax at the cost of R composability.
-
+Familiar terminology is design inspiration only; vNext does not provide
+aliases, deprecations, or transition behavior for earlier package releases.
