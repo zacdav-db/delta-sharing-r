@@ -1,0 +1,248 @@
+name: Package artifacts
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-artifacts-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  R_KEEP_PKG_SOURCE: yes
+
+jobs:
+  source:
+    name: Build exact source package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+
+      - name: Restore Rust source cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src/rust -> target
+          cache-targets: false
+          key: package-source-vendor
+
+      - name: Install R
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - name: Install Pandoc
+        uses: r-lib/actions/setup-pandoc@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+
+      - name: Install package dependencies
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          needs: check
+          cache-version: 1
+
+      - name: Validate package workflow structure
+        run: python3 -m unittest tools/test_ci_workflows.py
+
+      - name: Generate and verify locked Rust sources
+        shell: bash
+        run: |
+          cargo fetch --manifest-path src/rust/Cargo.toml --locked
+          python3 tools/rust_vendor.py generate
+          python3 tools/rust_vendor.py check
+          python3 tools/dependency_licenses.py check
+
+      - name: Build and inspect source package
+        shell: bash
+        run: |
+          mkdir -p artifacts/source
+          R CMD build .
+
+          shopt -s nullglob
+          source_archives=(delta.sharing_*.tar.gz)
+          if [[ "${#source_archives[@]}" -ne 1 ]]; then
+            echo "::error::Expected exactly one delta.sharing source archive."
+            exit 1
+          fi
+
+          archive="${source_archives[0]}"
+          archive_contents="$(tar -tzf "$archive")"
+          for required in \
+            src/rust/vendor.tar.xz \
+            src/rust/vendor-config.toml \
+            inst/dependency-licenses/dependency-inventory.json \
+            inst/dependency-licenses/rust-license-texts.tar.xz
+          do
+            if ! grep -Eq "/${required}$" <<<"$archive_contents"; then
+              echo "::error::Source archive is missing ${required}."
+              exit 1
+            fi
+          done
+          if grep -Eq '/src/(vendor|\\.cargo|rust/target)/' <<<"$archive_contents"; then
+            echo "::error::Source archive contains an unpacked native build tree."
+            exit 1
+          fi
+
+          mv "$archive" artifacts/source/
+
+      - name: Retain exact source package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-source
+          path: artifacts/source
+          if-no-files-found: error
+          retention-days: 7
+
+  binary:
+    name: ${{ matrix.config.label }} source and binary
+    needs: source
+    runs-on: ${{ matrix.config.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - os: ubuntu-24.04
+            label: Linux x86_64
+            rust-target: x86_64-unknown-linux-gnu
+            artifact: linux-x86_64
+          - os: ubuntu-24.04-arm
+            label: Linux arm64
+            rust-target: aarch64-unknown-linux-gnu
+            artifact: linux-arm64
+          - os: macos-15
+            label: macOS arm64
+            rust-target: aarch64-apple-darwin
+            artifact: macos-arm64
+          - os: macos-15-intel
+            label: macOS x86_64
+            rust-target: x86_64-apple-darwin
+            artifact: macos-x86_64
+          - os: windows-2025
+            label: Windows x86_64
+            rust-target: x86_64-pc-windows-gnu
+            artifact: windows-x86_64
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install R
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - name: Install stable Rust target
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          targets: ${{ matrix.config.rust-target }}
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src/rust -> target
+          key: package-artifact-${{ matrix.config.artifact }}
+
+      - name: Install package dependencies
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          needs: check
+          cache-version: 1
+
+      - name: Download exact source package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-source
+          path: artifacts/source
+
+      - name: Build binary from exact source package
+        shell: bash
+        env:
+          ALL_PROXY: http://127.0.0.1:9
+          CARGO_NET_OFFLINE: "true"
+          HTTPS_PROXY: http://127.0.0.1:9
+          HTTP_PROXY: http://127.0.0.1:9
+        run: |
+          source_archive="$(find artifacts/source -maxdepth 1 -type f \
+            -name 'delta.sharing_*.tar.gz' -print -quit)"
+          if [[ -z "$source_archive" ]]; then
+            echo "::error::Downloaded source package was not found."
+            exit 1
+          fi
+
+          source_library="$RUNNER_TEMP/delta-sharing-source-library"
+          mkdir -p "$source_library" artifacts/binary
+          source_archive="$(cd "$(dirname "$source_archive")" && pwd)/$(basename "$source_archive")"
+          (
+            cd artifacts/binary
+            R CMD INSTALL \
+              --preclean \
+              --build \
+              --library="$source_library" \
+              "$source_archive"
+          )
+
+          Rscript tools/verify-installed-package.R "$source_library"
+
+          binary_count="$(find artifacts/binary -maxdepth 1 -type f \
+            \( -name 'delta.sharing_*.tgz' \
+              -o -name 'delta.sharing_*.zip' \
+              -o -name 'delta.sharing_*.tar.gz' \) \
+            | wc -l | tr -d '[:space:]')"
+          if [[ "$binary_count" != 1 ]]; then
+            echo "::error::Expected exactly one platform binary archive."
+            exit 1
+          fi
+
+      - name: Install binary without native build tools
+        shell: bash
+        run: |
+          binary_archive="$(find artifacts/binary -maxdepth 1 -type f \
+            \( -name 'delta.sharing_*.tgz' \
+              -o -name 'delta.sharing_*.zip' \
+              -o -name 'delta.sharing_*.tar.gz' \) \
+            -print -quit)"
+          if [[ -z "$binary_archive" ]]; then
+            echo "::error::Platform binary archive was not found."
+            exit 1
+          fi
+
+          no_native_tools="$RUNNER_TEMP/delta-sharing-no-native-tools"
+          mkdir -p "$no_native_tools"
+          for command in cargo rustc cmake cc; do
+            printf '#!/bin/sh\nexit 97\n' > "$no_native_tools/$command"
+            chmod +x "$no_native_tools/$command"
+          done
+
+          binary_library="$RUNNER_TEMP/delta-sharing-binary-library"
+          mkdir -p "$binary_library"
+          PATH="$no_native_tools:$PATH" R CMD INSTALL \
+            --library="$binary_library" \
+            "$binary_archive"
+          Rscript tools/verify-installed-package.R "$binary_library"
+
+      - name: Retain verified platform binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-binary-${{ matrix.config.artifact }}
+          path: artifacts/binary
+          if-no-files-found: error
+          retention-days: 7
