@@ -19,10 +19,9 @@
 #' R and native execution interface
 #'
 #' This internal callback interface keeps the first S7 tranche testable without
-#' retaining the previous reader. Discovery, profile, protocol, and planning
-#' callbacks are placeholders for later R implementations. Only
-#' `read_arrow_stream(specification, ...)` represents the future compact Rust
-#' and Delta Kernel boundary.
+#' retaining the previous reader. Discovery and table control-plane operations
+#' are R callbacks. Only `read_arrow_stream(specification, ...)` represents the
+#' future compact Rust and Delta Kernel boundary.
 #'
 #' Eager `arrow_from_stream(stream)` and `data_frame_from_stream(stream)`
 #' adapters receive only that stream, preventing an independent scan path.
@@ -68,6 +67,15 @@
   invisible(old)
 }
 
+.set_execution_callbacks <- function(callbacks) {
+  interface <- if (is.null(callbacks)) {
+    NULL
+  } else {
+    .new_execution_interface(callbacks)
+  }
+  .set_execution_interface(interface)
+}
+
 .with_execution_interface <- function(interface, code) {
   old <- .set_execution_interface(interface)
   on.exit(.set_execution_interface(old), add = TRUE)
@@ -99,8 +107,10 @@
 
   tryCatch(
     callback(...),
-    delta_sharing_error = function(cnd) stop(cnd),
     error = function(cnd) {
+      if (inherits(cnd, "delta_sharing_error")) {
+        stop(cnd)
+      }
       .abort_delta_sharing(
         sprintf("Execution operation `%s` failed.", operation),
         type = if (identical(operation, "read_arrow_stream")) {

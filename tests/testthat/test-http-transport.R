@@ -10,7 +10,7 @@ test_that("client requests encode path and query separately", {
   request <- delta.sharing:::.new_client_http_request(
     client = client,
     method = "GET",
-    path = c("shares", "sales eu", "schemas"),
+    path = c("shares", "sales eu/100%café", "schemas"),
     query = list(
       pageToken = "page/token?secret",
       tag = c("one", "two")
@@ -26,7 +26,7 @@ test_that("client requests encode path and query separately", {
     request$url,
     paste0(
       "https://sharing.example.test/api/",
-      "shares/sales%20eu/schemas"
+      "shares/sales%20eu%2F100%25caf%C3%A9/schemas"
     )
   )
   expect_identical(request$query$pageToken, "page/token?secret")
@@ -38,7 +38,7 @@ test_that("client requests encode path and query separately", {
     httr2::req_get_url(prepared),
     paste0(
       "https://sharing.example.test/api/",
-      "shares/sales%20eu/schemas?",
+      "shares/sales%20eu%2F100%25caf%C3%A9/schemas?",
       "pageToken=page%2Ftoken%3Fsecret&tag=one&tag=two"
     )
   )

@@ -26,7 +26,9 @@
   )
 }
 
-.discovery_route <- function(resource, share = NULL, schema = NULL) {
+.discovery_route_segments <- function(resource,
+                                      share = NULL,
+                                      schema = NULL) {
   if (!.is_scalar_character(resource) ||
       !resource %in% names(.discovery_operations)) {
     stop("Unknown discovery resource.", call. = FALSE)
@@ -37,7 +39,7 @@
     if (!is.null(share) || !is.null(schema)) {
       stop("Share and schema filters do not apply to the shares route.", call. = FALSE)
     }
-    return("/shares")
+    return("shares")
   }
 
   if (is.null(share)) {
@@ -47,20 +49,20 @@
       operation = operation
     )
   }
-  encoded_share <- .encode_discovery_segment(share, "share", operation)
+  share <- .discovery_identifier(share, "share", operation)
 
   if (identical(resource, "schemas")) {
     if (!is.null(schema)) {
       stop("A schema filter does not apply to the schemas route.", call. = FALSE)
     }
-    return(paste0("/shares/", encoded_share, "/schemas"))
+    return(c("shares", share, "schemas"))
   }
 
   if (identical(resource, "all_tables")) {
     if (!is.null(schema)) {
       stop("A schema filter does not apply to the all-tables route.", call. = FALSE)
     }
-    return(paste0("/shares/", encoded_share, "/all-tables"))
+    return(c("shares", share, "all-tables"))
   }
 
   if (is.null(schema)) {
@@ -70,14 +72,28 @@
       operation = operation
     )
   }
-  encoded_schema <- .encode_discovery_segment(schema, "schema", operation)
-  paste0(
-    "/shares/",
-    encoded_share,
-    "/schemas/",
-    encoded_schema,
-    "/tables"
+  schema <- .discovery_identifier(schema, "schema", operation)
+  c("shares", share, "schemas", schema, "tables")
+}
+
+.discovery_route <- function(resource, share = NULL, schema = NULL) {
+  segments <- .discovery_route_segments(
+    resource,
+    share = share,
+    schema = schema
   )
+  operation <- unname(.discovery_operations[[resource]])
+  encoded <- vapply(seq_along(segments), function(index) {
+    name <- if (identical(segments[[index]], share)) {
+      "share"
+    } else if (identical(segments[[index]], schema)) {
+      "schema"
+    } else {
+      "route"
+    }
+    .encode_discovery_segment(segments[[index]], name, operation)
+  }, character(1))
+  paste0("/", paste(encoded, collapse = "/"))
 }
 
 .empty_discovery_routes <- function() {
@@ -85,20 +101,20 @@
     operation = character(),
     share = character(),
     schema = character(),
-    path = character(),
+    path_segments = I(vector("list", 0L)),
     stringsAsFactors = FALSE
   )
 }
 
 .new_discovery_route_record <- function(operation,
-                                        path,
+                                        path_segments,
                                         share = NA_character_,
                                         schema = NA_character_) {
   data.frame(
     operation = operation,
     share = share,
     schema = schema,
-    path = path,
+    path_segments = I(list(path_segments)),
     stringsAsFactors = FALSE
   )
 }
@@ -128,7 +144,7 @@
     return(.new_discovery_route_record(
       operation = "list_schemas",
       share = share,
-      path = .discovery_route("schemas", share = share)
+      path_segments = .discovery_route_segments("schemas", share = share)
     ))
   }
 
@@ -142,7 +158,7 @@
       .new_discovery_route_record(
         operation = "list_schemas",
         share = name,
-        path = .discovery_route("schemas", share = name)
+        path_segments = .discovery_route_segments("schemas", share = name)
       )
     })
   )
@@ -165,7 +181,10 @@
       return(.new_discovery_route_record(
         operation = "list_tables",
         share = share,
-        path = .discovery_route("all_tables", share = share)
+        path_segments = .discovery_route_segments(
+          "all_tables",
+          share = share
+        )
       ))
     }
     schema <- .discovery_identifier(schema, "schema", "list_tables")
@@ -173,7 +192,7 @@
       operation = "list_tables",
       share = share,
       schema = schema,
-      path = .discovery_route(
+      path_segments = .discovery_route_segments(
         "tables",
         share = share,
         schema = schema
@@ -191,7 +210,10 @@
       .new_discovery_route_record(
         operation = "list_tables",
         share = name,
-        path = .discovery_route("all_tables", share = name)
+        path_segments = .discovery_route_segments(
+          "all_tables",
+          share = name
+        )
       )
     })
   )
@@ -457,13 +479,18 @@
 }
 
 .safe_discovery_page <- function(fetch_page,
-                                 path,
+                                 path_segments,
                                  page_token,
                                  operation) {
   tryCatch(
-    fetch_page(path = path, page_token = page_token),
-    delta_sharing_error = function(condition) stop(condition),
+    fetch_page(
+      path_segments = path_segments,
+      page_token = page_token
+    ),
     error = function(condition) {
+      if (inherits(condition, "delta_sharing_error")) {
+        stop(condition)
+      }
       .abort_delta_sharing(
         "The discovery page could not be obtained.",
         type = "protocol",
@@ -481,14 +508,19 @@
   }
   if (!is.data.frame(route) ||
       nrow(route) != 1L ||
-      !all(c("operation", "share", "schema", "path") %in% names(route))) {
+      !all(c(
+        "operation",
+        "share",
+        "schema",
+        "path_segments"
+      ) %in% names(route))) {
     stop("`route` must be one discovery route record.", call. = FALSE)
   }
 
   records <- .collect_pages(function(token) {
     .safe_discovery_page(
       fetch_page = fetch_page,
-      path = route$path[[1L]],
+      path_segments = route$path_segments[[1L]],
       page_token = token,
       operation = route$operation[[1L]]
     )
@@ -520,7 +552,7 @@
 .collect_share_records <- function(fetch_page) {
   route <- .new_discovery_route_record(
     operation = "list_shares",
-    path = .discovery_route("shares")
+    path_segments = .discovery_route_segments("shares")
   )
   .collect_discovery_route(
     fetch_page,

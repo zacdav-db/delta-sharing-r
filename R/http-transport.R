@@ -49,9 +49,7 @@
       anyNA(path) ||
       any(!nzchar(path)) ||
       any(path %in% c(".", "..")) ||
-      any(grepl("/", path, fixed = TRUE)) ||
-      any(grepl("\\", path, fixed = TRUE)) ||
-      any(grepl("[?#\r\n]", path))) {
+      any(grepl("[[:cntrl:]]", path))) {
     .http_validation_abort(
       "The relative HTTP path must contain safe non-empty segments."
     )
@@ -62,6 +60,7 @@
     utils::URLencode,
     character(1),
     reserved = TRUE,
+    repeated = TRUE,
     USE.NAMES = FALSE
   )
   if (any(!nzchar(encoded))) {
@@ -76,6 +75,9 @@
                                         kind,
                                         allow_vectors = FALSE) {
   if (is.null(fields)) {
+    return(list())
+  }
+  if (is.list(fields) && length(fields) == 0L) {
     return(list())
   }
   if (!is.list(fields) ||
@@ -349,8 +351,42 @@
   )
 }
 
+.encode_http_component <- function(value) {
+  utils::URLencode(
+    enc2utf8(as.character(value)),
+    reserved = TRUE,
+    repeated = TRUE
+  )
+}
+
+.http_query_string <- function(query) {
+  if (length(query) == 0L) {
+    return("")
+  }
+  fields <- unlist(lapply(seq_along(query), function(index) {
+    value <- query[[index]]
+    if (is.null(value)) {
+      return(character())
+    }
+    name <- .encode_http_component(names(query)[[index]])
+    paste0(name, "=", vapply(
+      value,
+      .encode_http_component,
+      character(1),
+      USE.NAMES = FALSE
+    ))
+  }), use.names = FALSE)
+  if (length(fields) == 0L) "" else paste(fields, collapse = "&")
+}
+
 .httr2_prepare_request <- function(request, timeout_seconds) {
-  prepared <- httr2::request(request$url)
+  query <- .http_query_string(request$query)
+  url <- if (nzchar(query)) {
+    paste0(request$url, "?", query)
+  } else {
+    request$url
+  }
+  prepared <- httr2::request(url)
   prepared <- httr2::req_method(prepared, request$method)
   prepared <- httr2::req_timeout(prepared, timeout_seconds)
   prepared <- httr2::req_error(
@@ -361,16 +397,6 @@
     prepared <- do.call(
       httr2::req_headers_redacted,
       c(list(prepared), as.list(request$headers))
-    )
-  }
-  if (length(request$query) > 0L) {
-    prepared <- do.call(
-      httr2::req_url_query,
-      c(
-        list(prepared),
-        request$query,
-        list(.multi = "explode", .space = "percent")
-      )
     )
   }
   if (identical(request$body_type, "form")) {

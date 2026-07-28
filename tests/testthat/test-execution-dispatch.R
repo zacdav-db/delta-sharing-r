@@ -2,21 +2,23 @@ test_that("unimplemented R and Kernel operations fail with typed conditions", {
   client <- test_client()
   table <- sharing_table(client, "sales.default.orders")
 
-  expect_error(
-    list_shares(client),
-    "not available",
-    class = "delta_sharing_not_implemented_error"
-  )
-  expect_error(
-    table_version(table),
-    "not available",
-    class = "delta_sharing_error"
-  )
-  expect_error(
-    read_arrow_stream(sharing_read(table)),
-    "not available",
-    class = "delta_sharing_native_unavailable_error"
-  )
+  delta.sharing:::.with_execution_interface(NULL, {
+    expect_error(
+      list_shares(client),
+      "not available",
+      class = "delta_sharing_not_implemented_error"
+    )
+    expect_error(
+      table_version(table),
+      "not available",
+      class = "delta_sharing_error"
+    )
+    expect_error(
+      read_arrow_stream(sharing_read(table)),
+      "not available",
+      class = "delta_sharing_native_unavailable_error"
+    )
+  })
 })
 
 test_that("execution interface injects discovery without client mutation", {

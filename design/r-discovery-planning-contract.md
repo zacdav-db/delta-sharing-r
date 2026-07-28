@@ -1,18 +1,21 @@
 # R discovery planning contract
 
-Status: implemented Phase 2 planning foundation
+Status: implemented and connected to R HTTP execution
 Branch owner: `codex/r-discovery-planning-vnext`
 
-This slice defines the pure-R discovery boundary without selecting or invoking
-an HTTP transport. It does not install the internal planning functions as
-public execution callbacks.
+This contract defines the pure-R discovery boundary. Production execution uses
+the authenticated httr2 adapter; hermetic tests inject the same private
+transport interface.
 
 ## Routes and pagination
 
-Discovery routes are relative to the normalized profile endpoint. Every
-provider-supplied share and schema name is encoded as one path segment, so
-spaces, slashes, percent signs, query markers, fragments, and non-ASCII names
-cannot change the route hierarchy.
+Discovery request plans carry validated raw path-segment vectors relative to
+the normalized profile endpoint. The transport performs the only encoding
+step. Provider-supplied share and schema names therefore remain one segment
+even when they contain spaces, slashes, percent signs, query markers,
+fragments, or non-ASCII names. `.discovery_route()` remains an internal
+deterministic encoded-route helper for assertions; its output is never passed
+back through the transport.
 
 The route families are:
 
@@ -21,9 +24,8 @@ The route families are:
 - `/shares/{share}/schemas/{schema}/tables`;
 - `/shares/{share}/all-tables`.
 
-Each route is collected through the shared bounded pagination control.
-Transport remains an injected internal callback until authenticated HTTP is
-ready.
+Each route is collected through the shared bounded pagination control. Page
+tokens remain separate query values and are never interpolated into paths.
 
 ## Omitted-filter fan-out
 

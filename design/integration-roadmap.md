@@ -189,10 +189,10 @@ accepted, and Arrow stream lifecycle proof passes on macOS, Linux, and Windows.
 - [ ] Implement expiry checks and single-flight refresh in R.
 - [ ] Implement authenticated HTTP, retry/backoff, pagination, and cancellation
   in R.
-- [ ] Connect `SharingClient` and `SharingTable` to R-owned client state.
-- [ ] Implement `list_shares()`, `list_schemas()`, and `list_tables()`.
-- [ ] Implement table version, protocol, metadata, and schema calls.
-- [ ] Add protocol fixtures, typed errors, and secret-redaction tests.
+- [x] Connect `SharingClient` and `SharingTable` to R-owned client state.
+- [x] Implement `list_shares()`, `list_schemas()`, and `list_tables()`.
+- [x] Implement table version, protocol, metadata, and schema calls.
+- [x] Add protocol fixtures, typed errors, and secret-redaction tests.
 
 Exit gate G2: discovery and metadata are complete, paginated, typed, redacted,
 and tested without row reading.

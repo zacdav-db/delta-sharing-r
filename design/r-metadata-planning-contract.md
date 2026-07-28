@@ -1,18 +1,19 @@
 # R table metadata planning contract
 
-Status: implemented Phase 2 planning foundation
+Status: implemented and connected to R HTTP execution
 Branch owner: `codex/r-metadata-planning-vnext`
 
-This slice defines pure-R planning and response handling for table version and
-table metadata requests. It uses injected fetch callbacks for tests and does
-not select an HTTP library, add authorization, or wire public execution
-callbacks.
+This contract defines pure-R planning and response handling for table version
+and table metadata requests. Production callbacks use authenticated httr2
+execution; lower-level tests retain injected fetch callbacks.
 
 ## Request descriptors
 
-All share, schema, and table names are encoded independently as URL path
-segments. Descriptors contain only a method, endpoint-relative path, query
-parameters, non-secret capability headers, and an operation name.
+Descriptors contain only a method, validated raw endpoint-relative path
+segments, query parameters, non-secret capability headers, and an operation
+name. Encoding occurs once in the HTTP transport. The deterministic
+`.table_route()` helper produces an encoded route only for internal assertions
+and is not a request-plan input.
 
 Latest table-version planning uses the protocol's current `GET` descriptor
 ending in `/version` and parses `Delta-Table-Version` through the shared header
@@ -31,9 +32,10 @@ source. The chunk source can be raw/character chunks already supplied by a
 test transport or a pull function returning one chunk at a time and `NULL` at
 end-of-stream.
 
-Incremental sources are consumed through the shared bounded NDJSON decoder.
-Line size and chunk-count ceilings fail with typed, fixed protocol errors.
-Neither callback error text nor response content is copied into conditions.
+The bounded control-plane response is exposed to the parser as fixed-size raw
+chunks and consumed through the shared incremental NDJSON decoder. Line size
+and chunk-count ceilings fail with typed, fixed protocol errors. Neither
+callback error text nor response content is copied into conditions.
 
 ## Safe projections
 
@@ -46,5 +48,5 @@ versions, and feature names. The metadata projection contains stable logical
 metadata and safe statistics. The schema projection parses and minimally
 validates the Delta struct-schema JSON without requiring Arrow.
 
-No function in this slice is exported, installed as an execution callback, or
-connected to authentication or a concrete HTTP transport.
+No metadata callback reads rows, buffers snapshot/CDF bodies, or invokes the
+native layer.

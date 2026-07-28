@@ -21,12 +21,15 @@
   )
 }
 
-.parse_table_version_header <- function(headers) {
+.parse_table_version_header <- function(headers, operation = "table_version") {
+  if (!.is_scalar_character(operation)) {
+    stop("`operation` must be one non-empty string.", call. = FALSE)
+  }
   if (is.null(headers) || is.null(names(headers))) {
     .abort_delta_sharing(
       "The server response is missing the table version.",
       type = "protocol",
-      operation = "table_version"
+      operation = operation
     )
   }
 
@@ -35,7 +38,7 @@
     .abort_delta_sharing(
       "The server response has an invalid table version.",
       type = "protocol",
-      operation = "table_version"
+      operation = operation
     )
   }
 
@@ -44,7 +47,7 @@
     .abort_delta_sharing(
       "The server response has an invalid table version.",
       type = "protocol",
-      operation = "table_version"
+      operation = operation
     )
   }
 
@@ -56,7 +59,7 @@
     .abort_delta_sharing(
       "The server response has an invalid table version.",
       type = "protocol",
-      operation = "table_version"
+      operation = operation
     )
   }
 

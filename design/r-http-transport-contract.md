@@ -3,9 +3,10 @@
 Status: implemented internal control-plane transport slice
 Branch owner: `codex/r-http-transport-vnext`
 
-This contract adds the R-owned authenticated HTTP boundary without wiring any
-public execution callback or interpreting discovery/metadata payloads. It
-contains no snapshot, CDF, native, or Rust transport path.
+This contract defines the R-owned authenticated HTTP boundary. Discovery and
+table-metadata callbacks now use it through the separate execution-wiring
+contract. The transport itself does not interpret payloads and contains no
+snapshot, CDF, native, or Rust path.
 
 ## Safe request model
 
@@ -19,11 +20,16 @@ an internal request from:
   Content-Length, or connection control;
 - at most one named form or JSON object.
 
-Path segments are URL-encoded independently, so identifiers containing spaces
-or reserved characters cannot change the endpoint host, path hierarchy, query,
-or fragment. Dot traversal, slashes, backslashes, and control characters are
-rejected as path segments. Query, form, JSON, header, and operation validation
-conditions use fixed messages and never echo supplied values.
+Path segments are URL-encoded independently, so raw identifiers containing
+spaces, slashes, backslashes, percent signs, query markers, fragments, or
+Unicode cannot change the endpoint host, path hierarchy, query, or fragment.
+Exact dot-traversal segments and control characters are rejected. Query, form,
+JSON, header, and operation validation conditions use fixed messages and never
+echo supplied values.
+
+Validated query fields are percent-encoded and appended only after the path is
+complete. This avoids reparsing an encoded `%2F` path segment as a hierarchy
+separator when httr2 prepares a request.
 
 Authentication is applied only through `.client_authorization()`. A caller
 cannot supply its own Authorization header. The production httr2 request marks

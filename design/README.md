@@ -12,7 +12,9 @@ The design packet is read in this order:
    required implementation proof.
 6. `vnext-plan.md` — detailed requirements, architecture, tests, benchmarks,
    risks, and technical references.
-7. `api-mock.R` — non-executable illustration of the canonical API.
+7. `r-execution-wiring-contract.md` — production R discovery/metadata
+   execution, injection, and lifecycle boundary.
+8. `api-mock.R` — non-executable illustration of the canonical API.
 
 When documents differ, the maintainer decisions and clean-break policy in the
 roadmap and interface matrix take precedence.

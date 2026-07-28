@@ -6,11 +6,29 @@ discovery_fixture <- function(name) {
 }
 
 fixture_discovery_fetcher <- function(recorder = NULL) {
-  function(path, page_token) {
+  function(path_segments, page_token) {
+    path <- paste0(
+      "/",
+      paste(
+        vapply(
+          path_segments,
+          utils::URLencode,
+          character(1),
+          reserved = TRUE,
+          repeated = TRUE,
+          USE.NAMES = FALSE
+        ),
+        collapse = "/"
+      )
+    )
     if (!is.null(recorder)) {
       recorder$calls <- c(
         recorder$calls,
-        list(list(path = path, page_token = page_token))
+        list(list(
+          path_segments = path_segments,
+          path = path,
+          page_token = page_token
+        ))
       )
     }
     key <- paste0(path, "|", if (is.null(page_token)) "" else page_token)
@@ -177,25 +195,25 @@ test_that("schema and table planners fan out omitted filters in provider order",
   tables <- delta.sharing:::.plan_table_routes(shares = shares)
 
   expect_identical(
-    schemas$path,
-    c(
-      "/shares/sales/schemas",
-      "/shares/operations/schemas"
+    unclass(schemas$path_segments),
+    list(
+      c("shares", "sales", "schemas"),
+      c("shares", "operations", "schemas")
     )
   )
   expect_identical(
-    tables$path,
-    c(
-      "/shares/sales/all-tables",
-      "/shares/operations/all-tables"
+    unclass(tables$path_segments),
+    list(
+      c("shares", "sales", "all-tables"),
+      c("shares", "operations", "all-tables")
     )
   )
   expect_identical(
     delta.sharing:::.plan_table_routes(
       share = "Sales Share",
       schema = "schema/name"
-    )$path,
-    "/shares/Sales%20Share/schemas/schema%2Fname/tables"
+    )$path_segments[[1L]],
+    c("shares", "Sales Share", "schemas", "schema/name", "tables")
   )
 })
 
@@ -257,7 +275,7 @@ test_that("discovery collectors reuse pagination and omitted-filter fan-out", {
 test_that("discovery collection wraps untyped callback errors safely", {
   secret <- "transport-secret-must-not-leak"
   condition <- expect_error(
-    delta.sharing:::.collect_share_records(function(path, page_token) {
+    delta.sharing:::.collect_share_records(function(path_segments, page_token) {
       stop(secret)
     }),
     class = "delta_sharing_protocol_error"

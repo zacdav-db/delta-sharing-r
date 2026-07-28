@@ -11,48 +11,55 @@
   identifier
 }
 
-.table_route <- function(identifier, operation) {
+.table_route_segments <- function(identifier, operation) {
   identifier <- .validate_table_identifier(identifier, operation)
-  share <- .encode_discovery_segment(
+  share <- .discovery_identifier(
     identifier@share,
     "share",
     operation
   )
-  schema <- .encode_discovery_segment(
+  schema <- .discovery_identifier(
     identifier@schema,
     "schema",
     operation
   )
-  table <- .encode_discovery_segment(
+  table <- .discovery_identifier(
     identifier@table,
     "table",
     operation
   )
-  paste0(
-    "/shares/",
+  c(
+    "shares",
     share,
-    "/schemas/",
+    "schemas",
     schema,
-    "/tables/",
+    "tables",
     table
   )
 }
 
+.table_route <- function(identifier, operation) {
+  segments <- .table_route_segments(identifier, operation)
+  encoded <- vapply(
+    enc2utf8(segments),
+    utils::URLencode,
+    character(1),
+    reserved = TRUE,
+    repeated = TRUE,
+    USE.NAMES = FALSE
+  )
+  paste0("/", paste(encoded, collapse = "/"))
+}
+
 .new_table_request <- function(method,
-                               path,
+                               path_segments,
                                operation,
-                               query = stats::setNames(
-                                 character(),
-                                 character()
-                               ),
-                               headers = stats::setNames(
-                                 character(),
-                                 character()
-                               )) {
+                               query = list(),
+                               headers = list()) {
   structure(
     list(
       method = method,
-      path = path,
+      path_segments = path_segments,
       query = query,
       headers = headers,
       operation = operation
@@ -64,9 +71,9 @@
 .plan_table_version_request <- function(identifier) {
   .new_table_request(
     method = "GET",
-    path = paste0(
-      .table_route(identifier, "table_version"),
-      "/version"
+    path_segments = c(
+      .table_route_segments(identifier, "table_version"),
+      "version"
     ),
     operation = "table_version"
   )
@@ -79,8 +86,17 @@
 .plan_table_metadata_request <- function(identifier,
                                          version = NULL,
                                          timestamp = NULL,
-                                         response_format = "auto") {
-  identifier <- .validate_table_identifier(identifier, "table_metadata")
+                                         response_format = "auto",
+                                         operation = "table_metadata") {
+  if (!.is_scalar_character(operation) ||
+      !operation %in% c(
+        "table_protocol",
+        "table_metadata",
+        "table_schema"
+      )) {
+    stop("Unknown table metadata operation.", call. = FALSE)
+  }
+  identifier <- .validate_table_identifier(identifier, operation)
   version <- .normalize_version(version, "version")
   timestamp <- .normalize_timestamp(timestamp, "timestamp")
   response_format <- .normalize_response_format(response_format)
@@ -89,29 +105,29 @@
     .abort_delta_sharing(
       "`version` and `timestamp` are mutually exclusive.",
       type = "validation",
-      operation = "table_metadata"
+      operation = operation
     )
   }
 
-  query <- stats::setNames(character(), character())
+  query <- list()
   if (!is.null(version)) {
-    query <- c(version = .format_protocol_version(version))
+    query <- list(version = .format_protocol_version(version))
   } else if (!is.null(timestamp)) {
-    query <- c(timestamp = .format_protocol_timestamp(timestamp))
+    query <- list(timestamp = .format_protocol_timestamp(timestamp))
   }
 
   .new_table_request(
     method = "GET",
-    path = paste0(
-      .table_route(identifier, "table_metadata"),
-      "/metadata"
+    path_segments = c(
+      .table_route_segments(identifier, operation),
+      "metadata"
     ),
     query = query,
-    headers = c(
+    headers = list(
       "delta-sharing-capabilities" =
         .snapshot_capability_header(response_format)
     ),
-    operation = "table_metadata"
+    operation = operation
   )
 }
 
@@ -121,8 +137,10 @@
   }
   tryCatch(
     fetch(request),
-    delta_sharing_error = function(condition) stop(condition),
     error = function(condition) {
+      if (inherits(condition, "delta_sharing_error")) {
+        stop(condition)
+      }
       .abort_delta_sharing(
         "The table metadata request could not be completed.",
         type = "protocol",
@@ -159,8 +177,10 @@
 .next_metadata_chunk <- function(read_chunk, operation) {
   chunk <- tryCatch(
     read_chunk(),
-    delta_sharing_error = function(condition) stop(condition),
     error = function(condition) {
+      if (inherits(condition, "delta_sharing_error")) {
+        stop(condition)
+      }
       .abort_delta_sharing(
         "The table metadata response could not be read.",
         type = "protocol",
@@ -184,13 +204,14 @@
 .consume_table_metadata_chunks <- function(
   chunks,
   max_line_bytes = .ndjson_default_max_line_bytes,
-  max_chunks = .metadata_chunk_limit
+  max_chunks = .metadata_chunk_limit,
+  operation = "table_metadata"
 ) {
   if (!is.function(chunks)) {
     return(.parse_table_metadata_ndjson(
       chunks,
       max_line_bytes = max_line_bytes,
-      operation = "table_metadata"
+      operation = operation
     ))
   }
   if (!is.numeric(max_chunks) ||
@@ -204,13 +225,13 @@
   }
 
   decoder <- .new_ndjson_decoder(
-    operation = "table_metadata",
+    operation = operation,
     max_line_bytes = max_line_bytes
   )
   actions <- list()
   chunk_count <- 0L
   repeat {
-    chunk <- .next_metadata_chunk(chunks, "table_metadata")
+    chunk <- .next_metadata_chunk(chunks, operation)
     if (is.null(chunk)) {
       break
     }
@@ -218,13 +239,13 @@
     if (chunk_count > max_chunks) {
       .protocol_abort(
         "Table metadata response exceeded the internal chunk limit.",
-        "table_metadata"
+        operation
       )
     }
     actions <- c(actions, .ndjson_decoder_push(decoder, chunk))
   }
   actions <- c(actions, .ndjson_decoder_finish(decoder))
-  .metadata_from_actions(actions, operation = "table_metadata")
+  .metadata_from_actions(actions, operation = operation)
 }
 
 .new_private_metadata_storage <- function(metadata) {
@@ -279,12 +300,14 @@
                                   response_format = "auto",
                                   max_line_bytes =
                                     .ndjson_default_max_line_bytes,
-                                  max_chunks = .metadata_chunk_limit) {
+                                  max_chunks = .metadata_chunk_limit,
+                                  operation = "table_metadata") {
   request <- .plan_table_metadata_request(
     identifier = identifier,
     version = version,
     timestamp = timestamp,
-    response_format = response_format
+    response_format = response_format,
+    operation = operation
   )
   response <- .validate_table_response(
     .safe_table_fetch(fetch, request),
@@ -293,15 +316,19 @@
   if (!"chunks" %in% names(response)) {
     .protocol_abort(
       "The table metadata response is missing its body.",
-      "table_metadata"
+      operation
     )
   }
 
-  table_version <- .parse_table_version_header(response$headers)
+  table_version <- .parse_table_version_header(
+    response$headers,
+    operation = operation
+  )
   parsed <- .consume_table_metadata_chunks(
     chunks = response$chunks,
     max_line_bytes = max_line_bytes,
-    max_chunks = max_chunks
+    max_chunks = max_chunks,
+    operation = operation
   )
   .new_table_metadata_response(table_version, parsed)
 }

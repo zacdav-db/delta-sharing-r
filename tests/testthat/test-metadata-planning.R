@@ -47,11 +47,11 @@ test_that("version planning uses the current safe GET descriptor", {
 
   expect_identical(request$method, "GET")
   expect_identical(
-    request$path,
-    "/shares/sales/schemas/default/tables/orders/version"
+    request$path_segments,
+    c("shares", "sales", "schemas", "default", "tables", "orders", "version")
   )
-  expect_identical(request$query, stats::setNames(character(), character()))
-  expect_identical(request$headers, stats::setNames(character(), character()))
+  expect_identical(request$query, list())
+  expect_identical(request$headers, list())
   expect_identical(request$operation, "table_version")
   expect_false("authorization" %in% tolower(names(request$headers)))
 })
@@ -74,18 +74,18 @@ test_that("metadata request planning is deterministic for all time modes", {
 
   expect_identical(latest$method, "GET")
   expect_identical(
-    latest$path,
-    "/shares/sales/schemas/default/tables/orders/metadata"
+    latest$path_segments,
+    c("shares", "sales", "schemas", "default", "tables", "orders", "metadata")
   )
-  expect_identical(latest$query, stats::setNames(character(), character()))
-  expect_identical(version$query, c(version = "42"))
+  expect_identical(latest$query, list())
+  expect_identical(version$query, list(version = "42"))
   expect_identical(
     timestamp$query,
-    c(timestamp = "2026-07-29T02:34:56.125Z")
+    list(timestamp = "2026-07-29T02:34:56.125Z")
   )
   expect_identical(
     latest$headers,
-    c(
+    list(
       "delta-sharing-capabilities" = paste0(
         "responseformat=delta,parquet;",
         "readerfeatures=columnmapping,deletionvectors,timestampntz"
@@ -94,7 +94,7 @@ test_that("metadata request planning is deterministic for all time modes", {
   )
   expect_identical(
     timestamp$headers,
-    c(
+    list(
       "delta-sharing-capabilities" = paste0(
         "responseformat=delta;",
         "readerfeatures=columnmapping,deletionvectors,timestampntz"

@@ -35,6 +35,23 @@ events <- sharing_table(
 )
 ```
 
+Discovery and table control-plane calls execute entirely in R through the
+authenticated client:
+
+``` r
+list_shares(client)
+list_schemas(client, share = "sales")
+list_tables(client, share = "sales", schema = "default")
+
+table_version(orders)
+table_protocol(orders)
+table_metadata(orders)
+table_schema(orders)
+```
+
+Discovery follows every page. Metadata results are safe projections and omit
+storage locations, credentials, response bodies, and other private fields.
+
 `read_arrow_stream()`, `read_arrow()`, and `read_data_frame()` define the
 execution interface. Until the Rust layer is linked, they fail with a typed
 `delta_sharing_native_unavailable_error`; the R package does not fall back to a
