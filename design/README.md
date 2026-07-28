@@ -16,7 +16,9 @@ The design packet is read in this order:
    policy plus reviewed transitive exceptions.
 8. `r-execution-wiring-contract.md` — production R discovery/metadata
    execution, injection, and lifecycle boundary.
-9. `api-mock.R` — non-executable illustration of the canonical API.
+9. `parquet-response-kernel-proof.md` — Phase 6 wire-to-log mapping, R/Kernel
+   ownership, safety gates, and executable fixture evidence.
+10. `api-mock.R` — non-executable illustration of the canonical API.
 
 Implemented R subsystems also carry focused contracts. Snapshot synthetic-log
 mapping, atomic publication, privacy, and lifetime are recorded in
