@@ -24,11 +24,12 @@ reproducible generator live in
 
 ## Deliberately open
 
-This fixture is representative, not an exhaustive Delta logical-type matrix.
-Decimal, map, interval, additional timestamp variants, and deeper combinations
-of nested and column-mapped fields are not yet proven here. Existing focused
-fixtures separately cover `timestampNtz`, column mapping by ID, and inline
-deletion-vector filtering.
+This fixture is representative rather than exhaustive. The companion
+`snapshot-logical-type-conformance.md` packet proves decimals, maps, UTC and
+timezone-free timestamps, and deeper nested name-mapped combinations through
+the same production path. It also records Delta Kernel 0.22.0's typed,
+redacted rejection of unsupported Delta interval metadata. Existing focused
+fixtures separately cover column mapping by ID and deletion-vector filtering.
 
 The matrix also does not replace target-platform evidence for signed HTTPS
 object storage, Windows cancellation, sanitizers, or hosted cross-platform
