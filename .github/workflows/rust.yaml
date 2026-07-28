@@ -1,0 +1,299 @@
+name: Native Rust
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  RUST_MANIFEST_PATH: src/rust/Cargo.toml
+  RUST_MSRV: "1.88"
+  RUST_MIN_COVERAGE: "85"
+
+jobs:
+  discover:
+    name: Discover native crate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      present: ${{ steps.native.outputs.present }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Require a locked native crate when present
+        id: native
+        shell: bash
+        run: |
+          if [[ ! -f "$RUST_MANIFEST_PATH" ]]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No native crate is present; Rust checks are not applicable."
+            exit 0
+          fi
+
+          if [[ ! -f "$(dirname "$RUST_MANIFEST_PATH")/Cargo.lock" ]]; then
+            echo "::error::The R package's Rust crate must commit Cargo.lock."
+            exit 1
+          fi
+
+          echo "present=true" >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: fmt, clippy, docs, and tests
+    needs: discover
+    if: needs.discover.outputs.present == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Install R for the extendr build
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: release
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src/rust -> target
+          key: stable-quality
+
+      - name: Validate declared MSRV
+        shell: bash
+        run: |
+          cargo metadata \
+            --manifest-path "$RUST_MANIFEST_PATH" \
+            --format-version 1 \
+            --no-deps \
+            --locked > cargo-metadata.json
+          jq -e --arg msrv "$RUST_MSRV" '
+            [.packages[] | select(.source == null)] as $local
+            | ($local | length) > 0
+            and all($local[]; .rust_version == $msrv)
+          ' cargo-metadata.json
+
+      - name: Check formatting
+        run: cargo fmt --manifest-path "$RUST_MANIFEST_PATH" --all -- --check
+
+      - name: Run Clippy
+        run: >-
+          cargo clippy
+          --manifest-path "$RUST_MANIFEST_PATH"
+          --workspace
+          --all-targets
+          --all-features
+          --locked
+          --
+          -D warnings
+
+      - name: Build documentation without warnings
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: >-
+          cargo doc
+          --manifest-path "$RUST_MANIFEST_PATH"
+          --workspace
+          --all-features
+          --no-deps
+          --locked
+
+      - name: Run stable Rust tests
+        run: >-
+          cargo test
+          --manifest-path "$RUST_MANIFEST_PATH"
+          --workspace
+          --all-features
+          --locked
+
+  msrv:
+    name: Rust 1.88 (MSRV)
+    needs: discover
+    if: needs.discover.outputs.present == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the minimum Rust toolchain
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: ${{ env.RUST_MSRV }}
+
+      - name: Install R for the extendr build
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: release
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src/rust -> target
+          key: msrv-${{ env.RUST_MSRV }}
+
+      - name: Test the minimum Rust version
+        run: >-
+          cargo test
+          --manifest-path "$RUST_MANIFEST_PATH"
+          --workspace
+          --all-features
+          --locked
+
+  platform:
+    name: ${{ matrix.config.label }}
+    needs: discover
+    if: needs.discover.outputs.present == 'true'
+    runs-on: ${{ matrix.config.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - os: ubuntu-24.04-arm
+            label: Linux arm64
+          - os: macos-15
+            label: macOS arm64
+          - os: macos-15-intel
+            label: macOS x86_64
+          - os: windows-2025
+            label: Windows x86_64
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+
+      - name: Install R for the extendr build
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: release
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src/rust -> target
+          key: platform-${{ matrix.config.os }}
+
+      - name: Run platform tests
+        run: >-
+          cargo test
+          --manifest-path "$RUST_MANIFEST_PATH"
+          --workspace
+          --all-features
+          --locked
+
+  coverage:
+    name: Rust coverage
+    needs: discover
+    if: needs.discover.outputs.present == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust with coverage tools
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+
+      - name: Install R for the extendr build
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: release
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2.85.2
+        with:
+          tool: cargo-llvm-cov@0.8.6
+          fallback: none
+
+      - name: Generate and enforce Rust coverage
+        shell: bash
+        run: |
+          mkdir -p coverage
+          cargo llvm-cov \
+            --manifest-path "$RUST_MANIFEST_PATH" \
+            --workspace \
+            --all-features \
+            --locked \
+            --fail-under-lines "$RUST_MIN_COVERAGE" \
+            --lcov \
+            --output-path coverage/rust-lcov.info
+
+      - name: Retain Rust coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rust-coverage
+          path: coverage
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish-rust-coverage:
+    name: Publish Rust coverage
+    needs:
+      - discover
+      - coverage
+    if: needs.discover.outputs.present == 'true' && needs.coverage.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download Rust coverage report
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rust-coverage
+          path: coverage
+
+      - name: Upload Rust coverage to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: coverage/rust-lcov.info
+          flags: rust
+          name: rust-tests
+          disable_search: true
+          fail_ci_if_error: true
+          use_oidc: true
