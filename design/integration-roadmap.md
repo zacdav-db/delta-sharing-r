@@ -265,6 +265,7 @@ reader architecture.
 - [ ] Complete R and Rust dependency/license notices and source-build policy.
 - [ ] Meet the coverage gates below with reviewed exclusions.
 - [x] Enforce and pass the 90% whole-tree R line-coverage gate.
+- [x] Enforce and pass the 85% whole-tree Rust line-coverage gate.
 - [ ] Pass package checks on minimum, release, and development R.
 - [ ] Pass macOS arm64/x86_64, Linux x86_64/arm64, and Windows x86_64 builds.
 - [ ] Pass Rust MSRV and stable builds.
@@ -348,11 +349,13 @@ or main-line integration.
 | 4 | Eager materializers (`a42e189`) | Integrated | Arrow and data-frame outputs consume one lazy Arrow stream without IPC or a second scan |
 | 5–7 | CDF, Parquet normalization, remaining hardening | Active or open | Exact CDF provider-version preservation is proven against Kernel 0.22; implementation and remaining completion gates stay active |
 | 7 | R coverage hardening (`d1598b8`) | Integrated | Exact combined-tree coverage is 90.79%; tooling and CI enforce the final 90% R gate |
+| 7 | Rust coverage evidence | Integrated-tree gate passing | Exact Rust line coverage is 88.69% with 28 tests passing; CI enforces the 85% gate |
 
 Current integration evidence: the R planning and native execution handoffs each
 pass built-source package checks on macOS arm64, and the integrated native tree
 passes strict clippy plus 28 Rust tests. The public snapshot stream and eager
 materializers pass built-source package checks, and exact integrated R line
-coverage is 90.79% against the enforced 90% gate. The 85% Rust coverage,
-cross-platform, performance, offline packaging, binary-size, and remaining
-lifecycle gates remain open.
+coverage is 90.79% against the enforced 90% gate. Exact integrated Rust line
+coverage is 88.69% against the enforced 85% gate. Both coverage gates require a
+final rerun after the remaining feature work; cross-platform, performance,
+offline packaging, binary-size, and remaining lifecycle gates remain open.
