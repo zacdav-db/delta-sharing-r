@@ -29,9 +29,12 @@ Imports:
 Suggests:
   arrow,
   covr,
+  DBI,
+  duckdb (>= 1.5.0),
   testthat (>= 3.0.0)
 Config/Needs/check: rcmdcheck
 Config/Needs/coverage: covr
+Config/Needs/duckdb: arrow, DBI, duckdb
 Config/Needs/documentation: roxygen2
 Config/testthat/edition: 3
 Config/testthat/parallel: true
