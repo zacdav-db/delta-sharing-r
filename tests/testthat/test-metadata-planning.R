@@ -40,15 +40,15 @@ test_that("table routes encode every identifier component independently", {
   )
 })
 
-test_that("version planning uses a safe HEAD descriptor", {
+test_that("version planning uses the current safe GET descriptor", {
   request <- delta.sharing:::.plan_table_version_request(
     table_identifier("sales.default.orders")
   )
 
-  expect_identical(request$method, "HEAD")
+  expect_identical(request$method, "GET")
   expect_identical(
     request$path,
-    "/shares/sales/schemas/default/tables/orders"
+    "/shares/sales/schemas/default/tables/orders/version"
   )
   expect_identical(request$query, stats::setNames(character(), character()))
   expect_identical(request$headers, stats::setNames(character(), character()))
@@ -121,7 +121,7 @@ test_that("metadata planning rejects mixed time travel before fetching", {
   expect_identical(calls, 0L)
 })
 
-test_that("table version fetch parses HEAD response headers", {
+test_that("table version fetch parses GET response headers", {
   seen <- NULL
   version <- delta.sharing:::.fetch_table_version(
     table_identifier("sales.default.orders"),
@@ -132,7 +132,7 @@ test_that("table version fetch parses HEAD response headers", {
   )
 
   expect_identical(version, 125)
-  expect_identical(seen$method, "HEAD")
+  expect_identical(seen$method, "GET")
   expect_identical(seen$operation, "table_version")
 })
 

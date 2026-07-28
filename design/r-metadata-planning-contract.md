@@ -14,9 +14,10 @@ All share, schema, and table names are encoded independently as URL path
 segments. Descriptors contain only a method, endpoint-relative path, query
 parameters, non-secret capability headers, and an operation name.
 
-Latest table-version planning uses a `HEAD` descriptor for the table route and
-parses `Delta-Table-Version` through the shared header parser. Metadata uses a
-`GET` descriptor ending in `/metadata`.
+Latest table-version planning uses the protocol's current `GET` descriptor
+ending in `/version` and parses `Delta-Table-Version` through the shared header
+parser. The deprecated `HEAD` route is not used. Metadata uses a `GET`
+descriptor ending in `/metadata`.
 
 Metadata requests include the deterministic snapshot capability allowlist.
 Latest metadata has no time-travel query parameter. Version and timestamp

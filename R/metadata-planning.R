@@ -63,8 +63,11 @@
 
 .plan_table_version_request <- function(identifier) {
   .new_table_request(
-    method = "HEAD",
-    path = .table_route(identifier, "table_version"),
+    method = "GET",
+    path = paste0(
+      .table_route(identifier, "table_version"),
+      "/version"
+    ),
     operation = "table_version"
   )
 }
