@@ -77,6 +77,13 @@
     {
       "distribution": "external R package; code is not bundled",
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
+      "name": "processx",
+      "relationship": "Suggests",
+      "requirement": null
+    },
+    {
+      "distribution": "external R package; code is not bundled",
+      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
       "name": "testthat",
       "relationship": "Suggests",
       "requirement": ">= 3.0.0"
