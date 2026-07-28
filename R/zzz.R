@@ -4,6 +4,7 @@
 }
 
 .onUnload <- function(...) {
+  try(.native_reap_pending_cleanups(), silent = TRUE)
   .set_execution_callbacks(NULL)
 }
 

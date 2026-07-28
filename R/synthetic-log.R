@@ -1,6 +1,8 @@
 .snapshot_log_operation <- "prepare_snapshot_log"
 .snapshot_log_max_files <- 1000000L
 .snapshot_log_max_action_bytes <- 8L * 1024L * 1024L
+.snapshot_log_marker_name <- ".delta-sharing-r-prepared-log"
+.snapshot_log_marker_value <- "delta-sharing-r:vnext"
 
 .snapshot_log_abort <- function(message, type = "protocol") {
   .abort_delta_sharing(
@@ -966,6 +968,16 @@ print.delta_sharing_snapshot_log <- function(x, ...) {
 
   tryCatch(
     {
+      marker <- file.path(root, .snapshot_log_marker_name)
+      .write_snapshot_commit(marker, .snapshot_log_marker_value)
+      if (!file.exists(marker) || isTRUE(file.info(marker)$isdir)) {
+        .snapshot_log_abort("Snapshot ownership marker was not written.")
+      }
+      marker_permissions <- suppressWarnings(Sys.chmod(marker, mode = "0600"))
+      if (.Platform$OS.type != "windows" && !isTRUE(marker_permissions)) {
+        .snapshot_log_abort("Snapshot ownership marker could not be secured.")
+      }
+
       staging <- file.path(root, ".staging")
       log_dir <- file.path(staging, "_delta_log")
       if (!dir.create(log_dir, recursive = TRUE, mode = "0700")) {

@@ -1,6 +1,6 @@
 # Slim native core build and ownership
 
-Status: Phase 1 lifecycle foundation
+Status: Phase 2 compact local snapshot invocation
 Integration target: `codex/delta-kernel-s7-overhaul`
 
 ## Native scope
@@ -16,9 +16,19 @@ The native crate is deliberately limited to:
 It contains no profile, credential, auth, Delta Sharing HTTP, retry,
 pagination, protocol, NDJSON, planning, or synthetic-log implementation.
 
-The Phase 1 callable produces deterministic record batches solely to test the
-Arrow ABI and lifecycle before the real compact Kernel invocation is added.
-It is internal and is not a second reader implementation.
+The compact internal invocation accepts only:
+
+- an absolute prepared local table path or `file://` URI;
+- an optional ordered projection;
+- an optional exact non-negative row limit; and
+- a positive output batch-size ceiling.
+
+It constructs a real Kernel `Snapshot` and `Scan` through the default engine,
+converts `ArrowEngineData` to logical Arrow record batches, and stops pulling
+as soon as the exact limit is satisfied. Output batches never exceed the
+requested ceiling; Kernel file and row-group boundaries may yield smaller
+batches. The deterministic synthetic callable remains only as an ABI/lifecycle
+test and is not a second table reader.
 
 ## Binding boundary
 
@@ -35,11 +45,20 @@ Rust never calls the R API and never retains an R object. R errors are raised
 only after the Rust call has returned, so an R long jump cannot cross Rust
 frames. Arrow batches cross only through the Arrow C Stream ABI.
 
+Kernel, object-store, reqwest, Parquet, and Arrow implementation errors are
+mapped to fixed stage messages before crossing the ABI. Raw error formatting
+is prohibited because a Kernel action can contain a presigned URL. Column
+validation may identify a caller-supplied name, but table locations and action
+URLs are never interpolated into native conditions. Panic payloads are also
+discarded at the constructor, Arrow callback, and outer FFI boundaries.
+
 ## Pinned dependency stack
 
 - `delta_kernel = 0.22.0`, with Arrow 57 and the default rustls engine
 - `arrow-array = 57.3.0`
 - `arrow-schema = 57.3.0`
+- `same-file = 1.0.6` for stable cross-platform root identity (already in the
+  locked Kernel graph, so this adds no resolved package)
 - Rust MSRV 1.88
 
 `src/rust/Cargo.lock` is committed and normal source builds use `--locked`.
@@ -93,12 +112,35 @@ nanoarrow external pointer
   owns ArrowArrayStream
     owns panic-boundary RecordBatchReader
       owns cancellation and metrics
-      owns Kernel scan/engine and temporary resources
+      owns Kernel scan/engine
+      optionally owns one verified prepared-root cleanup token
 ```
 
-Releasing the stream drops the owner exactly once. Emitted Arrow arrays retain
-their buffers independently. Panics during construction or batch pulls are
-contained and returned as status/error payloads.
+Releasing or exhausting the stream drops active resources exactly once.
+Emitted Arrow arrays retain their buffers independently. Panics during
+construction or batch pulls are contained and returned as status/error
+payloads.
+
+The cleanup token is native lifecycle glue, not a Rust synthetic-log
+implementation. R creates and populates the log. The token can only be
+constructed for an absolute private `.delta-sharing-snapshot-*` root with mode
+0700 on Unix, the package marker, the exact `table/_delta_log/version-zero`
+shape, no symlinks, and a canonical table equal to `root/table`. Ordinary
+local-table scans never receive deletion capability. The token records root
+filesystem identity at construction, then repeats the exact shape, canonical
+containment, no-link/reparse-point, permission, and identity checks immediately
+before removal. A replaced or mutated root is deliberately left in place.
+Terminal stream paths take and drop the Kernel reader before dropping the
+cleanup token.
+
+Cleanup uses only `remove_file` and `remove_dir` on the known version-zero
+shape, never recursive removal. Each stage gets three immediate attempts. A
+transient failure retains the canonical root, stable identity, and stage in a
+process-local queue; every later native call and `.onUnload` run the bounded
+reaper after revalidation. Diagnostics expose only the pending count. A
+same-UID path race remains theoretically possible between validation and one
+filesystem call, but it cannot induce recursive traversal: injected content,
+non-empty directories, changed identity, links, and reparse points fail closed.
 
 ## Developer checks
 
@@ -126,16 +168,25 @@ The foundation was validated on macOS arm64 with R 4.5.1, rustc 1.92, and the
 declared 1.88 MSRV across the resolved graph:
 
 - 326 locked Rust packages, all from normal upstream registry dependencies;
-- 15 Rust unit tests covering Kernel construction, the C ABI status boundary,
-  Arrow stream ownership, early release, buffer lifetimes, errors, and panics;
-- package installation and R tests using nanoarrow and arrow consumers;
-- a 2.9 MiB stripped shared library (3,086,768 bytes for the direct install
-  and 3,087,136 bytes in the clean package check);
-- a 57,791-byte source archive without unpacked dependency sources;
-- a 210.77-second clean local install (Cargo compilation reported 3m 25s); and
-- a 233.40-second clean `R CMD check --no-manual` with status `OK`.
+- 28 Rust unit tests covering real Kernel Snapshot/Scan execution, logical
+  schema and projection, exact limits, zero/one/multiple batches, the C ABI
+  status boundary, early release, buffer lifetimes, prepared-root cleanup and
+  reaping, fixed errors, and panic containment; the suite passed three
+  consecutive full runs after the loopback-server hardening;
+- focused installed-package native snapshot tests and the full installed R
+  suite passed, with four unrelated tests skipped under their existing CRAN
+  guard;
+- a final clean `R CMD check --no-manual` of the exact post-hardening source
+  archive completed with status `OK`;
+- a 32,327,152-byte installed shared library (26,281,664 bytes after a
+  separate `strip -x` measurement);
+- a 118,389-byte source archive without unpacked dependency sources; and
+- loopback HTTP evidence that the default engine follows a presigned object
+  action without losing its query, plus fixed-message redaction tests for a
+  downstream request failure.
 
 This is local evidence, not cross-platform build proof. Linux and Windows
 source builds, a network-isolated source install using a complete dependency
-archive, dependency-license inventory, and end-to-end Kernel scan performance
+archive, dependency-license inventory, real TLS/HTTPS and deletion-vector
+coverage, package-size disposition, and end-to-end Kernel scan performance
 remain release gates.

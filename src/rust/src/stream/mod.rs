@@ -5,10 +5,12 @@
 //! reader, cancellation state, and all resources tied to the active stream.
 
 use std::any::Any;
+use std::hash::{Hash, Hasher};
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use arrow_array::builder::{Int32Builder, ListBuilder};
 use arrow_array::ffi_stream::FFI_ArrowArrayStream;
@@ -17,9 +19,12 @@ use arrow_array::{
     TimestampMicrosecondArray,
 };
 use arrow_schema::{ArrowError, DataType, Field, Schema, SchemaRef, TimeUnit};
+use same_file::Handle;
 
 static GLOBAL_METRICS: LazyLock<Arc<StreamMetrics>> =
     LazyLock::new(|| Arc::new(StreamMetrics::default()));
+static PENDING_CLEANUPS: LazyLock<Mutex<Vec<PendingCleanup>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
 
 #[derive(Debug, Default)]
 struct StreamMetrics {
@@ -83,7 +88,6 @@ impl StreamOwner {
         }
     }
 
-    #[cfg(test)]
     fn keep_alive<T: Any + Send>(&mut self, resource: T) {
         self._resources.push(Box::new(resource));
     }
@@ -100,6 +104,11 @@ impl StreamOwner {
         self.metrics.active_streams.fetch_sub(1, Ordering::AcqRel);
         self.released = true;
     }
+
+    fn finish(&mut self) {
+        self.release();
+        self._resources.clear();
+    }
 }
 
 impl Drop for StreamOwner {
@@ -112,7 +121,7 @@ impl Drop for StreamOwner {
 /// Prevent a reader panic from unwinding through Arrow's `extern "C"` callback.
 struct PanicBoundaryReader {
     schema: SchemaRef,
-    inner: Box<dyn RecordBatchReader + Send>,
+    inner: Option<Box<dyn RecordBatchReader + Send>>,
     owner: StreamOwner,
     terminal: bool,
 }
@@ -122,10 +131,18 @@ impl PanicBoundaryReader {
         let schema = inner.schema();
         Self {
             schema,
-            inner,
+            inner: Some(inner),
             owner,
             terminal: false,
         }
+    }
+
+    fn finish(&mut self) {
+        self.terminal = true;
+        // Kernel scan/source/engine resources must be dropped before a
+        // prepared-log cleanup capability can remove the local log.
+        drop(self.inner.take());
+        self.owner.finish();
     }
 }
 
@@ -144,7 +161,9 @@ impl Iterator for PanicBoundaryReader {
             )));
         }
 
-        match catch_unwind(AssertUnwindSafe(|| self.inner.next())) {
+        match catch_unwind(AssertUnwindSafe(|| {
+            self.inner.as_mut().and_then(|reader| reader.next())
+        })) {
             Ok(Some(Ok(batch))) => {
                 self.owner
                     .metrics
@@ -153,7 +172,7 @@ impl Iterator for PanicBoundaryReader {
                 Some(Ok(batch))
             }
             Ok(Some(Err(error))) => {
-                self.terminal = true;
+                self.finish();
                 let message = error.to_string();
                 if message.contains('\0') {
                     Some(Err(ArrowError::ComputeError(message.replace('\0', "\\0"))))
@@ -162,15 +181,14 @@ impl Iterator for PanicBoundaryReader {
                 }
             }
             Ok(None) => {
-                self.terminal = true;
+                self.finish();
                 None
             }
-            Err(payload) => {
-                self.terminal = true;
-                Some(Err(ArrowError::ComputeError(format!(
-                    "panic contained at Arrow stream boundary: {}",
-                    panic_message(payload.as_ref())
-                ))))
+            Err(_) => {
+                self.finish();
+                Some(Err(ArrowError::ComputeError(
+                    "panic contained at Arrow stream boundary".to_string(),
+                )))
             }
         }
     }
@@ -184,21 +202,9 @@ impl RecordBatchReader for PanicBoundaryReader {
 
 impl Drop for PanicBoundaryReader {
     fn drop(&mut self) {
+        drop(self.inner.take());
         self.owner.release();
     }
-}
-
-pub(crate) fn panic_message(payload: &(dyn Any + Send)) -> String {
-    let message = if let Some(message) = payload.downcast_ref::<&str>() {
-        (*message).to_string()
-    } else if let Some(message) = payload.downcast_ref::<String>() {
-        message.clone()
-    } else {
-        "non-string Rust panic".to_string()
-    };
-
-    // Arrow stores callback errors in a CString.
-    message.replace('\0', "\\0")
 }
 
 fn export_reader(
@@ -206,6 +212,411 @@ fn export_reader(
     owner: StreamOwner,
 ) -> FFI_ArrowArrayStream {
     FFI_ArrowArrayStream::new(Box::new(PanicBoundaryReader::new(reader, owner)))
+}
+
+pub(crate) fn record_batch_stream(
+    reader: Box<dyn RecordBatchReader + Send>,
+) -> FFI_ArrowArrayStream {
+    export_reader(reader, StreamOwner::new(GLOBAL_METRICS.clone()))
+}
+
+pub(crate) fn record_batch_stream_with_resource<T: Any + Send>(
+    reader: Box<dyn RecordBatchReader + Send>,
+    resource: T,
+) -> FFI_ArrowArrayStream {
+    let mut owner = StreamOwner::new(GLOBAL_METRICS.clone());
+    owner.keep_alive(resource);
+    export_reader(reader, owner)
+}
+
+/// Cleanup token for an R-prepared synthetic log.
+///
+/// Construction proves that the supplied table is exactly the `table` child
+/// of a private `.delta-sharing-snapshot-*` directory. The token performs no
+/// synthetic-log interpretation; it only couples cleanup to native stream
+/// release after R transfers ownership.
+pub(crate) struct PreparedLogCleanup {
+    root: PathBuf,
+    identity: FileIdentity,
+    #[cfg(test)]
+    injected_failures: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl PreparedLogCleanup {
+    pub(crate) fn try_new(root: &str, table_location: &str) -> Result<Self, String> {
+        let root_path = Path::new(root);
+        let table_path = Path::new(table_location);
+        if !root_path.is_absolute() || !table_path.is_absolute() {
+            return Err("prepared-log cleanup paths must be absolute".to_string());
+        }
+
+        let canonical_root = validate_prepared_root(root_path, table_path)?;
+        let identity = file_identity(&canonical_root)?;
+        Ok(Self {
+            root: canonical_root,
+            identity,
+            #[cfg(test)]
+            injected_failures: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        })
+    }
+
+    fn pending_cleanup(&self) -> PendingCleanup {
+        PendingCleanup {
+            root: self.root.clone(),
+            identity: self.identity.clone(),
+            stage: CleanupStage::Commit,
+            #[cfg(test)]
+            injected_failures: self.injected_failures.clone(),
+        }
+    }
+
+    #[cfg(test)]
+    fn inject_removal_failures(&self, failures: usize) {
+        self.injected_failures
+            .store(failures, std::sync::atomic::Ordering::Release);
+    }
+
+    #[cfg(test)]
+    fn injected_failure_controller(&self) -> Arc<std::sync::atomic::AtomicUsize> {
+        self.injected_failures.clone()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileIdentity(Vec<u8>);
+
+#[derive(Default)]
+struct IdentityCollector {
+    bytes: Vec<u8>,
+}
+
+impl Hasher for IdentityCollector {
+    fn finish(&self) -> u64 {
+        0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        self.bytes
+            .extend_from_slice(&(bytes.len() as u64).to_ne_bytes());
+        self.bytes.extend_from_slice(bytes);
+    }
+}
+
+fn file_identity(path: &Path) -> Result<FileIdentity, String> {
+    let handle = Handle::from_path(path)
+        .map_err(|_| "prepared-log cleanup identity is unavailable".to_string())?;
+    let mut collector = IdentityCollector::default();
+    handle.hash(&mut collector);
+    Ok(FileIdentity(collector.bytes))
+}
+
+fn validate_prepared_root(root_path: &Path, table_path: &Path) -> Result<PathBuf, String> {
+    let root_metadata = require_plain_directory(
+        root_path,
+        "prepared-log cleanup root is not a private directory",
+    )?;
+    let safe_name = root_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with(".delta-sharing-snapshot-"));
+    if !safe_name {
+        return Err("prepared-log cleanup root has an invalid name".to_string());
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if root_metadata.permissions().mode() & 0o077 != 0 {
+            return Err("prepared-log cleanup root is not private".to_string());
+        }
+    }
+
+    let canonical_root = std::fs::canonicalize(root_path)
+        .map_err(|_| "prepared-log cleanup root is unavailable".to_string())?;
+
+    require_exact_entries(&canonical_root, &[".delta-sharing-r-prepared-log", "table"])?;
+    let marker = canonical_root.join(".delta-sharing-r-prepared-log");
+    require_plain_file(&marker, "prepared-log ownership marker is invalid")?;
+    let marker_value = std::fs::read_to_string(&marker)
+        .map_err(|_| "prepared-log ownership marker is invalid".to_string())?;
+    if marker_value != "delta-sharing-r:vnext\n" {
+        return Err("prepared-log ownership marker is invalid".to_string());
+    }
+
+    let owned_table = canonical_root.join("table");
+    require_plain_directory(&owned_table, "prepared local table is invalid")?;
+    require_exact_entries(&owned_table, &["_delta_log"])?;
+    let log_directory = owned_table.join("_delta_log");
+    require_plain_directory(&log_directory, "prepared local table log is invalid")?;
+    require_exact_entries(&log_directory, &["00000000000000000000.json"])?;
+    require_plain_file(
+        &log_directory.join("00000000000000000000.json"),
+        "prepared local table commit is invalid",
+    )?;
+
+    let canonical_table = std::fs::canonicalize(table_path)
+        .map_err(|_| "prepared local table is unavailable".to_string())?;
+    let expected_table = std::fs::canonicalize(owned_table)
+        .map_err(|_| "prepared local table is unavailable".to_string())?;
+    if canonical_table != expected_table {
+        return Err("prepared-log cleanup root does not own the local table".to_string());
+    }
+
+    Ok(canonical_root)
+}
+
+fn require_plain_directory(path: &Path, message: &str) -> Result<std::fs::Metadata, String> {
+    let metadata = std::fs::symlink_metadata(path).map_err(|_| message.to_string())?;
+    if !metadata.is_dir() || metadata_is_link_like(&metadata) {
+        return Err(message.to_string());
+    }
+    Ok(metadata)
+}
+
+fn require_plain_file(path: &Path, message: &str) -> Result<(), String> {
+    let metadata = std::fs::symlink_metadata(path).map_err(|_| message.to_string())?;
+    if !metadata.is_file() || metadata_is_link_like(&metadata) {
+        return Err(message.to_string());
+    }
+    Ok(())
+}
+
+fn metadata_is_link_like(metadata: &std::fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return true;
+        }
+    }
+    false
+}
+
+fn require_exact_entries(path: &Path, expected: &[&str]) -> Result<(), String> {
+    let mut actual = std::fs::read_dir(path)
+        .map_err(|_| "prepared-log directory shape is invalid".to_string())?
+        .map(|entry| {
+            entry
+                .map_err(|_| "prepared-log directory shape is invalid".to_string())?
+                .file_name()
+                .into_string()
+                .map_err(|_| "prepared-log directory shape is invalid".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    actual.sort();
+    let mut expected = expected
+        .iter()
+        .map(|name| (*name).to_string())
+        .collect::<Vec<_>>();
+    expected.sort();
+    if actual != expected {
+        return Err("prepared-log directory shape is invalid".to_string());
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CleanupStage {
+    Commit,
+    LogDirectory,
+    Table,
+    Marker,
+    Root,
+}
+
+impl CleanupStage {
+    fn next(self) -> Option<Self> {
+        match self {
+            Self::Commit => Some(Self::LogDirectory),
+            Self::LogDirectory => Some(Self::Table),
+            Self::Table => Some(Self::Marker),
+            Self::Marker => Some(Self::Root),
+            Self::Root => None,
+        }
+    }
+}
+
+struct PendingCleanup {
+    root: PathBuf,
+    identity: FileIdentity,
+    stage: CleanupStage,
+    #[cfg(test)]
+    injected_failures: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+enum CleanupOutcome {
+    Complete,
+    Retry(PendingCleanup),
+    Abandon,
+}
+
+impl PendingCleanup {
+    fn run(mut self) -> CleanupOutcome {
+        loop {
+            let mut removed = false;
+            for _ in 0..3 {
+                if !self.is_valid_for_stage() {
+                    return CleanupOutcome::Abandon;
+                }
+                if self.remove_current_target().is_ok() {
+                    removed = true;
+                    break;
+                }
+            }
+            if !removed {
+                return CleanupOutcome::Retry(self);
+            }
+
+            match self.stage.next() {
+                Some(next) => self.stage = next,
+                None => return CleanupOutcome::Complete,
+            }
+        }
+    }
+
+    fn is_valid_for_stage(&self) -> bool {
+        let root_metadata = match require_plain_directory(
+            &self.root,
+            "prepared-log cleanup root is not a private directory",
+        ) {
+            Ok(metadata) => metadata,
+            Err(_) => return false,
+        };
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if root_metadata.permissions().mode() & 0o077 != 0 {
+                return false;
+            }
+        }
+        #[cfg(not(unix))]
+        let _ = root_metadata;
+        if file_identity(&self.root).ok().as_ref() != Some(&self.identity) {
+            return false;
+        }
+        if std::fs::canonicalize(&self.root).ok().as_ref() != Some(&self.root) {
+            return false;
+        }
+
+        let marker = self.root.join(".delta-sharing-r-prepared-log");
+        let table = self.root.join("table");
+        let log = table.join("_delta_log");
+        let commit = log.join("00000000000000000000.json");
+
+        let marker_is_valid = || {
+            require_plain_file(&marker, "invalid").is_ok()
+                && std::fs::read_to_string(&marker).ok().as_deref()
+                    == Some("delta-sharing-r:vnext\n")
+        };
+
+        match self.stage {
+            CleanupStage::Commit => {
+                require_exact_entries(&self.root, &[".delta-sharing-r-prepared-log", "table"])
+                    .is_ok()
+                    && marker_is_valid()
+                    && require_plain_directory(&table, "invalid").is_ok()
+                    && require_exact_entries(&table, &["_delta_log"]).is_ok()
+                    && require_plain_directory(&log, "invalid").is_ok()
+                    && require_exact_entries(&log, &["00000000000000000000.json"]).is_ok()
+                    && require_plain_file(&commit, "invalid").is_ok()
+            }
+            CleanupStage::LogDirectory => {
+                require_exact_entries(&self.root, &[".delta-sharing-r-prepared-log", "table"])
+                    .is_ok()
+                    && marker_is_valid()
+                    && require_plain_directory(&table, "invalid").is_ok()
+                    && require_exact_entries(&table, &["_delta_log"]).is_ok()
+                    && require_plain_directory(&log, "invalid").is_ok()
+                    && require_exact_entries(&log, &[]).is_ok()
+            }
+            CleanupStage::Table => {
+                require_exact_entries(&self.root, &[".delta-sharing-r-prepared-log", "table"])
+                    .is_ok()
+                    && marker_is_valid()
+                    && require_plain_directory(&table, "invalid").is_ok()
+                    && require_exact_entries(&table, &[]).is_ok()
+            }
+            CleanupStage::Marker => {
+                require_exact_entries(&self.root, &[".delta-sharing-r-prepared-log"]).is_ok()
+                    && marker_is_valid()
+            }
+            CleanupStage::Root => require_exact_entries(&self.root, &[]).is_ok(),
+        }
+    }
+
+    fn remove_current_target(&self) -> std::io::Result<()> {
+        #[cfg(test)]
+        if self
+            .injected_failures
+            .fetch_update(
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+                |remaining| remaining.checked_sub(1),
+            )
+            .is_ok()
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "injected cleanup failure",
+            ));
+        }
+
+        let table = self.root.join("table");
+        let log = table.join("_delta_log");
+        match self.stage {
+            CleanupStage::Commit => std::fs::remove_file(log.join("00000000000000000000.json")),
+            CleanupStage::LogDirectory => std::fs::remove_dir(log),
+            CleanupStage::Table => std::fs::remove_dir(table),
+            CleanupStage::Marker => {
+                std::fs::remove_file(self.root.join(".delta-sharing-r-prepared-log"))
+            }
+            CleanupStage::Root => std::fs::remove_dir(&self.root),
+        }
+    }
+}
+
+fn enqueue_pending_cleanup(cleanup: PendingCleanup) {
+    if let Ok(mut pending) = PENDING_CLEANUPS.lock() {
+        pending.push(cleanup);
+    }
+}
+
+pub(crate) fn reap_pending_cleanups() {
+    let pending = match PENDING_CLEANUPS.lock() {
+        Ok(mut pending) => std::mem::take(&mut *pending),
+        Err(_) => return,
+    };
+    let mut retry = Vec::new();
+    for cleanup in pending {
+        if let CleanupOutcome::Retry(cleanup) = cleanup.run() {
+            retry.push(cleanup);
+        }
+    }
+    if retry.is_empty() {
+        return;
+    }
+    if let Ok(mut pending) = PENDING_CLEANUPS.lock() {
+        pending.extend(retry);
+    }
+}
+
+pub(crate) fn pending_cleanup_count() -> u64 {
+    PENDING_CLEANUPS
+        .lock()
+        .map_or(0, |pending| pending.len() as u64)
+}
+
+impl Drop for PreparedLogCleanup {
+    fn drop(&mut self) {
+        match self.pending_cleanup().run() {
+            CleanupOutcome::Retry(cleanup) => enqueue_pending_cleanup(cleanup),
+            CleanupOutcome::Complete | CleanupOutcome::Abandon => {}
+        }
+    }
 }
 
 /// Populate a nanoarrow-owned stream shell exactly once.
@@ -223,12 +634,8 @@ where
         return Err("nanoarrow stream output is already initialized".to_string());
     }
 
-    let stream = catch_unwind(AssertUnwindSafe(make_stream)).map_err(|payload| {
-        format!(
-            "panic contained while creating Arrow stream: {}",
-            panic_message(payload.as_ref())
-        )
-    })??;
+    let stream = catch_unwind(AssertUnwindSafe(make_stream))
+        .map_err(|_| "panic contained while creating Arrow stream".to_string())??;
 
     // SAFETY: destination is aligned, non-null, and owned by nanoarrow. Only
     // its NULL release slot has been initialized; this moves in the stream.
@@ -272,8 +679,7 @@ impl FixtureStreamConfig {
 
 pub(crate) fn fixture_stream(config: FixtureStreamConfig) -> Result<FFI_ArrowArrayStream, String> {
     let reader = FixtureReader::new(config);
-    let owner = StreamOwner::new(GLOBAL_METRICS.clone());
-    Ok(export_reader(Box::new(reader), owner))
+    Ok(record_batch_stream(Box::new(reader)))
 }
 
 struct FixtureReader {
@@ -391,7 +797,10 @@ fn make_fixture_batch(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::AtomicUsize;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicBool, AtomicUsize};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use arrow_array::ffi_stream::ArrowArrayStreamReader;
 
@@ -408,6 +817,38 @@ mod tests {
         let reader = FixtureReader::new(config);
         let owner = StreamOwner::new(metrics.clone());
         (export_reader(Box::new(reader), owner), metrics)
+    }
+
+    fn prepared_root(label: &str) -> (PathBuf, PathBuf) {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            ".delta-sharing-snapshot-{label}-{}-{nanos}",
+            std::process::id()
+        ));
+        populate_prepared_root(&root);
+        let root = fs::canonicalize(root).unwrap();
+        let table = root.join("table");
+        (root, table)
+    }
+
+    fn populate_prepared_root(root: &Path) {
+        let table = root.join("table");
+        let log = table.join("_delta_log");
+        fs::create_dir_all(&log).unwrap();
+        fs::write(
+            root.join(".delta-sharing-r-prepared-log"),
+            "delta-sharing-r:vnext\n",
+        )
+        .unwrap();
+        fs::write(log.join("00000000000000000000.json"), "{}\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(root, fs::Permissions::from_mode(0o700)).unwrap();
+        }
     }
 
     #[test]
@@ -461,10 +902,6 @@ mod tests {
         let error = reader.next().unwrap().unwrap_err().to_string();
         assert!(error.contains("synthetic reader error after 1 batches"));
         assert!(reader.next().is_none());
-
-        let message = panic_message(&String::from("embedded\0nul"));
-        assert_eq!(message, "embedded\\0nul");
-        assert_eq!(panic_message(&123_i32), "non-string Rust panic");
     }
 
     #[test]
@@ -480,7 +917,7 @@ mod tests {
         let mut panic_reader = ArrowArrayStreamReader::try_new(panic_stream).unwrap();
         let error = panic_reader.next().unwrap().unwrap_err().to_string();
         assert!(error.contains("panic contained at Arrow stream boundary"));
-        assert!(error.contains("synthetic reader panic after 0 batches"));
+        assert!(!error.contains("synthetic reader panic after 0 batches"));
         assert!(panic_reader.next().is_none());
     }
 
@@ -493,7 +930,7 @@ mod tests {
         assert!(reader.next().unwrap().is_ok());
         let error = reader.next().unwrap().unwrap_err().to_string();
         assert!(error.contains("panic contained at Arrow stream boundary"));
-        assert!(error.contains("synthetic reader panic after 1 batches"));
+        assert!(!error.contains("synthetic reader panic after 1 batches"));
     }
 
     #[test]
@@ -564,8 +1001,180 @@ mod tests {
 
         let mut empty = FFI_ArrowArrayStream::empty();
         let destination = NonNull::from(&mut empty);
-        let error = populate_stream(destination, || panic!("constructor panic")).unwrap_err();
+        let error = populate_stream(destination, || {
+            panic!("constructor panic X-Amz-Signature=super-secret")
+        })
+        .unwrap_err();
         assert!(error.contains("panic contained while creating Arrow stream"));
+        assert!(!error.contains("super-secret"));
         assert!(empty.release.is_none());
+    }
+
+    #[test]
+    fn prepared_log_cleanup_requires_exact_private_capability_shape() {
+        let (root, table) = prepared_root("valid");
+        let cleanup =
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), table.to_str().unwrap()).unwrap();
+        drop(cleanup);
+        assert!(!root.exists());
+
+        let (root, table) = prepared_root("tampered");
+        fs::write(root.join("unexpected"), "not package owned").unwrap();
+        assert!(
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), table.to_str().unwrap()).is_err()
+        );
+        assert!(root.exists());
+        fs::remove_dir_all(root).unwrap();
+
+        let (root, _table) = prepared_root("mismatch");
+        let unrelated =
+            std::env::temp_dir().join(format!("delta-sharing-r-unrelated-{}", std::process::id()));
+        fs::create_dir_all(&unrelated).unwrap();
+        assert!(
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), unrelated.to_str().unwrap())
+                .is_err()
+        );
+        assert!(root.exists());
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(unrelated).unwrap();
+    }
+
+    #[test]
+    fn prepared_log_cleanup_accepts_equivalent_noncanonical_spelling() {
+        let (root, _) = prepared_root("normalized-spelling");
+        let alias_root = root
+            .parent()
+            .unwrap()
+            .join(".")
+            .join(root.file_name().unwrap());
+        let alias_table = alias_root.join("table");
+        let cleanup = PreparedLogCleanup::try_new(
+            alias_root.to_str().unwrap(),
+            alias_table.to_str().unwrap(),
+        )
+        .unwrap();
+
+        drop(cleanup);
+        assert!(!root.exists());
+    }
+
+    #[test]
+    fn prepared_log_cleanup_revalidates_mutations_before_removal() {
+        let (root, table) = prepared_root("mutated-after-handoff");
+        let cleanup =
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), table.to_str().unwrap()).unwrap();
+        let unexpected = root.join("unexpected-user-content");
+        fs::write(&unexpected, "must survive fail-closed cleanup").unwrap();
+
+        drop(cleanup);
+        assert!(root.exists());
+        assert!(unexpected.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn pending_cleanup_reaper_recovers_after_bounded_removal_failures() {
+        let (root, table) = prepared_root("retry");
+        let cleanup =
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), table.to_str().unwrap()).unwrap();
+        let failures = cleanup.injected_failure_controller();
+        cleanup.inject_removal_failures(1_000_000);
+
+        drop(cleanup);
+        assert!(root.exists());
+
+        failures.store(0, std::sync::atomic::Ordering::Release);
+        reap_pending_cleanups();
+        assert!(!root.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn prepared_log_cleanup_rejects_a_replaced_root_identity() {
+        let (root, table) = prepared_root("replaced-after-handoff");
+        let cleanup =
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), table.to_str().unwrap()).unwrap();
+        let original = root.with_file_name(format!(
+            "{}-original",
+            root.file_name().unwrap().to_string_lossy()
+        ));
+        fs::rename(&root, &original).unwrap();
+        populate_prepared_root(&root);
+
+        drop(cleanup);
+        assert!(root.exists(), "replacement root must not be deleted");
+        assert!(original.exists(), "original root must not be followed");
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(original).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn prepared_log_cleanup_rejects_symlinked_shape_without_following_it() {
+        use std::os::unix::fs::symlink;
+
+        let (root, table) = prepared_root("symlink");
+        let marker = root.join(".delta-sharing-r-prepared-log");
+        let target = root.join("marker-target");
+        fs::remove_file(&marker).unwrap();
+        fs::write(&target, "delta-sharing-r:vnext\n").unwrap();
+        symlink(&target, &marker).unwrap();
+
+        assert!(
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), table.to_str().unwrap()).is_err()
+        );
+        assert!(root.exists());
+        assert!(target.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn terminalization_drops_the_reader_before_owned_cleanup_resources() {
+        struct ReaderDropProbe(Arc<AtomicBool>);
+        impl Iterator for ReaderDropProbe {
+            type Item = Result<RecordBatch, ArrowError>;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                None
+            }
+        }
+        impl RecordBatchReader for ReaderDropProbe {
+            fn schema(&self) -> SchemaRef {
+                fixture_schema()
+            }
+        }
+        impl Drop for ReaderDropProbe {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+
+        struct CleanupOrderProbe {
+            reader_dropped: Arc<AtomicBool>,
+            cleanup_dropped: Arc<AtomicBool>,
+        }
+        impl Drop for CleanupOrderProbe {
+            fn drop(&mut self) {
+                assert!(
+                    self.reader_dropped.load(Ordering::Acquire),
+                    "reader must drop before cleanup resources"
+                );
+                self.cleanup_dropped.store(true, Ordering::Release);
+            }
+        }
+
+        let reader_dropped = Arc::new(AtomicBool::new(false));
+        let cleanup_dropped = Arc::new(AtomicBool::new(false));
+        let stream = record_batch_stream_with_resource(
+            Box::new(ReaderDropProbe(reader_dropped.clone())),
+            CleanupOrderProbe {
+                reader_dropped: reader_dropped.clone(),
+                cleanup_dropped: cleanup_dropped.clone(),
+            },
+        );
+        let mut reader = ArrowArrayStreamReader::try_new(stream).unwrap();
+        assert!(reader.next().is_none());
+        assert!(reader_dropped.load(Ordering::Acquire));
+        assert!(cleanup_dropped.load(Ordering::Acquire));
     }
 }

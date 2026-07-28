@@ -16,6 +16,7 @@ typedef struct {
   uint64_t active_streams;
   uint64_t cancelled_streams;
   uint64_t emitted_batches;
+  uint64_t pending_cleanups;
 } DeltaSharingNativeInfo;
 
 int32_t delta_sharing_native_populate_test_stream(
@@ -27,8 +28,25 @@ int32_t delta_sharing_native_populate_test_stream(
     char *error_buffer,
     size_t error_capacity);
 
+int32_t delta_sharing_native_populate_snapshot_stream(
+    ArrowArrayStream *destination,
+    const char *table_location,
+    const char *cleanup_root,
+    const char *const *columns,
+    size_t column_count,
+    int32_t has_limit,
+    uint64_t limit,
+    uint32_t batch_size,
+    char *error_buffer,
+    size_t error_capacity);
+
 int32_t delta_sharing_native_info(
     DeltaSharingNativeInfo *output,
+    char *error_buffer,
+    size_t error_capacity);
+
+int32_t delta_sharing_native_reap_pending(
+    uint64_t *pending,
     char *error_buffer,
     size_t error_capacity);
 

@@ -1,6 +1,7 @@
 # R snapshot synthetic-log contract
 
-Status: implemented foundation; Kernel conformance proof pending
+Status: implemented and wired to the compact native snapshot scan; full
+cross-platform conformance pending
 Branch owner: `codex/r-synthetic-log-vnext`
 
 ## Scope
@@ -31,6 +32,7 @@ lifetime guard.
 One local commit is written:
 
 ```text
+<private root>/.delta-sharing-r-prepared-log
 <private root>/table/_delta_log/00000000000000000000.json
 ```
 
@@ -40,9 +42,12 @@ timestamps, expiry, table size, locations, and access modes) are not copied
 into the Delta actions. Table `location` and `auxiliaryLocations` are never
 written.
 
-The later native invocation must retain the guard and use
-`.snapshot_log_uri(guard)`, which returns an encoded absolute `file:///...`
-table URI. `.snapshot_log_path(guard)` exists for local file inspection only.
+The native invocation receives `.snapshot_log_path(guard)` and the exact
+private root only when its cleanup capability is transferred. Ordinary local
+table scans receive no cleanup root. `.snapshot_log_uri(guard)` remains the
+encoded absolute `file:///...` representation for diagnostics and contracts,
+but the internal handoff uses the canonical local path so native code can
+prove containment without parsing or owning R semantics.
 
 ## Validation and intentionally closed cases
 
@@ -72,17 +77,27 @@ and deletion-vector fields fail closed until the mapping is reviewed.
 ## Atomicity, privacy, and lifetime
 
 All actions are validated and encoded before filesystem publication. R creates
-a mode-0700 private root, writes a mode-0600 commit below a staging directory,
-closes the file, and renames the staging table into place on the same
-filesystem. A failure at any point recursively removes the exact generated
-root and raises a fixed, typed condition that does not copy an input URL,
-location, JSON body, or underlying error text.
+a mode-0700 private root, writes a package ownership marker and commit with
+mode 0600, closes the files, and renames the staging table into place on the
+same filesystem. A failure at any point recursively removes the exact
+generated root and raises a fixed, typed condition that does not copy an input
+URL, location, JSON body, or underlying error text.
 
 Presigned data and DV URLs exist only in locked private action state and the
 private commit file. The guard's print method reports only active/released
-state and action count. Explicit release is idempotent; the guard finalizer is
-a fallback. The native Arrow stream must eventually retain this guard until
-stream release so Kernel cannot observe a removed log.
+state and action count. Before native handoff, explicit release is idempotent
+and the guard finalizer is a fallback. After successful handoff, the guard is
+marked released and the Arrow stream owns a native cleanup token. The token
+accepts only the canonical generated `root/table`, the exact marker/table/log
+shape, private root permissions, and plain non-symlink files. Explicit stream
+release, normal exhaustion, an imported Arrow reader's release, or garbage
+collection then removes the root.
+
+Native cleanup is staged and non-recursive. A transient filesystem failure is
+retried and then retained as a capability-checked process-local pending
+cleanup. Later native calls and `.onUnload` retry after stable-identity and
+exact-stage revalidation. A changed or replaced root is abandoned rather than
+deleted.
 
 ## Remaining integration proof
 
@@ -94,7 +109,11 @@ proven by this R-only slice and remains a G3 integration gate:
 - object-store error paths redact those URLs;
 - expiry and refresh are coordinated before a stream outlives its URLs;
 - Kernel applies remove and deletion-vector semantics to the generated commit;
-- early Arrow-stream release and garbage collection release the retained
-  temporary root exactly once.
+- deletion-vector application against a presigned URL remains unproven.
+
+The current native tests prove the Kernel 0.22 default engine's presigned-URL
+branch against a loopback HTTP server, including the signed query, and prove
+redaction of a downstream reqwest failure. This is useful implementation
+evidence but is not TLS/HTTPS or cross-platform proof.
 
 [sharing-protocol]: https://github.com/delta-io/delta-sharing/blob/main/PROTOCOL.md#api-response-actions-in-delta-format

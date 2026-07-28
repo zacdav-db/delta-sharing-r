@@ -55,12 +55,30 @@ nanoarrow external pointer
   owns FFI_ArrowArrayStream
     owns Rust RecordBatchReader
       owns kernel scan + engine references
-      may retain an R-prepared temporary log guard
+      may own one capability-checked prepared-log cleanup token
       owns Kernel cancellation + native metrics
 ```
 
 The stream release callback drops this ownership chain. Each batch/array release
-callback independently keeps its referenced buffers alive.
+callback independently keeps its referenced buffers alive. Rust never retains
+the R guard itself. After successful handoff, R transfers only the exact private
+root cleanup capability; native code verifies its marker, canonical
+`root/table` relation, exact directory shape, permissions, and absence of
+symlinks before it can remove any expected path. It records filesystem
+identity at handoff and repeats the complete no-follow validation immediately
+before removal; replacement or mutation fails closed. On exhaustion, error,
+panic, and explicit release, the Kernel reader is dropped before the cleanup
+token.
+
+Removal is staged as individual file and empty-directory operations; native
+code never recursively removes a post-handoff tree. A transient failure is
+retried three times, then the root, stable identity, and current stage enter a
+process-local pending queue. Every later native entry point and `.onUnload`
+run the bounded reaper after the same stage-specific validation. A mutated or
+replaced root is abandoned fail-closed. A same-UID process can still race one
+path operation after validation, but the non-recursive operations can remove
+only the expected file/symlink itself or an already-empty directory; they
+cannot follow or recursively delete injected content.
 
 ## Rejected alternatives
 

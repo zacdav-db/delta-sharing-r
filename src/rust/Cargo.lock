@@ -636,6 +636,7 @@ dependencies = [
  "arrow-array",
  "arrow-schema",
  "delta_kernel",
+ "same-file",
 ]
 
 [[package]]
