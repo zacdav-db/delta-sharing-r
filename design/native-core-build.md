@@ -192,6 +192,21 @@ Emitted Arrow arrays retain their buffers independently. Panics during
 construction or batch pulls are contained and returned as status/error
 payloads.
 
+The registered C shim wraps each initialized stream with owner-thread interrupt
+polling. It uses `R_ToplevelExec(R_CheckUserInterrupt, ...)` before owner-thread
+batch pulls so an R interrupt cannot long-jump across Arrow or Rust ownership.
+An interrupt first releases the inner native stream, then returns a fixed
+secret-free C Stream error which R maps to `delta_sharing_cancelled`. Pulls on
+foreign consumer threads never call the R API. Their consumer remains
+responsible for releasing the imported stream, which uses the same exact-once
+inner release path.
+
+The R stream/materializer adapters also catch a normal R `interrupt` condition
+when nanoarrow or Arrow observes it inside conversion code before the next
+callback. That owner-thread fallback releases the outer stream and raises the
+same typed condition. It is required because different consumers choose their
+own safe interrupt polling points; it does not call R from a foreign thread.
+
 The cleanup token is native lifecycle glue, not a Rust synthetic-log
 implementation. R creates and populates the log. The token can only be
 constructed for an absolute private `.delta-sharing-snapshot-*` root with mode

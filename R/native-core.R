@@ -15,7 +15,71 @@
     as.integer(error_after),
     as.integer(panic_after)
   )
+  .interruptible_native_stream(stream)
+}
+
+.native_stream_interrupt_message <- "delta-sharing stream interrupted"
+
+.native_stream_was_interrupted <- function(condition) {
+  inherits(condition, "error") &&
+    grepl(
+      .native_stream_interrupt_message,
+      conditionMessage(condition),
+      fixed = TRUE
+    )
+}
+
+.abort_native_stream_interrupt <- function(operation) {
+  .abort_delta_sharing(
+    "The Delta Sharing read was interrupted.",
+    type = "cancelled",
+    operation = operation
+  )
+}
+
+.with_native_stream_interrupt <- function(code, operation, stream = NULL) {
+  tryCatch(
+    code,
+    error = function(condition) {
+      if (!.native_stream_was_interrupted(condition)) {
+        stop(condition)
+      }
+      if (!is.null(stream)) {
+        .release_materializer_stream(stream)
+      }
+      .abort_native_stream_interrupt(operation)
+    },
+    interrupt = function(condition) {
+      if (!is.null(stream)) {
+        .release_materializer_stream(stream)
+      }
+      .abort_native_stream_interrupt(operation)
+    }
+  )
+}
+
+.interruptible_native_stream <- function(stream) {
+  class(stream) <- c(
+    "delta_sharing_interruptible_stream",
+    setdiff(class(stream), "delta_sharing_interruptible_stream")
+  )
   stream
+}
+
+#' @export
+`$.delta_sharing_interruptible_stream` <- function(x, name) {
+  method <- NextMethod("$")
+  if (!identical(name, "get_next")) {
+    return(method)
+  }
+
+  function(...) {
+    .with_native_stream_interrupt(
+      method(...),
+      operation = "read_arrow_stream",
+      stream = x
+    )
+  }
 }
 
 .native_snapshot_stream <- function(table_location,
@@ -100,7 +164,7 @@
     # capability. Rust retains no R object and performs no log interpretation.
     state$released <- TRUE
   }
-  stream
+  .interruptible_native_stream(stream)
 }
 
 .native_cdf_stream <- function(table_location,
@@ -200,7 +264,7 @@
   if (!is.null(guard)) {
     state$released <- TRUE
   }
-  stream
+  .interruptible_native_stream(stream)
 }
 
 .native_diagnostics <- function() {

@@ -1,16 +1,200 @@
 #include <R.h>
 #include <R_ext/Rdynload.h>
+#include <R_ext/Utils.h>
 #include <R_ext/Visibility.h>
 #include <Rinternals.h>
 
+#include <errno.h>
 #include <limits.h>
 #include <math.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
 
 #include "rust/include/delta_sharing_native.h"
 
 #define DELTA_SHARING_ERROR_CAPACITY 1024
+#define DELTA_SHARING_INTERRUPT_MESSAGE "delta-sharing stream interrupted"
+
+/*
+ * Stable Arrow C Stream ABI. Keeping this small definition local avoids
+ * coupling the registered R shim to either nanoarrow's or arrow-rs' headers.
+ */
+struct ArrowSchema;
+struct ArrowArray;
+struct ArrowArrayStream {
+  int (*get_schema)(struct ArrowArrayStream *, struct ArrowSchema *);
+  int (*get_next)(struct ArrowArrayStream *, struct ArrowArray *);
+  const char *(*get_last_error)(struct ArrowArrayStream *);
+  void (*release)(struct ArrowArrayStream *);
+  void *private_data;
+};
+
+#ifdef _WIN32
+typedef DWORD DeltaSharingThreadId;
+
+static DeltaSharingThreadId delta_sharing_current_thread(void) {
+  return GetCurrentThreadId();
+}
+
+static int delta_sharing_same_thread(DeltaSharingThreadId left,
+                                     DeltaSharingThreadId right) {
+  return left == right;
+}
+#else
+typedef pthread_t DeltaSharingThreadId;
+
+static DeltaSharingThreadId delta_sharing_current_thread(void) {
+  return pthread_self();
+}
+
+static int delta_sharing_same_thread(DeltaSharingThreadId left,
+                                     DeltaSharingThreadId right) {
+  return pthread_equal(left, right) != 0;
+}
+#endif
+
+typedef struct {
+  ArrowArrayStream inner;
+  DeltaSharingThreadId owner_thread;
+  int inner_released;
+  int interrupted;
+} DeltaSharingInterruptStream;
+
+static void delta_sharing_check_interrupt(void *data) {
+  (void)data;
+  R_CheckUserInterrupt();
+}
+
+static int delta_sharing_interrupt_pending(void) {
+  return R_ToplevelExec(delta_sharing_check_interrupt, NULL) == FALSE;
+}
+
+static void delta_sharing_release_inner(DeltaSharingInterruptStream *state) {
+  if (state == NULL || state->inner_released) {
+    return;
+  }
+  state->inner_released = 1;
+  if (state->inner.release != NULL) {
+    state->inner.release(&state->inner);
+  }
+}
+
+static int delta_sharing_interrupt_get_schema(ArrowArrayStream *stream,
+                                              struct ArrowSchema *schema) {
+  DeltaSharingInterruptStream *state =
+      stream == NULL ? NULL : stream->private_data;
+  if (state == NULL || state->inner_released ||
+      state->inner.get_schema == NULL) {
+    return EINVAL;
+  }
+  return state->inner.get_schema(&state->inner, schema);
+}
+
+static int delta_sharing_interrupt_get_next(ArrowArrayStream *stream,
+                                            struct ArrowArray *array) {
+  DeltaSharingInterruptStream *state =
+      stream == NULL ? NULL : stream->private_data;
+  if (state == NULL) {
+    return EINVAL;
+  }
+  if (state->interrupted) {
+    return EINTR;
+  }
+
+  /*
+   * Imported consumers may pull from their own worker threads. Only the exact
+   * R thread that constructed this stream may touch R's interrupt machinery.
+   */
+  if (delta_sharing_same_thread(
+          state->owner_thread, delta_sharing_current_thread()) &&
+      delta_sharing_interrupt_pending()) {
+    state->interrupted = 1;
+    delta_sharing_release_inner(state);
+    return EINTR;
+  }
+
+  if (state->inner_released || state->inner.get_next == NULL) {
+    return EINVAL;
+  }
+  return state->inner.get_next(&state->inner, array);
+}
+
+static const char *delta_sharing_interrupt_get_last_error(
+    ArrowArrayStream *stream) {
+  DeltaSharingInterruptStream *state =
+      stream == NULL ? NULL : stream->private_data;
+  if (state == NULL) {
+    return "delta-sharing stream state is unavailable";
+  }
+  if (state->interrupted) {
+    return DELTA_SHARING_INTERRUPT_MESSAGE;
+  }
+  if (!state->inner_released && state->inner.get_last_error != NULL) {
+    return state->inner.get_last_error(&state->inner);
+  }
+  return NULL;
+}
+
+static void delta_sharing_interrupt_release(ArrowArrayStream *stream) {
+  if (stream == NULL || stream->release == NULL) {
+    return;
+  }
+
+  DeltaSharingInterruptStream *state = stream->private_data;
+  /*
+   * Mark the outer stream released before invoking the inner callback so
+   * repeated or re-entrant release cannot cancel native ownership twice.
+   */
+  stream->release = NULL;
+  stream->private_data = NULL;
+  if (state != NULL) {
+    delta_sharing_release_inner(state);
+    free(state);
+  }
+  stream->get_schema = NULL;
+  stream->get_next = NULL;
+  stream->get_last_error = NULL;
+}
+
+static int delta_sharing_install_interrupt_wrapper(ArrowArrayStream *stream) {
+  if (stream == NULL || stream->release == NULL ||
+      stream->get_schema == NULL || stream->get_next == NULL) {
+    return EINVAL;
+  }
+
+  DeltaSharingInterruptStream *state =
+      (DeltaSharingInterruptStream *)calloc(1, sizeof(*state));
+  if (state == NULL) {
+    stream->release(stream);
+    return ENOMEM;
+  }
+  state->inner = *stream;
+  state->owner_thread = delta_sharing_current_thread();
+
+  stream->get_schema = delta_sharing_interrupt_get_schema;
+  stream->get_next = delta_sharing_interrupt_get_next;
+  stream->get_last_error = delta_sharing_interrupt_get_last_error;
+  stream->release = delta_sharing_interrupt_release;
+  stream->private_data = state;
+  return 0;
+}
+
+static void install_interrupt_wrapper_or_error(ArrowArrayStream *stream) {
+  const int status = delta_sharing_install_interrupt_wrapper(stream);
+  if (status != 0) {
+    Rf_error(
+        "Native operation failed (status %d): interruptible Arrow stream "
+        "setup failed.",
+        status);
+  }
+}
 
 static int32_t scalar_int32(SEXP value, const char *name) {
   if (TYPEOF(value) != INTSXP || XLENGTH(value) != 1 ||
@@ -125,6 +309,7 @@ static SEXP delta_sharing_stream_from_test_data(
   if (status != 0) {
     raise_native_error(status, error);
   }
+  install_interrupt_wrapper_or_error(stream);
 
   return R_NilValue;
 }
@@ -206,6 +391,7 @@ static SEXP delta_sharing_stream_from_snapshot(
   if (status != 0) {
     raise_native_error(status, error);
   }
+  install_interrupt_wrapper_or_error(stream);
 
   return R_NilValue;
 }
@@ -286,6 +472,7 @@ static SEXP delta_sharing_stream_from_cdf(
   if (status != 0) {
     raise_native_error(status, error);
   }
+  install_interrupt_wrapper_or_error(stream);
   return R_NilValue;
 }
 

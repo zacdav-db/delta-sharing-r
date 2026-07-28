@@ -68,7 +68,11 @@
     )
   }
   on.exit(try(reader$Close(), silent = TRUE), add = TRUE)
-  reader$read_table()
+  .with_native_stream_interrupt(
+    reader$read_table(),
+    operation = "read_arrow",
+    stream = stream
+  )
 }
 
 .materialize_data_frame_stream <- function(
@@ -81,7 +85,11 @@
     stop("`converter` must be a function.", call. = FALSE)
   }
 
-  result <- converter(stream)
+  result <- .with_native_stream_interrupt(
+    converter(stream),
+    operation = "read_data_frame",
+    stream = stream
+  )
   if (!inherits(result, "data.frame")) {
     .abort_delta_sharing(
       "The nanoarrow adapter did not return a data frame.",

@@ -274,6 +274,9 @@ reader architecture.
 - [ ] Pass macOS arm64/x86_64, Linux x86_64/arm64, and Windows x86_64 builds.
 - [ ] Pass Rust MSRV and stable builds.
 - [ ] Pass native lifecycle, sanitizer/valgrind-equivalent, and leak checks.
+- [ ] Prove owner-thread R interrupts cancel snapshot, CDF, and synthetic
+  streams exactly once on every target; foreign-thread consumers must never
+  call the R API.
 - [ ] Meet throughput, FFI overhead, RSS, backpressure, first-batch, and
   cancellation performance gates.
 - [ ] Finish reference documentation, README, architecture notes, examples, and

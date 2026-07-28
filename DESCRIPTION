@@ -31,6 +31,7 @@ Suggests:
   covr,
   DBI,
   duckdb (>= 1.5.0),
+  processx,
   testthat (>= 3.0.0)
 Config/Needs/check: rcmdcheck
 Config/Needs/coverage: covr

@@ -80,6 +80,44 @@ path operation after validation, but the non-recursive operations can remove
 only the expected file/symlink itself or an already-empty directory; they
 cannot follow or recursively delete injected content.
 
+## R interrupt boundary
+
+Every package-created Arrow C Stream has one small C wrapper outside the
+arrow-rs stream. The wrapper records the native thread that completed the
+registered `.Call` construction. Immediately before each `get_next` delegation
+on that exact thread, it calls `R_CheckUserInterrupt()` inside
+`R_ToplevelExec()`. `R_ToplevelExec()` converts R's non-local interrupt jump
+into a normal return to the wrapper, where the inner Arrow stream is released
+before an `EINTR` status and the fixed message
+`delta-sharing stream interrupted` cross the C Stream ABI. R maps only that
+fixed marker to `delta_sharing_cancelled`; provider URLs, paths, query text, and
+native diagnostics are never incorporated.
+
+R-native consumers such as nanoarrow or Arrow may observe the process interrupt
+inside their own allocation/conversion code before the next C Stream callback.
+The package adapters therefore also catch R's `interrupt` condition, release
+the same outer stream, and raise the identical typed cancellation. This is a
+backstop for R-owned control flow, not an R callback from a native worker. Both
+the sentinel-error path and the R-condition path release the outer stream
+before raising, while the guarded inner release prevents a second native
+cancellation.
+
+The wrapper owns a copy of the original stream callbacks and private data.
+Interruption, explicit release, imported-consumer release, and finalization all
+funnel through one guarded inner-release operation. Arrays returned before an
+interrupt keep their own Arrow array release callbacks and buffers; cancelling
+the stream does not invalidate them. The outer wrapper remains alive long
+enough for a consumer to call `get_last_error`, then its normal release frees
+the wrapper without releasing the already-cancelled inner stream again.
+
+An imported Arrow or DuckDB consumer may invoke C Stream callbacks from a
+worker thread. A thread-identity check occurs before the interrupt poll, and a
+non-owning thread delegates directly without calling any R API. Such a consumer
+must use its own interruption mechanism and release the imported stream; that
+release still performs the same exact-once native cancellation and prepared-log
+cleanup. This intentionally avoids pretending that R can safely poll
+interrupts from an arbitrary downstream worker.
+
 ## Rejected alternatives
 
 ### Convert batches to R vectors in a binding framework
