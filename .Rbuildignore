@@ -3,6 +3,7 @@
 ^\.covrignore$
 ^\.github$
 ^\.git$
+^\.gitattributes$
 ^\.gitignore$
 ^codecov\.yml$
 ^coverage$

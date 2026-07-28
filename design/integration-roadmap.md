@@ -272,7 +272,9 @@ reader architecture.
 ### Phase 7 — completion hardening
 
 - [ ] Close all correctness and security review findings.
-- [ ] Complete R and Rust dependency/license notices and source-build policy.
+- [x] Complete R and Rust dependency/license notices and source-build policy
+  with a locked-graph inventory, verbatim legal-text bundle, and deterministic
+  offline generator/checker.
 - [ ] Meet the coverage gates below with reviewed exclusions.
 - [x] Enforce and pass the 90% whole-tree R line-coverage gate.
 - [x] Enforce and pass the 85% whole-tree Rust line-coverage gate.
@@ -365,6 +367,7 @@ or main-line integration.
 | 7 | R coverage hardening (`d1598b8`, `4913f19`) | Integrated-tree gate passing | Exact combined snapshot/CDF coverage is 91.34%; tooling and CI enforce the final 90% R gate |
 | 7 | Rust coverage evidence | Integrated-tree gate passing | Exact snapshot/CDF Rust line coverage is 85.76% with 36 tests passing; CI enforces the 85% gate |
 | 7 | Rust dependency policy | Integrated-tree gate passing | Pinned `cargo-deny` passes advisory, dependency-rule, license, and source checks with four reviewed transitive advisory exceptions |
+| 7 | Dependency notices | Handoff ready | All 326 locked Rust packages and direct R requirements are inventoried; 214 unique legal texts ship in a deterministic bundle with 14 fail-closed missing-file overrides |
 
 Current integration evidence: the R planning and native execution handoffs each
 pass built-source package checks on macOS arm64, and the integrated native tree

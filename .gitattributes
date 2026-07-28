@@ -1,0 +1,2 @@
+# Preserve revision-pinned third-party legal files byte-for-byte.
+/tools/rust-license-overrides/** binary

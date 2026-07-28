@@ -14,13 +14,15 @@ The design packet is read in this order:
    risks, and technical references.
 7. `rust-dependency-policy.md` — enforced native advisory, license, and source
    policy plus reviewed transitive exceptions.
-8. `r-execution-wiring-contract.md` — production R discovery/metadata
+8. `dependency-license-notices.md` — reproducible source/binary dependency
+   inventory, legal-text preservation, and pinned override policy.
+9. `r-execution-wiring-contract.md` — production R discovery/metadata
    execution, injection, and lifecycle boundary.
-9. `parquet-response-kernel-proof.md` — Phase 6 wire-to-log mapping, R/Kernel
+10. `parquet-response-kernel-proof.md` — Phase 6 wire-to-log mapping, R/Kernel
    ownership, safety gates, and executable fixture evidence.
-10. `r-read-diagnostics-contract.md` — stream-local, immutable, redacted
+11. `r-read-diagnostics-contract.md` — stream-local, immutable, redacted
     diagnostics and lifecycle boundaries.
-11. `api-mock.R` — non-executable illustration of the canonical API.
+12. `api-mock.R` — non-executable illustration of the canonical API.
 
 Implemented R subsystems also carry focused contracts. Snapshot synthetic-log
 mapping, atomic publication, privacy, and lifetime are recorded in

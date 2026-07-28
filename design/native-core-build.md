@@ -89,6 +89,8 @@ generate and verify a complete archive from the committed lockfile:
 ```sh
 python3 tools/rust_vendor.py generate
 python3 tools/rust_vendor.py check
+python3 tools/dependency_licenses.py generate
+python3 tools/dependency_licenses.py check
 ```
 
 The generator runs `cargo vendor --locked --offline --respect-source-config
@@ -103,16 +105,22 @@ cache every locked crate. The checker rejects unsafe or non-normalized archive
 entries, revalidates all checksums, and runs `cargo metadata --frozen` with an
 empty Cargo home and offline networking.
 
+The dependency-license commands use that verified archive plus frozen offline
+Cargo metadata to regenerate the source/binary distribution inventory and
+content-addressed legal-text bundle. They validate all 326 locked packages,
+including exact declared license expressions and the revision-pinned
+workspace-root license files needed by crate archives that omit them. See
+`dependency-license-notices.md` for the override and review policy.
+
 The Makevars recipes require `src/rust/vendor.tar.xz` and
 `src/rust/vendor-config.toml` as a pair, use a package-local Cargo home, and
 build with `--frozen -j 2`. Release evidence must also include a clean source
 tarball installation with network access disabled, archive and installed
 binary sizes, and the lock/archive SHA-256 values reported by the checker.
 
-Do not carry a generated archive across lockfile changes. In particular, the
-active CDF lane adds a direct `url` declaration to the locked graph. Regenerate
-and re-run the complete offline source-install proof from the final integrated
-post-CDF commit immediately before release packaging.
+Do not carry a generated archive or license inventory across lockfile changes.
+Regenerate both and re-run the complete offline source-install proof from the
+final integrated commit immediately before release packaging.
 
 The current resolved graph is large because the pinned Kernel default engine
 includes Arrow, Parquet, object-store, TLS, and cloud support. The resulting
@@ -327,6 +335,8 @@ infrastructure blocker, not Linux package-build evidence; run the isolated
 proof above on a functioning engine.
 
 This is local evidence, not cross-platform build proof. Linux and Windows
-source builds, a final post-CDF network-isolated source install, dependency
-license inventory, real TLS/HTTPS and deletion-vector coverage, package-size
-disposition, and end-to-end Kernel scan performance remain release gates.
+source builds, real TLS/HTTPS and deletion-vector coverage, package-size
+disposition, and end-to-end Kernel scan performance remain release gates. The
+current locked graph now has a network-isolated macOS source install and
+complete dependency-license inventory; both must be regenerated and rechecked
+if integration changes the lockfile or package dependencies.

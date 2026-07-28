@@ -6,6 +6,12 @@ unapproved licenses, and fails on every RustSec advisory except the reviewed
 transitive cases recorded below. An exception is tied to one advisory ID and
 does not suppress later advisories for the same crate.
 
+License acceptability and redistribution notices are separate gates.
+`design/dependency-license-notices.md` defines the deterministic inventory and
+verbatim legal-text bundle shipped in source and binary R packages. It covers
+the complete locked graph and fails closed when Cargo metadata, the vendor
+archive, or a pinned missing-license override changes.
+
 ## Reviewed transitive advisory exceptions
 
 | Advisory | Locked path | Disposition |
@@ -30,5 +36,7 @@ Before integration:
 2. Review every new license and advisory; do not add wildcard exceptions.
 3. Confirm any advisory exception is unreachable through the documented
    vNext boundary and records a removal condition.
-4. Run locked MSRV, stable, platform, coverage, and package checks after any
+4. Generate and check the vendor pair and dependency-license outputs; review
+   every inventory or pinned-override diff.
+5. Run locked MSRV, stable, platform, coverage, and package checks after any
    Kernel, Arrow, Parquet, object-store, or TLS dependency change.
