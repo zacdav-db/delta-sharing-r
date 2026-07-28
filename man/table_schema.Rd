@@ -10,7 +10,7 @@ table_schema(table)
 \item{table}{A \link{SharingTable}.}
 }
 \value{
-The table's logical schema.
+The table's parsed logical struct schema as a JSON-style list.
 }
 \description{
 Retrieve a table schema

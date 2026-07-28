@@ -10,7 +10,7 @@ table_version(table)
 \item{table}{A \link{SharingTable}.}
 }
 \value{
-Table-version metadata from the future R protocol layer.
+A non-negative whole-number table version.
 }
 \description{
 Retrieve a table version

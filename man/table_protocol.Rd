@@ -10,7 +10,8 @@ table_protocol(table)
 \item{table}{A \link{SharingTable}.}
 }
 \value{
-Parsed protocol capabilities.
+A safe list containing \code{response_format}, \code{min_reader_version},
+\code{min_writer_version}, \code{reader_features}, and \code{writer_features}.
 }
 \description{
 Retrieve table protocol capabilities

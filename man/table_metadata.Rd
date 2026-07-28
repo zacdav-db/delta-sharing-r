@@ -10,7 +10,10 @@ table_metadata(table)
 \item{table}{A \link{SharingTable}.}
 }
 \value{
-Safe structured table metadata.
+A safe structured list containing table version, response format,
+identifiers, format, schema JSON, configuration, partition columns,
+optional size statistics, creation time, and access modes. Storage
+locations and auxiliary locations are excluded.
 }
 \description{
 This operation does not scan table rows.

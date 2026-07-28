@@ -129,7 +129,7 @@ list_tables <- S7::new_generic(
 #' Retrieve a table version
 #'
 #' @param table A [SharingTable].
-#' @return Table-version metadata from the future R protocol layer.
+#' @return A non-negative whole-number table version.
 #' @export
 table_version <- S7::new_generic(
   "table_version",
@@ -140,7 +140,8 @@ table_version <- S7::new_generic(
 #' Retrieve table protocol capabilities
 #'
 #' @inheritParams table_version
-#' @return Parsed protocol capabilities.
+#' @return A safe list containing `response_format`, `min_reader_version`,
+#'   `min_writer_version`, `reader_features`, and `writer_features`.
 #' @export
 table_protocol <- S7::new_generic(
   "table_protocol",
@@ -153,7 +154,10 @@ table_protocol <- S7::new_generic(
 #' This operation does not scan table rows.
 #'
 #' @inheritParams table_version
-#' @return Safe structured table metadata.
+#' @return A safe structured list containing table version, response format,
+#'   identifiers, format, schema JSON, configuration, partition columns,
+#'   optional size statistics, creation time, and access modes. Storage
+#'   locations and auxiliary locations are excluded.
 #' @export
 table_metadata <- S7::new_generic(
   "table_metadata",
@@ -164,7 +168,7 @@ table_metadata <- S7::new_generic(
 #' Retrieve a table schema
 #'
 #' @inheritParams table_version
-#' @return The table's logical schema.
+#' @return The table's parsed logical struct schema as a JSON-style list.
 #' @export
 table_schema <- S7::new_generic(
   "table_schema",
