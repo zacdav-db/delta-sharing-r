@@ -54,9 +54,19 @@ run_interrupt_subprocess <- function(kind) {
     )
   }
 
-  # Let the child enter the native conversion or pull before delivering SIGINT.
+  # Let the child enter the native conversion or pull before delivering the
+  # platform interrupt: SIGINT on Unix and CTRL+BREAK on Windows.
   Sys.sleep(0.1)
-  process$interrupt()
+  delivered <- process$interrupt()
+  if (!isTRUE(delivered)) {
+    stop(
+      paste(
+        "Interrupt subprocess could not receive the platform interrupt:",
+        paste(readLines(log, warn = FALSE), collapse = "\n")
+      ),
+      call. = FALSE
+    )
+  }
   process$wait(timeout = 5000)
   if (process$is_alive()) {
     stop("Interrupt subprocess did not stop promptly.", call. = FALSE)
@@ -75,8 +85,6 @@ run_interrupt_subprocess <- function(kind) {
 }
 
 test_that("a real R interrupt cancels synthetic, snapshot, and CDF streams", {
-  skip_on_os("windows")
-
   for (kind in c("synthetic", "snapshot", "cdf")) {
     result <- run_interrupt_subprocess(kind)
     expect_true(
@@ -102,8 +110,6 @@ test_that("a real R interrupt cancels synthetic, snapshot, and CDF streams", {
 })
 
 test_that("direct get_next maps a real interrupt to public cancellation", {
-  skip_on_os("windows")
-
   result <- run_interrupt_subprocess("direct")
   expect_true("delta_sharing_cancelled" %in% result$classes)
   expect_identical(
@@ -119,7 +125,6 @@ test_that("direct get_next maps a real interrupt to public cancellation", {
 })
 
 test_that("read_arrow maps a real interrupt to public cancellation", {
-  skip_on_os("windows")
   skip_if_not_installed("arrow")
 
   result <- run_interrupt_subprocess("arrow")

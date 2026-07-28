@@ -118,6 +118,15 @@ release still performs the same exact-once native cancellation and prepared-log
 cleanup. This intentionally avoids pretending that R can safely poll
 interrupts from an arbitrary downstream worker.
 
+The real-interrupt subprocess gate is platform-neutral. Its child constructs
+and pulls the stream on the main R thread; the parent uses `processx` to send
+SIGINT on Unix or CTRL+BREAK on Windows. Failure to deliver the platform event,
+failure to return a typed cancellation, a second cancellation, a live stream
+pointer, or a retained prepared root all fail the test. Windows uses canonical
+`file:///C:/...` fixture URIs. This makes hosted Windows execution a real gate,
+not a skip, while local Unix execution remains evidence only for the platform
+on which it ran.
+
 ## Rejected alternatives
 
 ### Convert batches to R vectors in a binding framework

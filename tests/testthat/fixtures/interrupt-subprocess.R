@@ -25,10 +25,12 @@ if (nzchar(package_path) && !file.exists(installed_marker)) {
 }
 
 fixture_uri <- function(path) {
+  normalized <- normalizePath(path, winslash = "/", mustWork = TRUE)
+  prefix <- if (.Platform$OS.type == "windows") "file:///" else "file://"
   paste0(
-    "file://",
+    prefix,
     utils::URLencode(
-      normalizePath(path, winslash = "/", mustWork = TRUE),
+      normalized,
       reserved = FALSE,
       repeated = TRUE
     )
