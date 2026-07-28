@@ -379,7 +379,7 @@ test_that("cache invalidation is generation-safe for future 401 replay", {
   )
 })
 
-test_that("private-key authentication remains explicitly unavailable", {
+test_that("private-key authentication failures remain secret-safe", {
   client <- sharing_client(test_path(
     "fixtures",
     "profiles",
@@ -387,9 +387,9 @@ test_that("private-key authentication remains explicitly unavailable", {
   ))
   condition <- expect_error(
     delta.sharing:::.client_authorization(client),
-    class = "delta_sharing_unsupported_error"
+    class = "delta_sharing_auth_error"
   )
-  expect_identical(condition$feature, "private-key JWT authentication")
+  expect_identical(condition$operation, "oauth_private_key_jwt")
   expect_false(grepl(
     "/test-only/private-key.pem",
     conditionMessage(condition),

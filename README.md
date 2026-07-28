@@ -52,6 +52,10 @@ table_schema(orders)
 Discovery follows every page. Metadata results are safe projections and omit
 storage locations, credentials, response bodies, and other private fields.
 
+Version 2 profiles support bearer, Basic, OAuth client-secret, and RS256
+private-key JWT client authentication. Private keys and OAuth tokens remain
+behind the client's opaque R context and are never descriptor properties.
+
 `read_arrow_stream()`, `read_arrow()`, and `read_data_frame()` define the
 execution interface. Until the Rust layer is linked, they fail with a typed
 `delta_sharing_native_unavailable_error`; the R package does not fall back to a

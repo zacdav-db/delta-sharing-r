@@ -41,10 +41,10 @@ The parser accepts:
 
 OAuth client descriptors validate token endpoint, client identity, secret, and
 optional scope. Private-key descriptors validate their nested token endpoint,
-client identity, issuer, audience, optional scope, key-file descriptor, key id,
-and signing algorithm. Until an R crypto stack is selected and cross-platform
-tested, only `RS256` descriptors are accepted. The key file is intentionally
-not opened in this slice. Missing algorithms default to `RS256`.
+client identity, issuer, audience, optional scope, key-file descriptor,
+optional key id, and signing algorithm. Only `RS256` descriptors are accepted;
+missing algorithms default to `RS256`. Construction does not open the key.
+Authentication opens and parses it only when a fresh assertion is required.
 
 Sharing and token endpoints must be absolute HTTP(S) URLs without embedded
 credentials, query strings, or fragments. Bearer expiration times must be RFC

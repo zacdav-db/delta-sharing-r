@@ -23,6 +23,7 @@ Imports:
   httr2,
   jsonlite,
   nanoarrow (>= 0.8.0),
+  openssl,
   S7
 Suggests:
   arrow,
@@ -35,4 +36,5 @@ Config/testthat/edition: 3
 Config/testthat/parallel: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
-SystemRequirements: Cargo (Rust's package manager), rustc (>= 1.88), CMake
+SystemRequirements: Cargo (Rust's package manager), rustc (>= 1.88), CMake,
+  OpenSSL (>= 1.0.2)

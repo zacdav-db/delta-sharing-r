@@ -610,7 +610,14 @@
                                         sleeper = Sys.sleep,
                                         random = stats::runif,
                                         max_attempts = 5L,
-                                        max_response_bytes = NULL) {
+                                        max_response_bytes = NULL,
+                                        assertion_random = .jwt_random_bytes,
+                                        assertion_signer =
+                                          .openssl_rs256_sign,
+                                        assertion_lifetime_seconds =
+                                          .jwt_assertion_lifetime_seconds,
+                                        assertion_clock_skew_seconds =
+                                          .jwt_assertion_clock_skew_seconds) {
   if (!.is_scalar_character(operation) ||
       !operation %in% .http_control_operations) {
     .http_validation_abort("The buffered HTTP operation is invalid.")
@@ -639,7 +646,11 @@
     clock = clock,
     sleeper = sleeper,
     random = random,
-    max_attempts = max_attempts
+    max_attempts = max_attempts,
+    assertion_random = assertion_random,
+    assertion_signer = assertion_signer,
+    assertion_lifetime_seconds = assertion_lifetime_seconds,
+    assertion_clock_skew_seconds = assertion_clock_skew_seconds
   )
   request <- .apply_http_authorization(request, authorization)
 
@@ -658,7 +669,7 @@
   status <- .safe_transport_status(transport, response)
   if (identical(as.integer(status), 401L)) {
     can_refresh <- replayable &&
-      identical(authorization$auth_type, "oauth_client_credentials") &&
+      .is_oauth_auth_type(authorization$auth_type) &&
       !is.null(authorization$cache_generation) &&
       isTRUE(.invalidate_client_auth(
         client,
@@ -674,7 +685,11 @@
       clock = clock,
       sleeper = sleeper,
       random = random,
-      max_attempts = max_attempts
+      max_attempts = max_attempts,
+      assertion_random = assertion_random,
+      assertion_signer = assertion_signer,
+      assertion_lifetime_seconds = assertion_lifetime_seconds,
+      assertion_clock_skew_seconds = assertion_clock_skew_seconds
     )
     request <- .apply_http_authorization(
       request,

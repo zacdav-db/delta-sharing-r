@@ -82,7 +82,7 @@ HTTP 401 is returned to the auth orchestrator only for the first round. Exactly
 one replay is permitted when all of these are true:
 
 1. the caller explicitly marked the request replayable;
-2. the request used cached OAuth client credentials;
+2. the request used a cached OAuth client-credentials or private-key JWT token;
 3. generation-matched invalidation succeeds.
 
 The context then performs one fresh token exchange, replaces the Authorization

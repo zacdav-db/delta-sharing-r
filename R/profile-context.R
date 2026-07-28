@@ -508,7 +508,7 @@
       "privateKeyFile",
       "auth.privateKey.privateKeyFile"
     ),
-    key_id = .required_profile_text(key, "keyId", "auth.privateKey.keyId"),
+    key_id = .optional_profile_text(key, "keyId", "auth.privateKey.keyId"),
     algorithm = algorithm
   )
 }

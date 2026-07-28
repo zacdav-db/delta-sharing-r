@@ -184,10 +184,10 @@ accepted, and Arrow stream lifecycle proof passes on macOS, Linux, and Windows.
 ### Phase 2 — profile, client, discovery, and metadata
 
 - [x] Parse all supported profile sources and versions in R.
-- [ ] Implement bearer, OAuth client credentials, JWT assertion, and basic auth
+- [x] Implement bearer, OAuth client credentials, JWT assertion, and basic auth
   in R.
-- [ ] Implement expiry checks and single-flight refresh in R.
-- [ ] Implement authenticated HTTP, retry/backoff, pagination, and cancellation
+- [x] Implement expiry checks and single-flight refresh in R.
+- [x] Implement authenticated HTTP, retry/backoff, pagination, and cancellation
   in R.
 - [x] Connect `SharingClient` and `SharingTable` to R-owned client state.
 - [x] Implement `list_shares()`, `list_schemas()`, and `list_tables()`.

@@ -32,8 +32,8 @@ Most users create this object indirectly with \code{\link[=sharing_client]{shari
 Profile version 1 supports bearer credentials. Profile version 2 supports
 \code{bearer_token}, \code{basic}, \code{oauth_client_credentials}, and
 \code{oauth_jwt_bearer_private_key_jwt} descriptors. OAuth exchange and
-private-key loading happen in the later authentication layer, not during
-construction.
+private-key loading happen lazily when an authenticated request needs a new
+access token, not during construction.
 
 JSON, file, and connection inputs are limited to 1 MiB. A supplied open
 binary connection is consumed from its current position and remains open. A
