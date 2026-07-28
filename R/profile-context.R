@@ -1,10 +1,6 @@
 .profile_max_bytes <- 1024L * 1024L
 .profile_versions <- c(1, 2)
-.private_key_algorithms <- c(
-  "RS256", "RS384", "RS512",
-  "PS256", "PS384", "PS512",
-  "ES256", "ES384", "EdDSA"
-)
+.private_key_algorithms <- "RS256"
 
 .profile_credentials_registry <- new.env(hash = TRUE, parent = emptyenv())
 .client_context_registry <- new.env(hash = TRUE, parent = emptyenv())
@@ -88,7 +84,10 @@
   context$credentials <- .profile_credentials(profile)
   context$state <- "configured"
   context$access_token <- NULL
+  context$access_token_issued_at <- NULL
   context$access_token_expires_at <- NULL
+  context$access_token_refresh_at <- NULL
+  context$access_token_generation <- 0
   context
 }
 
@@ -202,7 +201,7 @@
   if (!isOpen(connection)) {
     tryCatch(
       {
-        open(connection, open = "r")
+        open(connection, open = "rb")
         opened_here <- TRUE
       },
       error = function(error) {
@@ -225,23 +224,25 @@
     )
   }
 
-  pieces <- character()
+  pieces <- list()
   size <- 0L
   repeat {
-    line <- tryCatch(
-      readLines(connection, n = 1L, warn = FALSE),
+    chunk <- tryCatch(
+      readBin(connection, what = "raw", n = 65536L),
       error = function(error) {
         .abort_delta_sharing(
-          "The profile connection could not be read.",
+          paste0(
+            "The profile connection must support bounded binary reads."
+          ),
           type = "validation",
           operation = "sharing_profile"
         )
       }
     )
-    if (length(line) == 0L) {
+    if (length(chunk) == 0L) {
       break
     }
-    size <- size + length(charToRaw(enc2utf8(line))) + 1L
+    size <- size + length(chunk)
     if (size > .profile_max_bytes) {
       .abort_delta_sharing(
         "Profile input exceeds the 1 MiB size limit.",
@@ -249,9 +250,12 @@
         operation = "sharing_profile"
       )
     }
-    pieces <- c(pieces, line)
+    pieces[[length(pieces) + 1L]] <- chunk
   }
-  charToRaw(paste(pieces, collapse = "\n"))
+  if (length(pieces) == 0L) {
+    return(raw())
+  }
+  do.call(c, pieces)
 }
 
 .profile_json_bytes <- function(source, source_type) {

@@ -8,7 +8,7 @@ sharing_profile(source, source_type = NULL)
 }
 \arguments{
 \item{source}{Profile file path, inline JSON string or raw vector,
-connection, or inline list.}
+binary-readable connection, or inline list.}
 
 \item{source_type}{Optional explicit source type: \code{"path"}, \code{"json"},
 \code{"connection"}, or \code{"list"}.}

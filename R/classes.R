@@ -7,15 +7,15 @@
 #'
 #' `SharingProfile` is a small, read-only descriptor for a standard Delta
 #' Sharing profile source. The source may be a file path, inline JSON, a
-#' connection, or an inline list. Construction parses and validates profile
-#' versions 1 and 2 without making a network request. Only safe metadata is
-#' exposed as properties; credential material is held behind an opaque
-#' package-private handle and is excluded from printed output.
+#' binary-readable connection, or an inline list. Construction parses and
+#' validates profile versions 1 and 2 without making a network request. Only
+#' safe metadata is exposed as properties; credential material is held behind
+#' an opaque package-private handle and is excluded from printed output.
 #'
 #' Most users create this object indirectly with [sharing_client()].
 #'
 #' @param source Profile file path, inline JSON string or raw vector,
-#'   connection, or inline list.
+#'   binary-readable connection, or inline list.
 #' @param source_type Optional explicit source type: `"path"`, `"json"`,
 #'   `"connection"`, or `"list"`.
 #' @return A read-only `SharingProfile` object.
@@ -27,8 +27,9 @@
 #' construction.
 #'
 #' JSON, file, and connection inputs are limited to 1 MiB. A supplied open
-#' connection is consumed from its current position and remains open. A
-#' supplied closed connection is opened for reading and closed after parsing.
+#' binary connection is consumed from its current position and remains open. A
+#' supplied closed connection is opened for bounded binary reads and closed
+#' after parsing.
 #'
 #' The endpoint and token endpoint must be absolute HTTP(S) URLs without
 #' embedded credentials, query strings, or fragments. Bearer expiration times

@@ -23,9 +23,11 @@ is not an S7 property. Printing a profile or client shows safe metadata and
 never renders credential fields.
 
 Supported sources are a file path, inline JSON character or raw data, a
-connection, and an explicitly named list. JSON-bearing sources are limited to
-1 MiB. Construction performs no sharing request, token exchange, or private-key
-read.
+binary-readable connection, and an explicitly named list. JSON-bearing sources
+are limited to 1 MiB. Text-only connections are rejected because base R cannot
+read them in bounded chunks; callers can use a `rawConnection` for in-memory
+input. Construction performs no sharing request, token exchange, or
+private-key read.
 
 ## Accepted profile descriptors
 
@@ -40,8 +42,9 @@ The parser accepts:
 OAuth client descriptors validate token endpoint, client identity, secret, and
 optional scope. Private-key descriptors validate their nested token endpoint,
 client identity, issuer, audience, optional scope, key-file descriptor, key id,
-and supported signing algorithm. The key file is intentionally not opened in
-this slice. Missing algorithms default to `RS256`.
+and signing algorithm. Until an R crypto stack is selected and cross-platform
+tested, only `RS256` descriptors are accepted. The key file is intentionally
+not opened in this slice. Missing algorithms default to `RS256`.
 
 Sharing and token endpoints must be absolute HTTP(S) URLs without embedded
 credentials, query strings, or fragments. Bearer expiration times must be RFC
@@ -57,7 +60,7 @@ their registry entries. A client context holds:
 - normalized endpoint and authentication type;
 - the validated credential descriptor;
 - mutable authentication state;
-- placeholders for a future access token and its expiration.
+- cached OAuth access-token timing and generation state.
 
 The internal `.client_context()` boundary is the handoff for the R HTTP/auth
 workstream. It must not be exported or added as a public S7 property. Future

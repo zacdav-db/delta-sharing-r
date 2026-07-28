@@ -161,10 +161,47 @@ test_that("expiration and private-key descriptors are validated", {
     class = "delta_sharing_unsupported_error"
   )
 
+  private_key$auth$privateKey$algorithm <- "RS384"
+  expect_error(
+    sharing_profile(private_key),
+    "not supported",
+    class = "delta_sharing_unsupported_error"
+  )
+
   private_key$auth$privateKey$algorithm <- NULL
   profile <- sharing_profile(private_key)
   credentials <- delta.sharing:::.profile_credentials(profile)
   expect_identical(credentials$algorithm, "RS256")
+})
+
+test_that("connection sources use bounded binary reads", {
+  profile_json <- jsonlite::toJSON(test_profile(), auto_unbox = TRUE)
+  binary <- rawConnection(charToRaw(profile_json), open = "rb")
+  on.exit(close(binary), add = TRUE)
+
+  expect_identical(sharing_profile(binary)@auth_type, "bearer_token")
+
+  text <- textConnection(profile_json, open = "r")
+  on.exit(close(text), add = TRUE)
+  expect_error(
+    sharing_profile(text),
+    "bounded binary reads",
+    class = "delta_sharing_validation_error"
+  )
+
+  oversized_path <- tempfile("oversized-profile-")
+  on.exit(unlink(oversized_path), add = TRUE)
+  writeBin(
+    charToRaw(paste(rep("x", 1024 * 1024 + 1), collapse = "")),
+    oversized_path
+  )
+  oversized <- file(oversized_path, open = "rb")
+  on.exit(close(oversized), add = TRUE)
+  expect_error(
+    sharing_profile(oversized),
+    "1 MiB",
+    class = "delta_sharing_validation_error"
+  )
 })
 
 test_that("malformed, missing, and oversized sources are rejected safely", {

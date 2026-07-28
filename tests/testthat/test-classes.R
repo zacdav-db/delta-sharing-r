@@ -25,7 +25,7 @@ test_that("sharing_client accepts supported profile source forms", {
   inline_json <- sharing_client(profile_json)
   inline_raw <- sharing_client(charToRaw(profile_json))
   inline_list <- sharing_client(test_profile())
-  connection <- textConnection(profile_json)
+  connection <- rawConnection(charToRaw(profile_json), open = "rb")
   on.exit(close(connection), add = TRUE)
   inline_connection <- sharing_client(connection)
   path_profile <- sharing_profile(test_path(
