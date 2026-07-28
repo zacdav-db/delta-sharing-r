@@ -64,6 +64,12 @@ includeendstreamaction=true
 advertises exactly that single format. The response capability and normalized
 protocol/metadata/file actions must all agree on the selected format.
 
+The protocol-default fallback is asymmetric. A server that ignores an explicit
+Delta request may return Parquet; the planner accepts that response now that
+the R Parquet normalizer is implemented, and diagnostics report the actual
+selected format. A server may not return Delta after an explicit Parquet
+request because the client did not advertise Delta reader-feature support.
+
 The separate `fileidhash: delta` request header is sent and its response echo
 is required.
 

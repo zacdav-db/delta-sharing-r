@@ -820,8 +820,15 @@ print.delta_sharing_prepared_snapshot <- function(x, ...) {
       protocol <- page$protocol
       metadata <- page$metadata
       table_version <- page$table_version
-      if (!identical(read@response_format, "auto") &&
-          !identical(read@response_format, page$response_format)) {
+      # A server that does not recognize the capabilities header may return
+      # the protocol-default Parquet format after Delta was requested. The
+      # reverse mismatch is unsafe because a Parquet-only client did not
+      # advertise Delta reader-feature support.
+      format_mismatch <- !identical(read@response_format, "auto") &&
+        !identical(read@response_format, page$response_format) &&
+        !(identical(read@response_format, "delta") &&
+          identical(page$response_format, "parquet"))
+      if (format_mismatch) {
         .snapshot_planning_abort(
           "The server selected a different snapshot response format than requested."
         )

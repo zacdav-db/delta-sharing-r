@@ -168,7 +168,7 @@ test_that("empty Parquet responses retain schema and validate totals", {
   )
 })
 
-test_that("Parquet response selection and versions cannot drift", {
+test_that("Parquet selection follows the protocol fallback direction", {
   actions <- parquet_response_actions()
   expect_error(
     prepare_parquet_response(
@@ -178,13 +178,20 @@ test_that("Parquet response selection and versions cannot drift", {
     "format",
     class = "delta_sharing_protocol_error"
   )
-  expect_error(
-    prepare_parquet_response(
-      actions,
-      response_format = "delta"
-    ),
-    "different",
-    class = "delta_sharing_protocol_error"
+  fallback <- prepare_parquet_response(
+    actions,
+    response_format = "delta"
+  )
+  on.exit(delta.sharing:::.release_prepared_snapshot(fallback), add = TRUE)
+  fallback_request <- attr(fallback, "test_requests", exact = TRUE)[[1L]]
+  expect_match(
+    fallback_request$headers[["delta-sharing-capabilities"]],
+    "responseformat=delta;",
+    fixed = TRUE
+  )
+  expect_identical(
+    delta.sharing:::.prepared_snapshot_diagnostics(fallback)$response_format,
+    "parquet"
   )
   expect_error(
     prepare_parquet_response(
