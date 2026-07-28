@@ -82,23 +82,37 @@ requirements still need proof on Linux, macOS, and Windows.
 
 ## Offline source releases
 
-The repository intentionally does not contain a partial vendor directory.
-Before an offline/CRAN-style source release, generate a complete archive from
-the committed lockfile:
+The repository intentionally does not contain a partial vendor directory or a
+development-branch archive. Before an offline/CRAN-style source release,
+generate and verify a complete archive from the committed lockfile:
 
 ```sh
-cargo vendor \
-  --manifest-path src/rust/Cargo.toml \
-  --locked \
-  --versioned-dirs \
-  src/vendor
-tar -cJf src/rust/vendor.tar.xz -C src vendor
+python3 tools/rust_vendor.py generate
+python3 tools/rust_vendor.py check
 ```
 
-Store Cargo's emitted source replacement as
-`src/rust/vendor-config.toml`. The Makevars recipes detect both files, use a
-package-local Cargo home, and build with `--frozen -j 2`. A clean source
-tarball must be installed with network access disabled before release.
+The generator runs `cargo vendor --locked --offline --respect-source-config
+--versioned-dirs` in a temporary copy, so a release machine may use its
+configured registry mirror without encoding that mirror in the resulting
+package. It validates every registry package and file checksum against
+`Cargo.lock`, normalizes Cargo's emitted source replacement to the
+package-local `vendor` directory, and writes a byte-reproducible
+`src/rust/vendor.tar.xz`. Run `cargo fetch --manifest-path
+src/rust/Cargo.toml --locked` first when the release machine does not already
+cache every locked crate. The checker rejects unsafe or non-normalized archive
+entries, revalidates all checksums, and runs `cargo metadata --frozen` with an
+empty Cargo home and offline networking.
+
+The Makevars recipes require `src/rust/vendor.tar.xz` and
+`src/rust/vendor-config.toml` as a pair, use a package-local Cargo home, and
+build with `--frozen -j 2`. Release evidence must also include a clean source
+tarball installation with network access disabled, archive and installed
+binary sizes, and the lock/archive SHA-256 values reported by the checker.
+
+Do not carry a generated archive across lockfile changes. In particular, the
+active CDF lane adds a direct `url` declaration to the locked graph. Regenerate
+and re-run the complete offline source-install proof from the final integrated
+post-CDF commit immediately before release packaging.
 
 The current resolved graph is large because the pinned Kernel default engine
 includes Arrow, Parquet, object-store, TLS, and cloud support. The resulting
@@ -185,8 +199,31 @@ declared 1.88 MSRV across the resolved graph:
   action without losing its query, plus fixed-message redaction tests for a
   downstream request failure.
 
+Offline source packaging was separately exercised on macOS arm64 from
+integration commit `63fa7a7`, before the active CDF lane:
+
+- two independent generator runs produced byte-identical archives for 325
+  registry packages (326 resolved packages total);
+- the lockfile SHA-256 was
+  `9e41b2b72ba747d56289ae7754a0078ed8e9a87aeb2df780cafe7454b7bdad2b`;
+- the 427 MiB unpacked vendor tree compressed to a 28,805,176-byte archive with
+  SHA-256
+  `b69ef646822deb20bdcba36c0c9aec9a74536153b3144f6f5b73fa4484e601b8`;
+- `R CMD build` produced a 28,966,232-byte source archive containing only the
+  compressed vendor archive and its 101-byte config, not an unpacked vendor
+  tree, Cargo home, build target, design packet, or packaging tools; and
+- `R CMD INSTALL --preclean` completed from that source archive with
+  `CARGO_NET_OFFLINE=true`, an empty package-local Cargo home, and HTTP(S)/all
+  proxies directed at a closed loopback port. Loading the installed package
+  reported Kernel 0.22.0, Arrow 57.3.0, a successful Kernel smoke test, and no
+  active lifecycle resources. The installed shared library was 32,359,792
+  bytes and no vendor, Cargo-home, or target tree remained installed.
+
+These are reproducibility and local offline-install results for the pre-CDF
+graph, not release artifacts to carry forward. The archive and config must be
+regenerated from the final post-CDF lockfile.
+
 This is local evidence, not cross-platform build proof. Linux and Windows
-source builds, a network-isolated source install using a complete dependency
-archive, dependency-license inventory, real TLS/HTTPS and deletion-vector
-coverage, package-size disposition, and end-to-end Kernel scan performance
-remain release gates.
+source builds, a final post-CDF network-isolated source install, dependency
+license inventory, real TLS/HTTPS and deletion-vector coverage, package-size
+disposition, and end-to-end Kernel scan performance remain release gates.

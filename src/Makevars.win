@@ -16,7 +16,8 @@ $(SHLIB): $(STATLIB)
 $(STATLIB):
 	@set -e; \
 	cargo_flags="--locked"; \
-	if test -f rust/vendor.tar.xz; then \
+	if test -f rust/vendor.tar.xz || test -f rust/vendor-config.toml; then \
+		test -f rust/vendor.tar.xz; \
 		test -f rust/vendor-config.toml; \
 		rm -Rf vendor .cargo; \
 		tar xf rust/vendor.tar.xz; \
