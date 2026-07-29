@@ -2,7 +2,7 @@
 
 Status: active branch checklist
 Integration branch: `codex/delta-kernel-s7-overhaul`
-Current recorded head: `edefcab`
+Current recorded head: `8d1ed40`
 Last integration update: 2026-07-30
 
 This is the branch-local execution plan for the vNext overhaul. The integration
@@ -118,7 +118,7 @@ planning.
 
 ## Current evidence
 
-At `92c4068`:
+At `dbb538c`:
 
 - The ordinary R suite passes with seven explicitly gated integration skips:
   six public endpoint tests and one credentialed CDF test.
@@ -139,7 +139,7 @@ At `92c4068`:
 
 ### Performance evidence
 
-Commit `1850bcc` upgraded Kernel 0.22/Arrow 57 to Kernel 0.26/Arrow 58.3 and
+Commit `fecb4e5` upgraded Kernel 0.22/Arrow 57 to Kernel 0.26/Arrow 58.3 and
 configured Kernel source batches from the public batch size, bounded to
 1,000–65,536 rows. On the controlled 8,388,608-row local table:
 
@@ -339,10 +339,10 @@ not the current public implementation or completion proof.
 | S7 implementation | `fe0d522`, `936f5cf`, later phase commits | Superseded | Built the first vNext implementation and much of the lifecycle/CI evidence. ADR 004 and `e56404c` removed this public surface. |
 | Portability/security scaffolding | `2494378`, `4d89ca9`, `cfdad9e`, `e61a221`, `d4347b9`, `e97adfd` | Infrastructure retained; proof must be rerun | Offline vendoring, package artifacts, hosted matrices, Windows interrupt, and sanitizer jobs remain useful, but old passes do not close current-head gates. |
 | Lean R6 rewrite | `e56404c` | Current architecture integrated | Replaced the S7 implementation with the compact R6 client/table/read surface and R-owned protocol stack; ADR 004 governs. |
-| Live helper correction | `f047384` | Integrated | Uses the Desktop profile explicitly for the large live progress demonstration. |
-| Kernel/Arrow upgrade | `1850bcc` | Integrated and locally proven | Delta Kernel 0.26, Arrow 58.3, larger Kernel source batches, offline vendor/license updates, and controlled performance evidence. |
-| Live eager progress | `92c4068` | Integrated and locally/live proven | Native Arrow collection worker, continuous spinner, trustworthy snapshot percentages, indeterminate CDF progress, cancellation and unload guards, and focused R/native tests. |
-| Bounded manifests and lifecycle | `edefcab` | Integrated and locally/live proven | Bounded R snapshot staging, rejected CDF-spooling evidence, installed progress-worker lifecycle gates, current R/Python comparison, package check, coverage baseline, and credential-safe live helper. |
+| Live helper correction | `63e79f7` | Integrated | Uses the Desktop profile explicitly for the large live progress demonstration. |
+| Kernel/Arrow upgrade | `fecb4e5` | Integrated and locally proven | Delta Kernel 0.26, Arrow 58.3, larger Kernel source batches, offline vendor/license updates, and controlled performance evidence. |
+| Live eager progress | `dbb538c` | Integrated and locally/live proven | Native Arrow collection worker, continuous spinner, trustworthy snapshot percentages, indeterminate CDF progress, cancellation and unload guards, and focused R/native tests. |
+| Bounded manifests and lifecycle | `8d1ed40` | Integrated and locally/live proven | Bounded R snapshot staging, rejected CDF-spooling evidence, installed progress-worker lifecycle gates, current R/Python comparison, package check, coverage baseline, and credential-safe live helper. |
 
 Only after every open gate is evidenced on this integration branch is the
 overhaul eligible for a separately authorized release or main-line integration.

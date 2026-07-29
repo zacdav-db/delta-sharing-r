@@ -2,7 +2,7 @@
 
 Date: 2026-07-30
 Branch: `codex/delta-kernel-s7-overhaul`
-Current recorded head: `edefcab` (`Bound snapshot manifests and harden read lifecycle`)
+Current recorded head: `8d1ed40` (`Bound snapshot manifests and harden read lifecycle`)
 Status: the lean R6 snapshot/CDF implementation is committed and live-proven;
 the remaining work is release hardening, portability, lifecycle evidence, and
 targeted R-side performance work.
@@ -225,7 +225,7 @@ version-range JSONs (+ checkpoint bootstrap). Any layout drift = native failure.
 
 ## 8. Progress and performance
 
-Commits `1850bcc` and `92c4068`, plus the current manifest/lifecycle slice,
+Commits `fecb4e5` and `dbb538c`, plus the current manifest/lifecycle slice,
 contain the current performance work:
 
 - Kernel 0.26's configurable source batches changed an 8,388,608-row local read
@@ -276,10 +276,10 @@ planning responsibility should move to Rust. See
 - **R coverage**: the first whole-tree measurement of the lean R6 rewrite is
   70.46%. The historical 91.83% S7 result is superseded; focused current-R6
   tests must raise this to the 90% release gate.
-- **Credential rotation/history cleanup**: commit `f047384` copied the Desktop
-  bearer token into `tools/spin-live.R`. The current tree now reads
-  `~/Desktop/config.share`, but the credential remains in local branch history.
-  Rotate it and clean that commit before any push or external handoff.
+- **Credential rotation**: local integration history was rewritten on
+  2026-07-30 so commit `63e79f7` uses `~/Desktop/config.share` and contains no
+  plaintext credential. Per maintainer instruction, the live credential has
+  not been rotated; rotate it before any push or external handoff.
 - **Release performance gates**: rerun controlled direct, progress, first-batch,
   RSS, backpressure, and cancellation benchmarks on the final candidate.
 - **Optional integrations**: `{duckdb}` tests require the package to be
