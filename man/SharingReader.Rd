@@ -40,8 +40,9 @@ Materialize as an Arrow table (requires \code{{arrow}}).
 \describe{
 \item{\code{batch_size}}{Rows per batch.}
 
-\item{\code{progress}}{Show rows read while materializing. Defaults to
-\code{TRUE} in interactive R sessions.}
+\item{\code{progress}}{Show live rows and, when snapshot statistics are
+complete, an exact percentage. Defaults to \code{TRUE} in interactive R
+sessions.}
 }
 \if{html}{\out{</div>}}
 }
@@ -88,8 +89,9 @@ Materialize as a base data frame.
 \describe{
 \item{\code{batch_size}}{Rows per batch.}
 
-\item{\code{progress}}{Show rows read while materializing. Defaults to
-\code{TRUE} in interactive R sessions.}
+\item{\code{progress}}{Show live rows and, when snapshot statistics are
+complete, an exact percentage. Defaults to \code{TRUE} in interactive R
+sessions.}
 }
 \if{html}{\out{</div>}}
 }

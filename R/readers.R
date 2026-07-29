@@ -16,8 +16,9 @@ SharingReader <- R6::R6Class(
   public = list(
     #' @description Materialize as an Arrow table (requires `{arrow}`).
     #' @param batch_size Rows per batch.
-    #' @param progress Show rows read while materializing. Defaults to
-    #'   `TRUE` in interactive R sessions.
+    #' @param progress Show live rows and, when snapshot statistics are
+    #'   complete, an exact percentage. Defaults to `TRUE` in interactive R
+    #'   sessions.
     #' @return An `arrow::Table`.
     to_arrow = function(
       batch_size = DEFAULT_BATCH_SIZE,
@@ -42,8 +43,9 @@ SharingReader <- R6::R6Class(
 
     #' @description Materialize as a base data frame.
     #' @param batch_size Rows per batch.
-    #' @param progress Show rows read while materializing. Defaults to
-    #'   `TRUE` in interactive R sessions.
+    #' @param progress Show live rows and, when snapshot statistics are
+    #'   complete, an exact percentage. Defaults to `TRUE` in interactive R
+    #'   sessions.
     #' @return A data frame.
     to_data_frame = function(
       batch_size = DEFAULT_BATCH_SIZE,

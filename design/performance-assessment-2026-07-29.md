@@ -477,3 +477,44 @@ coalescer. It materially reduces R/native crossings and progress callback
 overhead, but it does not animate the CLI spinner while a single synchronous
 Kernel pull is blocked on I/O. Continuous animation remains a distinct
 lifecycle experiment rather than a reason to add a second batching layer.
+
+## Implemented experiment: live eager-read progress
+
+The progress path now moves an already-created Arrow C stream to one native
+worker for eager collection. R polls only atomic row, batch, and completion
+counters every 50 milliseconds, forcing a CLI repaint even when the next
+Kernel batch is still blocked on object-store I/O. When collection completes,
+the worker returns the retained Arrow record batches through the same Arrow C
+Stream ABI. Lazy readers and eager reads with `progress = FALSE` remain on the
+direct path.
+
+For snapshots, the R query layer computes an exact denominator only when every
+returned add has valid `stats.numRecords`. Deletion-vector cardinality is
+subtracted and an exact read limit caps the result. Missing or malformed
+statistics leave the indicator indeterminate. CDF is always indeterminate:
+live `cdf_dv_interop` action statistics implied 4,906 rows while Kernel
+correctly emitted 3,500 changes, so an action-based percentage would be false.
+
+On the 8,388,608-row local table, eight progress-enabled Arrow
+materializations had a 0.2025-second median, compared with 0.7790 seconds for
+the pre-upgrade progress path. The corresponding direct current path had a
+0.1750-second median. The remaining progress cost is bounded polling and one
+in-memory Arrow-stream handoff rather than one R callback and retained
+nanoarrow object per source batch.
+
+The live 250-million-row deletion-vector table validated the visible behavior
+with a 250,000-row exact limit. The spinner continued to repaint while the
+first object was blocked, advanced to 25,000/250,000 after the first file, and
+remained animated during the next blocked pull before completing at exactly
+250,000 rows. Alternating remote samples were dominated by network variance:
+the worker path took 12.5 and 14.3 seconds, while the direct current path took
+17.3 and 11.8 seconds.
+
+Cancellation never calls R from the worker. Dropping a job sets an atomic
+cancel flag and returns immediately; a blocked Kernel pull observes it once
+I/O returns. Normal completion joins the worker before returning its collected
+stream. If cancellation must detach a blocked worker, the native library is
+pinned for the rest of the R process rather than risking execution through an
+unloaded DLL. Native tests cover a gated no-batch interval, successful joined
+handoff, repeated finish, cancellation, detached-worker pinning, panic
+containment, and active-job completion.

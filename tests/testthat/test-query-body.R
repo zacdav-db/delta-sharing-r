@@ -43,3 +43,52 @@ test_that("structured predicate hints are encoded as one JSON string", {
 test_that("a page token is included when present", {
   expect_equal(query_body(list(), "tok")$pageToken, "tok")
 })
+
+test_that("snapshot progress totals account for deletion vectors and limits", {
+  files <- list(
+    list(
+      deltaSingleAction = list(
+        add = list(stats = '{"numRecords":10}')
+      )
+    ),
+    list(
+      deltaSingleAction = list(
+        add = list(
+          stats = '{"numRecords":7}',
+          deletionVector = list(cardinality = 2)
+        )
+      )
+    )
+  )
+
+  expect_equal(snapshot_total_rows(files, "delta"), 15)
+  expect_equal(snapshot_total_rows(files, "delta", limit = 12), 12)
+})
+
+test_that("parquet snapshot progress uses file statistics", {
+  files <- list(
+    list(url = "https://example.test/a", stats = '{"numRecords":4}'),
+    list(url = "https://example.test/b", stats = list(numRecords = 6))
+  )
+
+  expect_equal(snapshot_total_rows(files, "parquet"), 10)
+})
+
+test_that("snapshot progress stays indeterminate without trustworthy stats", {
+  expect_null(snapshot_total_rows(list(list()), "delta"))
+  expect_null(snapshot_total_rows(
+    list(list(deltaSingleAction = list(
+      add = list(stats = '{"numRecords":"unknown"}')
+    ))),
+    "delta"
+  ))
+  expect_null(snapshot_total_rows(
+    list(list(deltaSingleAction = list(
+      add = list(
+        stats = '{"numRecords":3}',
+        deletionVector = list(cardinality = 4)
+      )
+    ))),
+    "delta"
+  ))
+})

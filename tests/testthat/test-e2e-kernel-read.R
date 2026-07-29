@@ -26,12 +26,15 @@ test_that("kernel reads a local table to a data frame", {
 
 test_that("data-frame materialization can report read progress", {
   withr::local_options(list(cli.progress_show_after = Inf))
+  expect_equal(native_collect_active(), 0)
   stream <- native_test_stream(batches = 3L, rows_per_batch = 2L)
+  attr(stream, "delta_sharing_progress") <- list(total_rows = 6)
 
   df <- sharing_stream_to_data_frame(stream, progress = TRUE)
 
   expect_s3_class(df, "data.frame")
   expect_equal(nrow(df), 6L)
+  expect_equal(native_collect_active(), 0)
 })
 
 test_that("read progress preserves typed stream failures", {
@@ -45,6 +48,23 @@ test_that("read progress preserves typed stream failures", {
   expect_error(
     sharing_stream_to_data_frame(stream, progress = TRUE),
     class = "delta_sharing_kernel_error"
+  )
+})
+
+test_that("progress polling translates user interrupts", {
+  stream <- native_test_stream()
+  interrupt <- structure(
+    list(message = "simulated user interrupt"),
+    class = c("interrupt", "condition")
+  )
+
+  expect_error(
+    with_native_stream_conditions(
+      signalCondition(interrupt),
+      operation = "read_arrow_stream",
+      stream = stream
+    ),
+    class = "delta_sharing_cancelled"
   )
 })
 
