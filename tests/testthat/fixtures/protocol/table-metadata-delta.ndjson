@@ -1,2 +1,0 @@
-{"protocol":{"deltaProtocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["deletionVectors","columnMapping"],"writerFeatures":["deletionVectors","columnMapping"]}}}
-{"metaData":{"version":42,"size":2048,"numFiles":3,"deltaMetadata":{"id":"table-id","name":"orders","format":{"provider":"parquet","options":{}},"schemaString":"{\"type\":\"struct\",\"fields\":[]}","partitionColumns":[],"configuration":{},"createdTime":1700000000000}}}

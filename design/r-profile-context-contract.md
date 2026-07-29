@@ -1,7 +1,12 @@
 # R profile and client-context contract
 
-Status: implemented Phase 2 foundation
+Status: superseded by `design/HANDOVER.md` and the current R6 implementation
 Branch owner: `codex/r-profile-context-vnext`
+
+This document records an earlier S7 implementation phase. Its profile
+validation rules are not the current contract and must not be used to restore
+aliases, eager credential policy, or validation that exceeds the Python
+connector's structural parsing level.
 
 This contract records the clean-vNext R boundary for profile configuration and
 client state. It adds no compatibility aliases, migration behavior, or

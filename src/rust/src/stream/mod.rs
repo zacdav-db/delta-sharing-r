@@ -33,6 +33,7 @@ struct StreamMetrics {
     emitted_batches: AtomicU64,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct StreamMetricsSnapshot {
     pub(crate) active_streams: u64,
@@ -41,6 +42,7 @@ pub(crate) struct StreamMetricsSnapshot {
 }
 
 impl StreamMetrics {
+    #[cfg(test)]
     fn snapshot(&self) -> StreamMetricsSnapshot {
         StreamMetricsSnapshot {
             active_streams: self.active_streams.load(Ordering::Acquire),
@@ -48,10 +50,6 @@ impl StreamMetrics {
             emitted_batches: self.emitted_batches.load(Ordering::Acquire),
         }
     }
-}
-
-pub(crate) fn global_metrics_snapshot() -> StreamMetricsSnapshot {
-    GLOBAL_METRICS.snapshot()
 }
 
 #[derive(Debug, Clone, Default)]

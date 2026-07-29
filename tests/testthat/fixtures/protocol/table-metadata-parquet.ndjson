@@ -1,2 +1,0 @@
-{"protocol":{"minReaderVersion":1}}
-{"metaData":{"id":"table-id","name":"orders","format":{"provider":"parquet"},"schemaString":"{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"long\",\"nullable\":false,\"metadata\":{}}]}","partitionColumns":[],"configuration":{"delta.enableChangeDataFeed":"true"}}}

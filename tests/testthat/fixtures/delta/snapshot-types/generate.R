@@ -1,4 +1,4 @@
-if (!file.exists("DESCRIPTION")) {
+if (!fs::file_exists("DESCRIPTION")) {
   stop("Run this generator from the package root.", call. = FALSE)
 }
 if (!requireNamespace("arrow", quietly = TRUE)) {
@@ -8,15 +8,15 @@ if (!requireNamespace("jsonlite", quietly = TRUE)) {
   stop("The fixture generator requires the `jsonlite` package.", call. = FALSE)
 }
 
-fixture_dir <- file.path(
+fixture_dir <- fs::path(
   "tests",
   "testthat",
   "fixtures",
   "delta",
   "snapshot-types"
 )
-log_dir <- file.path(fixture_dir, "_delta_log")
-dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
+log_dir <- fs::path(fixture_dir, "_delta_log")
+fs::dir_create(log_dir)
 
 empty_object <- structure(list(), names = character())
 fields <- list(
@@ -156,7 +156,7 @@ table <- arrow::Table$create(
   )
 )
 
-data_path <- file.path(fixture_dir, "part-00000.parquet")
+data_path <- fs::path(fixture_dir, "part-00000.parquet")
 arrow::write_parquet(
   table,
   data_path,
@@ -173,33 +173,36 @@ schema_string <- jsonlite::toJSON(
 )
 actions <- list(
   list(protocol = list(minReaderVersion = 1L, minWriterVersion = 2L)),
-  list(metaData = list(
-    id = "delta-sharing-r-snapshot-conformance-types",
-    format = list(provider = "parquet", options = empty_object),
-    schemaString = schema_string,
-    partitionColumns = list(),
-    configuration = empty_object,
-    createdTime = 0
-  )),
-  list(add = list(
-    path = basename(data_path),
-    partitionValues = empty_object,
-    size = unname(file.info(data_path)$size),
-    modificationTime = 0,
-    dataChange = TRUE
-  ))
+  list(
+    metaData = list(
+      id = "delta-sharing-r-snapshot-conformance-types",
+      format = list(provider = "parquet", options = empty_object),
+      schemaString = schema_string,
+      partitionColumns = list(),
+      configuration = empty_object,
+      createdTime = 0
+    )
+  ),
+  list(
+    add = list(
+      path = fs::path_file(data_path),
+      partitionValues = empty_object,
+      size = as.double(fs::file_size(data_path)),
+      modificationTime = 0,
+      dataChange = TRUE
+    )
+  )
 )
-lines <- vapply(
+lines <- purrr::map_chr(
   actions,
   jsonlite::toJSON,
-  character(1),
   auto_unbox = TRUE,
   null = "null",
   digits = NA
 )
 writeLines(
   lines,
-  file.path(log_dir, "00000000000000000000.json"),
+  fs::path(log_dir, "00000000000000000000.json"),
   useBytes = TRUE
 )
 

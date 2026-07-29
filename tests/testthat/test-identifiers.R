@@ -1,85 +1,72 @@
-test_that("compact identifiers parse exactly three parts", {
-  id <- table_identifier("sales.default.orders")
-
-  expect_true(S7::S7_inherits(id, SharingTableIdentifier))
-  expect_identical(id@share, "sales")
-  expect_identical(id@schema, "default")
-  expect_identical(id@table, "orders")
-
-  expect_error(
-    table_identifier("sales.orders"),
-    "exactly three",
-    class = "delta_sharing_validation_error"
-  )
-  expect_error(
-    table_identifier("sales.default.events.v2"),
-    "Supply",
-    class = "delta_sharing_validation_error"
-  )
+test_that("parses a compact three-part name", {
+  id <- sharing_table_identifier("sales.default.orders")
+  expect_equal(id$share, "sales")
+  expect_equal(id$schema, "default")
+  expect_equal(id$table, "orders")
 })
 
-test_that("structured identifiers preserve names containing dots", {
-  id <- table_identifier("sales.eu", "default", "events.v2")
-
-  expect_identical(id@share, "sales.eu")
-  expect_identical(id@schema, "default")
-  expect_identical(id@table, "events.v2")
-})
-
-test_that("identifier components are non-empty scalar strings", {
-  expect_error(
-    table_identifier("", "default", "orders"),
-    "`share`",
-    class = "delta_sharing_validation_error"
-  )
-  expect_error(
-    table_identifier(c("a", "b"), "default", "orders"),
-    "`share`",
-    class = "delta_sharing_validation_error"
-  )
-  expect_error(
-    table_identifier("sales", NA_character_, "orders"),
-    "`schema`",
-    class = "delta_sharing_validation_error"
-  )
-})
-
-test_that("sharing_table supports compact and structured identifiers", {
-  client <- test_client()
-  compact <- sharing_table(client, "sales.default.orders")
-  structured <- sharing_table(
-    client,
-    share = "sales.eu",
+test_that("explicit components preserve dots in names", {
+  id <- sharing_table_identifier(
+    share = "sales",
     schema = "default",
-    table = "events.v2"
+    name = "orders.v2"
   )
+  expect_equal(id$share, "sales")
+  expect_equal(id$schema, "default")
+  expect_equal(id$table, "orders.v2")
+})
 
-  expect_identical(table_identifier(compact)@table, "orders")
-  expect_identical(table_identifier(structured)@share, "sales.eu")
-  expect_identical(table_identifier(structured)@table, "events.v2")
-
+test_that("rejects malformed compact names", {
   expect_error(
-    sharing_table(client),
-    "exactly one",
-    class = "delta_sharing_validation_error"
-  )
-  expect_error(
-    sharing_table(
-      client,
-      "sales.default.orders",
-      share = "sales",
-      schema = "default",
-      table = "orders"
-    ),
-    "exactly one",
+    sharing_table_identifier("only.two"),
     class = "delta_sharing_validation_error"
   )
 })
 
-test_that("table_identifier dispatch is introspectable", {
-  table <- test_table()
+test_that("changes validation accepts a version range", {
+  spec <- sharing_changes_validate(120, 125, NULL, NULL, NULL, "auto")
+  expect_equal(spec$starting_version, 120)
+  expect_equal(spec$ending_version, 125)
+})
 
-  expect_true(is.function(S7::method(table_identifier, SharingTable)))
-  expect_identical(table_identifier(table), table@identifier)
-  expect_identical(table_identifier(table@identifier), table@identifier)
+test_that("changes validation accepts protocol-native timestamp strings", {
+  spec <- sharing_changes_validate(
+    NULL,
+    NULL,
+    "2024-01-01T00:00:00.123Z",
+    "2024-01-02T00:00:00.123Z",
+    NULL,
+    "auto"
+  )
+
+  expect_equal(spec$starting_timestamp, "2024-01-01T00:00:00.123Z")
+  expect_equal(spec$ending_timestamp, "2024-01-02T00:00:00.123Z")
+})
+
+test_that("changes validation rejects mixed bounds", {
+  expect_error(
+    sharing_changes_validate(
+      1,
+      NULL,
+      as.POSIXct("2020-01-01"),
+      NULL,
+      NULL,
+      "auto"
+    ),
+    class = "delta_sharing_validation_error"
+  )
+})
+
+test_that("changes validation requires a starting bound", {
+  expect_error(
+    sharing_changes_validate(NULL, NULL, NULL, NULL, NULL, "auto"),
+    class = "delta_sharing_validation_error"
+  )
+})
+
+test_that("changes validation rejects an ending version before its start", {
+  expect_error(
+    sharing_changes_validate(125, 120, NULL, NULL, NULL, "auto"),
+    class = "delta_sharing_validation_error"
+  )
 })

@@ -47,38 +47,8 @@ impl SnapshotReadOptions {
         batch_size: usize,
     ) -> Result<Self, String> {
         validate_table_location(&table_location)?;
-
-        if !(1..=MAX_BATCH_SIZE).contains(&batch_size) {
-            return Err(format!(
-                "`batch_size` must be between 1 and {MAX_BATCH_SIZE}"
-            ));
-        }
-
-        if let Some(columns) = columns.as_ref() {
-            if columns.is_empty() {
-                return Err("`columns` must be NULL or contain at least one name".to_string());
-            }
-            if columns.len() > MAX_PROJECTION_COLUMNS {
-                return Err(format!(
-                    "`columns` must contain at most {MAX_PROJECTION_COLUMNS} names"
-                ));
-            }
-
-            let mut seen = HashSet::with_capacity(columns.len());
-            for column in columns {
-                if column.is_empty() {
-                    return Err("`columns` must not contain empty names".to_string());
-                }
-                if column.as_bytes().contains(&0) {
-                    return Err("`columns` must not contain NUL bytes".to_string());
-                }
-                if !seen.insert(column.to_lowercase()) {
-                    return Err(format!(
-                        "`columns` contains the duplicate Delta column name `{column}`"
-                    ));
-                }
-            }
-        }
+        validate_batch_size(batch_size)?;
+        validate_projection(columns.as_ref())?;
 
         Ok(Self {
             table_location,
@@ -264,7 +234,7 @@ pub(crate) fn cdf_reader(
             options.start_version,
             Some(options.end_version),
         )
-        .map_err(|_| "Delta Kernel CDF preparation failed".to_string())?,
+        .map_err(|e| format!("Delta Kernel CDF preparation failed: {e}"))?,
     );
 
     let output_logical_schema = match options.columns.as_ref() {
@@ -479,14 +449,6 @@ impl RecordBatchReader for KernelRecordBatchReader {
     }
 }
 
-pub(crate) fn smoke() -> Result<&'static str, String> {
-    let store = Arc::new(delta_kernel::object_store::memory::InMemory::new());
-    let _engine = DefaultEngineBuilder::new(store).build();
-    let _snapshot_builder = Snapshot::builder_for("memory:///delta-sharing-r-smoke");
-
-    Ok("Delta Kernel default engine and snapshot builder constructed")
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -610,8 +572,11 @@ mod tests {
 
     #[test]
     fn pinned_kernel_default_engine_constructs() {
-        let message = smoke().expect("kernel/default-engine smoke path must construct");
-        assert!(message.contains("Delta Kernel"));
+        // Guards against pre-1.0 kernel API drift in the pinned version: the
+        // default engine builder and snapshot builder must still construct.
+        let store = Arc::new(delta_kernel::object_store::memory::InMemory::new());
+        let _engine = DefaultEngineBuilder::new(store).build();
+        let _snapshot_builder = Snapshot::builder_for("memory:///delta-sharing-r-smoke");
     }
 
     #[test]

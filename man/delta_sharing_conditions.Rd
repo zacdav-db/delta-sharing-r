@@ -4,13 +4,10 @@
 \alias{delta_sharing_conditions}
 \title{Delta Sharing conditions}
 \description{
-All errors raised by the public API inherit from
-\code{delta_sharing_error}. More specific subclasses identify validation,
-authentication, HTTP, protocol, kernel, unsupported-feature, cancellation,
-and native-boundary failures.
-}
-\details{
-Conditions may carry only safe diagnostic fields. Credentials, request
-bodies, signed URLs, and secret material are never attached.
+All errors raised by the public API inherit from \code{delta_sharing_error}. More
+specific subclasses identify validation, authentication, HTTP, protocol,
+kernel, unsupported-feature, and cancellation failures. Diagnostic fields
+(such as \code{operation} or \code{status}) are attached as condition data; secrets
+are never included.
 }
 \keyword{internal}

@@ -1,6 +1,0 @@
-{
-  "shareCredentialsVersion": 2,
-  "type": "bearer_token",
-  "endpoint": "https://sharing.example.test/api/",
-  "bearerToken": "fixture-v2-bearer-token"
-}

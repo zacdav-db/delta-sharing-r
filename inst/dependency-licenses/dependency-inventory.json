@@ -14,7 +14,21 @@
     {
       "distribution": "external R package; code is not bundled",
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
-      "name": "S7",
+      "name": "R6",
+      "relationship": "Imports",
+      "requirement": null
+    },
+    {
+      "distribution": "external R package; code is not bundled",
+      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
+      "name": "cli",
+      "relationship": "Imports",
+      "requirement": null
+    },
+    {
+      "distribution": "external R package; code is not bundled",
+      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
+      "name": "fs",
       "relationship": "Imports",
       "requirement": null
     },
@@ -49,8 +63,22 @@
     {
       "distribution": "external R package; code is not bundled",
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
-      "name": "DBI",
-      "relationship": "Suggests",
+      "name": "purrr",
+      "relationship": "Imports",
+      "requirement": null
+    },
+    {
+      "distribution": "external R package; code is not bundled",
+      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
+      "name": "rlang",
+      "relationship": "Imports",
+      "requirement": null
+    },
+    {
+      "distribution": "external R package; code is not bundled",
+      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
+      "name": "tibble",
+      "relationship": "Imports",
       "requirement": null
     },
     {
@@ -63,28 +91,7 @@
     {
       "distribution": "external R package; code is not bundled",
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
-      "name": "covr",
-      "relationship": "Suggests",
-      "requirement": null
-    },
-    {
-      "distribution": "external R package; code is not bundled",
-      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
-      "name": "duckdb",
-      "relationship": "Suggests",
-      "requirement": ">= 1.5.0"
-    },
-    {
-      "distribution": "external R package; code is not bundled",
-      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
       "name": "knitr",
-      "relationship": "Suggests",
-      "requirement": null
-    },
-    {
-      "distribution": "external R package; code is not bundled",
-      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
-      "name": "processx",
       "relationship": "Suggests",
       "requirement": null
     },
@@ -101,6 +108,13 @@
       "name": "testthat",
       "relationship": "Suggests",
       "requirement": ">= 3.0.0"
+    },
+    {
+      "distribution": "external R package; code is not bundled",
+      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
+      "name": "withr",
+      "relationship": "Suggests",
+      "requirement": null
     },
     {
       "distribution": "external R package; code is not bundled",
@@ -126,31 +140,17 @@
     {
       "distribution": "external R package; code is not bundled",
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
-      "name": "DBI",
-      "relationship": "Config/Needs/duckdb",
-      "requirement": null
-    },
-    {
-      "distribution": "external R package; code is not bundled",
-      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
-      "name": "arrow",
-      "relationship": "Config/Needs/duckdb",
-      "requirement": null
-    },
-    {
-      "distribution": "external R package; code is not bundled",
-      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
-      "name": "duckdb",
-      "relationship": "Config/Needs/duckdb",
+      "name": "pkgdown",
+      "relationship": "Config/Needs/website",
       "requirement": null
     }
   ],
   "rust": {
     "cargo_lock_sha256": "185f48a34aac0bc0d2bf3c538ad4c555a82d8e0330c7f763202dbad2127633b1",
     "license_bundle": {
-      "bytes": 45900,
+      "bytes": 45916,
       "path": "rust-license-texts.tar.xz",
-      "sha256": "3b3648f0ebfa5dac41e948612000242ed829a1f92f426e9462603ab8d9b099d9"
+      "sha256": "213f3c7af6f1cc4a7834520f59bb2527bc604f72f397d8532b641477bed98161"
     },
     "locked_sibling_override_package_count": 1,
     "package_count_requiring_override": 14,
@@ -1710,9 +1710,9 @@
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
-            "bundle_member": "rust-license-texts/ed5faa4fe952f6318c55bac0a8be9d500eb65d389ea589c85989b54065d38985",
+            "bundle_member": "rust-license-texts/a7f56991ca639d254ffdf4db96640813ba8e5ef3a55012cd12a7ece3a7e2953d",
             "path": "LICENSE",
-            "sha256": "ed5faa4fe952f6318c55bac0a8be9d500eb65d389ea589c85989b54065d38985",
+            "sha256": "a7f56991ca639d254ffdf4db96640813ba8e5ef3a55012cd12a7ece3a7e2953d",
             "source": "R-package-license"
           }
         ],

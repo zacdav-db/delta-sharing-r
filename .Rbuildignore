@@ -1,6 +1,8 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
 ^\.covrignore$
+^\.claude$
+^\.isaac$
 ^\.github$
 ^\.git$
 ^\.gitattributes$
@@ -16,3 +18,7 @@
 ^src/rust/target$
 ^src/vendor$
 ^src/.*\.(o|so)$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^air\.toml$

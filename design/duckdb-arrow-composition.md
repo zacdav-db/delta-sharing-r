@@ -8,41 +8,39 @@ Status: implemented and locally proven against `{duckdb}` 1.5.5,
 DuckDB's R function
 [`duckdb_register_arrow()`](https://r.duckdb.org/reference/duckdb_register_arrow.html)
 expects an Arrow-scannable object. It does not accept the
-`nanoarrow_array_stream` returned by `read_arrow_stream()` directly. The
-supported adapter object is an `arrow::RecordBatchReader` created with
-[`as_record_batch_reader()`](https://arrow.apache.org/docs/r/reference/as_record_batch_reader.html):
+`nanoarrow_array_stream` returned by `to_arrow_stream()` directly. The package
+therefore exposes the supported adapter object directly:
 
 ```r
-stream <- read_arrow_stream(read)
-reader <- arrow::as_record_batch_reader(stream)
+reader <- table$snapshot()$to_arrow_reader()
 ```
 
-`as_record_batch_reader()` imports the Arrow C Stream without an IPC or
-R-vector round trip. Import transfers ownership: after the call, the original
-`nanoarrow_array_stream` pointer is invalid and must not be consumed or
-released independently. The reader is the object registered with DuckDB:
+`to_arrow_reader()` imports the Arrow C Stream without an IPC or R-vector round
+trip. Import transfers ownership to the returned `arrow::RecordBatchReader`,
+which is the object registered with DuckDB:
 
 ```r
-con <- DBI::dbConnect(
-  duckdb::duckdb(shared_home = FALSE),
-  dbdir = ":memory:"
-)
-on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-on.exit(try(reader$Close(), silent = TRUE), add = TRUE)
+result <- local({
+  reader <- table$snapshot()$to_arrow_reader()
+  on.exit(try(reader$Close(), silent = TRUE), add = TRUE)
 
-duckdb::duckdb_register_arrow(con, "shared_rows", reader)
-on.exit(
-  try(duckdb::duckdb_unregister_arrow(con, "shared_rows"), silent = TRUE),
-  add = TRUE
-)
+  con <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
 
-result <- DBI::dbGetQuery(
-  con,
-  "select \"group\", count(*) as n
-     from shared_rows
-    group by \"group\"
-    order by \"group\" nulls last"
-)
+  duckdb::duckdb_register_arrow(con, "shared_rows", reader)
+  on.exit(
+    try(duckdb::duckdb_unregister_arrow(con, "shared_rows"), silent = TRUE),
+    add = TRUE
+  )
+
+  DBI::dbGetQuery(
+    con,
+    "select \"group\", count(*) as n
+       from shared_rows
+      group by \"group\"
+      order by \"group\" nulls last"
+  )
+})
 ```
 
 The data returned by `dbGetQuery()` is only the SQL result. The shared source
@@ -55,9 +53,8 @@ first materialized as an R data frame or an Arrow table.
   one SQL statement that scans it, then unregister it.
 - DuckDB retains the registered reader until `duckdb_unregister_arrow()` or
   connection shutdown. Always unregister explicitly and close the reader.
-- Normal exhaustion and DuckDB query errors both release the exported native
-  Arrow stream. The integration test asserts that native active-stream counts
-  return to their baseline in both cases.
+- Normal exhaustion, `Close()`, and finalization release the exported native
+  Arrow stream.
 - If more than one SQL statement must scan the rows, use the first statement to
   create a DuckDB temporary table. Do not attempt to rescan the one-shot reader.
 - The proof uses one DuckDB worker thread. Parallel DuckDB execution is not a
@@ -65,9 +62,9 @@ first materialized as an R data frame or an Arrow table.
 
 ## Optional dependencies and limitations
 
-`{duckdb}`, `{DBI}`, and `{arrow}` are optional `Suggests`; none is imported by
-the package core. The proof is skipped when any of them is absent. Its dedicated
-dependency set is declared in `Config/Needs/duckdb`.
+`{arrow}` is an optional `Suggests` dependency because `to_arrow_reader()` is a
+public materializer. `{duckdb}` and `{DBI}` are downstream consumers shown in
+the README; they are not package dependencies.
 
 This is downstream composition, not a second delta.sharing materializer and not
 a public DuckDB-specific API. DuckDB projection and filter planning cannot

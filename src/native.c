@@ -476,48 +476,6 @@ static SEXP delta_sharing_stream_from_cdf(
   return R_NilValue;
 }
 
-static SEXP delta_sharing_native_diagnostics(void) {
-  DeltaSharingNativeInfo info;
-  memset(&info, 0, sizeof(info));
-  char error[DELTA_SHARING_ERROR_CAPACITY] = {0};
-
-  const int32_t status =
-      delta_sharing_native_info(&info, error, sizeof(error));
-  if (status != 0) {
-    raise_native_error(status, error);
-  }
-
-  const int count = 10;
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, count));
-  SEXP names = PROTECT(Rf_allocVector(STRSXP, count));
-
-  SET_STRING_ELT(names, 0, Rf_mkChar("abi_version"));
-  SET_STRING_ELT(names, 1, Rf_mkChar("delta_kernel_version"));
-  SET_STRING_ELT(names, 2, Rf_mkChar("arrow_rs_version"));
-  SET_STRING_ELT(names, 3, Rf_mkChar("ffi_backend"));
-  SET_STRING_ELT(names, 4, Rf_mkChar("kernel_smoke_ok"));
-  SET_STRING_ELT(names, 5, Rf_mkChar("kernel_smoke_message"));
-  SET_STRING_ELT(names, 6, Rf_mkChar("active_streams"));
-  SET_STRING_ELT(names, 7, Rf_mkChar("cancelled_streams"));
-  SET_STRING_ELT(names, 8, Rf_mkChar("emitted_batches"));
-  SET_STRING_ELT(names, 9, Rf_mkChar("pending_cleanups"));
-
-  SET_VECTOR_ELT(result, 0, Rf_ScalarInteger((int)info.abi_version));
-  SET_VECTOR_ELT(result, 1, Rf_mkString(info.delta_kernel_version));
-  SET_VECTOR_ELT(result, 2, Rf_mkString(info.arrow_rs_version));
-  SET_VECTOR_ELT(result, 3, Rf_mkString(info.ffi_backend));
-  SET_VECTOR_ELT(result, 4, Rf_ScalarLogical(info.kernel_smoke_ok));
-  SET_VECTOR_ELT(result, 5, Rf_mkString(info.kernel_smoke_message));
-  SET_VECTOR_ELT(result, 6, Rf_ScalarReal((double)info.active_streams));
-  SET_VECTOR_ELT(result, 7, Rf_ScalarReal((double)info.cancelled_streams));
-  SET_VECTOR_ELT(result, 8, Rf_ScalarReal((double)info.emitted_batches));
-  SET_VECTOR_ELT(result, 9, Rf_ScalarReal((double)info.pending_cleanups));
-  Rf_setAttrib(result, R_NamesSymbol, names);
-
-  UNPROTECT(2);
-  return result;
-}
-
 static SEXP delta_sharing_reap_pending_cleanups(void) {
   uint64_t pending = 0;
   char error[DELTA_SHARING_ERROR_CAPACITY] = {0};
@@ -539,9 +497,6 @@ static const R_CallMethodDef call_methods[] = {
     {"delta_sharing_stream_from_cdf",
      (DL_FUNC)&delta_sharing_stream_from_cdf,
      7},
-    {"delta_sharing_native_diagnostics",
-     (DL_FUNC)&delta_sharing_native_diagnostics,
-     0},
     {"delta_sharing_reap_pending_cleanups",
      (DL_FUNC)&delta_sharing_reap_pending_cleanups,
      0},

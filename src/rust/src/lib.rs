@@ -2,6 +2,13 @@
 //!
 //! The exported functions form a small C ABI. They never call the R API,
 //! retain an R object, or unwind across the native boundary.
+//!
+//! `unsafe` here is confined to the unavoidable FFI surface: the `extern "C"`
+//! entry points, reading raw pointers R passes in, and the Arrow C Stream ABI.
+//! Every `unsafe` block is individually scoped and carries a `// SAFETY:` note;
+//! `unsafe_op_in_unsafe_fn` is denied so even the entry points must justify each
+//! pointer operation rather than leaning on the function-level `unsafe`.
+#![deny(unsafe_op_in_unsafe_fn)]
 
 mod kernel;
 mod stream;
@@ -15,30 +22,9 @@ use arrow_array::ffi_stream::FFI_ArrowArrayStream;
 use crate::kernel::adapter::{CdfReadOptions, SnapshotReadOptions};
 use crate::stream::{fixture_stream, FixtureStreamConfig};
 
-const ABI_VERSION: u32 = 3;
 const STATUS_OK: c_int = 0;
 const STATUS_ERROR: c_int = 1;
 const STATUS_PANIC: c_int = 2;
-
-static DELTA_KERNEL_VERSION_C: &[u8] = b"0.22.0\0";
-static ARROW_RS_VERSION_C: &[u8] = b"57.3.0\0";
-static FFI_BACKEND_C: &[u8] = b"registered-c-shim\0";
-static KERNEL_SMOKE_MESSAGE_C: &[u8] =
-    b"Delta Kernel default engine and snapshot builder constructed\0";
-
-#[repr(C)]
-pub struct DeltaSharingNativeInfo {
-    abi_version: u32,
-    kernel_smoke_ok: c_int,
-    delta_kernel_version: *const c_char,
-    arrow_rs_version: *const c_char,
-    ffi_backend: *const c_char,
-    kernel_smoke_message: *const c_char,
-    active_streams: u64,
-    cancelled_streams: u64,
-    emitted_batches: u64,
-    pending_cleanups: u64,
-}
 
 fn write_error(error_buffer: *mut c_char, error_capacity: usize, message: &str) {
     if error_buffer.is_null() || error_capacity == 0 {
@@ -314,46 +300,6 @@ pub unsafe extern "C" fn delta_sharing_native_populate_cdf_stream(
     })
 }
 
-/// Fill dependency and lifecycle diagnostics for the registered C shim.
-///
-/// # Safety
-///
-/// `output` must point to writable storage for `DeltaSharingNativeInfo`.
-/// `error_buffer`, when non-null, must point to `error_capacity` writable bytes.
-#[no_mangle]
-pub unsafe extern "C" fn delta_sharing_native_info(
-    output: *mut DeltaSharingNativeInfo,
-    error_buffer: *mut c_char,
-    error_capacity: usize,
-) -> c_int {
-    ffi_boundary(error_buffer, error_capacity, || {
-        let output =
-            NonNull::new(output).ok_or_else(|| "native info output pointer is NULL".to_string())?;
-        kernel::adapter::smoke()?;
-        let metrics = stream::global_metrics_snapshot();
-
-        let info = DeltaSharingNativeInfo {
-            abi_version: ABI_VERSION,
-            kernel_smoke_ok: 1,
-            delta_kernel_version: DELTA_KERNEL_VERSION_C.as_ptr().cast(),
-            arrow_rs_version: ARROW_RS_VERSION_C.as_ptr().cast(),
-            ffi_backend: FFI_BACKEND_C.as_ptr().cast(),
-            kernel_smoke_message: KERNEL_SMOKE_MESSAGE_C.as_ptr().cast(),
-            active_streams: metrics.active_streams,
-            cancelled_streams: metrics.cancelled_streams,
-            emitted_batches: metrics.emitted_batches,
-            pending_cleanups: stream::pending_cleanup_count(),
-        };
-
-        // SAFETY: `output` was checked non-null and the caller promises the
-        // correctly aligned `DeltaSharingNativeInfo` allocation.
-        unsafe {
-            output.as_ptr().write(info);
-        }
-        Ok(())
-    })
-}
-
 /// Retry capability-checked prepared-log cleanups retained after transient
 /// filesystem failures.
 ///
@@ -472,50 +418,5 @@ mod tests {
         assert!(error_text(&error).contains("panic contained"));
         assert!(!error_text(&error).contains("boundary panic"));
         assert!(!error_text(&error).contains("super-secret"));
-    }
-
-    #[test]
-    fn native_info_reports_pins_and_c_backend() {
-        let mut output = std::mem::MaybeUninit::<DeltaSharingNativeInfo>::uninit();
-        let mut error = [0 as c_char; 256];
-        let status = unsafe {
-            delta_sharing_native_info(output.as_mut_ptr(), error.as_mut_ptr(), error.len())
-        };
-        assert_eq!(status, STATUS_OK, "{}", error_text(&error));
-
-        // SAFETY: a successful call initialized the full output structure.
-        let info = unsafe { output.assume_init() };
-        assert_eq!(info.abi_version, ABI_VERSION);
-        assert_eq!(info.kernel_smoke_ok, 1);
-        // SAFETY: diagnostic string pointers refer to static NUL-terminated data.
-        assert_eq!(
-            unsafe { CStr::from_ptr(info.delta_kernel_version) }
-                .to_str()
-                .unwrap(),
-            "0.22.0"
-        );
-        assert_eq!(
-            unsafe { CStr::from_ptr(info.arrow_rs_version) }
-                .to_str()
-                .unwrap(),
-            "57.3.0"
-        );
-        assert_eq!(
-            unsafe { CStr::from_ptr(info.ffi_backend) }
-                .to_str()
-                .unwrap(),
-            "registered-c-shim"
-        );
-    }
-
-    #[test]
-    fn native_info_rejects_null_output() {
-        let mut error = [0 as c_char; 128];
-        let status = unsafe {
-            delta_sharing_native_info(std::ptr::null_mut(), error.as_mut_ptr(), error.len())
-        };
-
-        assert_eq!(status, STATUS_ERROR);
-        assert!(error_text(&error).contains("NULL"));
     }
 }

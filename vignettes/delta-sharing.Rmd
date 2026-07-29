@@ -1,0 +1,141 @@
+---
+title: "Delta Sharing"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Delta Sharing}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+`delta.sharing` is an R6 client for [Delta Sharing](https://delta.io/sharing/).
+R manages profiles, authentication, the control plane, and query planning;
+snapshot and change data feed row scans are read by Delta Kernel and returned
+through an Arrow C Stream.
+
+The user-facing model is deliberately small and follows a staged shape:
+
+1. create a client from a standard Delta Sharing profile;
+2. get a reusable table handle;
+3. configure a snapshot or change data feed read; and
+4. materialize it as an Arrow stream, an Arrow table, or a data frame.
+
+## Create a client
+
+```{r, eval = FALSE}
+library(delta.sharing)
+
+client <- sharing_client("~/config.share")
+```
+
+The profile may be a path to a `.share` file, a parsed list, or an inline JSON
+string. Profile versions 1 and 2 are supported, including bearer tokens, basic
+auth, OAuth client credentials, and private-key JWT client assertions.
+Construction is offline: it parses configuration but makes no request and
+exchanges no token. Token exchange, caching, and refresh are handled by `httr2`
+on the first authenticated request.
+
+## Discover data
+
+```{r, eval = FALSE}
+client$list_shares()
+client$list_schemas()
+client$list_tables()
+```
+
+Discovery follows every page and returns tibbles. Supply `share` or both
+`share` and `schema` only when you want to narrow the result.
+
+## Inspect a table
+
+A table handle is cheap and reusable. Metadata queries do not scan rows.
+
+```{r, eval = FALSE}
+orders <- client$table("sales.default.orders")
+
+orders$version()
+orders$protocol()
+orders$metadata()
+orders$schema()
+```
+
+Use explicit components when a name contains a dot:
+
+```{r, eval = FALSE}
+events <- client$table(
+  share = "product",
+  schema = "default",
+  name = "events.v2"
+)
+```
+
+## Read a snapshot
+
+Query options live on `snapshot()`; the returned object exposes materializers.
+
+```{r, eval = FALSE}
+snapshot <- orders$snapshot(
+  columns = c("order_id", "amount"),
+  limit = 1000
+)
+
+# Lazy Arrow C stream (use when the result may not fit in memory).
+stream <- snapshot$to_arrow_stream(batch_size = 65536L)
+
+# Lazy Arrow reader for consumers such as DuckDB.
+reader <- snapshot$to_arrow_reader()
+reader$Close()
+
+# Eager adapters over the same stream path.
+df <- snapshot$to_data_frame()
+tbl <- snapshot$to_arrow() # requires the optional {arrow} package
+```
+
+Read a specific version or point in time:
+
+```{r, eval = FALSE}
+orders$snapshot(version = 42)$to_data_frame()
+orders$snapshot(timestamp = as.POSIXct("2024-01-01", tz = "UTC"))$to_data_frame()
+orders$snapshot(timestamp = "2024-01-01T00:00:00Z")$to_data_frame()
+```
+
+`limit` is enforced exactly by the Kernel scan. A `predicate` is a best-effort
+server hint, not an exact row filter.
+
+Predicates use ordinary nested R lists. The package serializes the list to the
+JSON-string wire field required by Delta Sharing:
+
+```{r, eval = FALSE}
+active_orders <- list(
+  op = "equal",
+  children = list(
+    list(op = "column", name = "is_active", valueType = "bool"),
+    list(op = "literal", value = "true", valueType = "bool")
+  )
+)
+orders$snapshot(predicate = active_orders)$to_data_frame()
+```
+
+## Read a change data feed
+
+```{r, eval = FALSE}
+orders$changes(starting_version = 120, ending_version = 125)$to_data_frame()
+orders$changes(
+  starting_timestamp = "2024-01-01T00:00:00Z",
+  ending_timestamp = "2024-01-02T00:00:00Z"
+)$to_data_frame()
+```
+
+## How reads work
+
+For both Delta- and Parquet-format responses, R fetches the Query Table
+response and writes a private local Delta log that Delta Kernel reads; Kernel
+then fetches data directly from the pre-signed URLs. There is no second
+downloader, and both formats flow through the same Kernel Arrow stream.

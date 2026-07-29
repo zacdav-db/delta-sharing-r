@@ -1,0 +1,26 @@
+url: https://zacdav-db.github.io/delta-sharing-r
+
+template:
+  bootstrap: 5
+
+reference:
+- title: Client
+  desc: Create a client and discover shared data.
+  contents:
+  - sharing_client
+  - SharingClient
+- title: Tables
+  desc: Reference a shared table and inspect its metadata.
+  contents:
+  - SharingTable
+- title: Reads
+  desc: Configure and materialize snapshot and change data feed reads.
+  contents:
+  - SharingSnapshot
+  - SharingChanges
+
+articles:
+- title: Get started
+  navbar: ~
+  contents:
+  - delta-sharing

@@ -1,4 +1,4 @@
-if (!file.exists("DESCRIPTION")) {
+if (!fs::file_exists("DESCRIPTION")) {
   stop("Run this generator from the package root.", call. = FALSE)
 }
 if (!requireNamespace("arrow", quietly = TRUE)) {
@@ -11,15 +11,15 @@ if (!requireNamespace("openssl", quietly = TRUE)) {
   stop("The fixture generator requires the `openssl` package.", call. = FALSE)
 }
 
-fixture_dir <- file.path(
+fixture_dir <- fs::path(
   "tests",
   "testthat",
   "fixtures",
   "delta",
   "logical-types"
 )
-log_dir <- file.path(fixture_dir, "_delta_log")
-dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
+log_dir <- fs::path(fixture_dir, "_delta_log")
+fs::dir_create(log_dir)
 
 empty_object <- structure(list(), names = character())
 mapping_metadata <- function(id, physical_name) {
@@ -28,11 +28,7 @@ mapping_metadata <- function(id, physical_name) {
     "delta.columnMapping.physicalName" = physical_name
   )
 }
-mapped_field <- function(name,
-                         type,
-                         nullable,
-                         id,
-                         physical_name) {
+mapped_field <- function(name, type, nullable, id, physical_name) {
   list(
     name = name,
     type = type,
@@ -112,7 +108,8 @@ observed_at <- as.POSIXct(
     "2025-12-31 23:59:59"
   ),
   tz = "UTC"
-) + c(0.123456, 0.654321, 0.999999)
+) +
+  c(0.123456, 0.654321, 0.999999)
 local_at <- as.POSIXct(
   c(
     "2024-03-01 01:02:03",
@@ -120,7 +117,8 @@ local_at <- as.POSIXct(
     "2025-02-28 20:21:22"
   ),
   tz = "UTC"
-) + c(0.000001, 0.100001, 0.200001)
+) +
+  c(0.000001, 0.100001, 0.200001)
 
 metrics <- arrow::Array$create(
   list(
@@ -193,7 +191,7 @@ table <- arrow::Table$create(
   `phys-profile` = profile
 )
 
-data_path <- file.path(fixture_dir, "part-00000.parquet")
+data_path <- fs::path(fixture_dir, "part-00000.parquet")
 arrow::write_parquet(
   table,
   data_path,
@@ -209,57 +207,61 @@ schema_string <- jsonlite::toJSON(
   digits = NA
 )
 actions <- list(
-  list(protocol = list(
-    minReaderVersion = 3L,
-    minWriterVersion = 7L,
-    readerFeatures = list("columnMapping", "timestampNtz"),
-    writerFeatures = list("columnMapping", "timestampNtz")
-  )),
-  list(metaData = list(
-    id = "delta-sharing-r-snapshot-logical-types",
-    format = list(provider = "parquet", options = empty_object),
-    schemaString = schema_string,
-    partitionColumns = list(),
-    configuration = list(
-      "delta.columnMapping.mode" = "name",
-      "delta.columnMapping.maxColumnId" = "13"
-    ),
-    createdTime = 0
-  )),
-  list(add = list(
-    path = basename(data_path),
-    partitionValues = empty_object,
-    size = unname(file.info(data_path)$size),
-    modificationTime = 0,
-    dataChange = TRUE
-  ))
+  list(
+    protocol = list(
+      minReaderVersion = 3L,
+      minWriterVersion = 7L,
+      readerFeatures = list("columnMapping", "timestampNtz"),
+      writerFeatures = list("columnMapping", "timestampNtz")
+    )
+  ),
+  list(
+    metaData = list(
+      id = "delta-sharing-r-snapshot-logical-types",
+      format = list(provider = "parquet", options = empty_object),
+      schemaString = schema_string,
+      partitionColumns = list(),
+      configuration = list(
+        "delta.columnMapping.mode" = "name",
+        "delta.columnMapping.maxColumnId" = "13"
+      ),
+      createdTime = 0
+    )
+  ),
+  list(
+    add = list(
+      path = fs::path_file(data_path),
+      partitionValues = empty_object,
+      size = as.double(fs::file_size(data_path)),
+      modificationTime = 0,
+      dataChange = TRUE
+    )
+  )
 )
-lines <- vapply(
+lines <- purrr::map_chr(
   actions,
   jsonlite::toJSON,
-  character(1),
   auto_unbox = TRUE,
   null = "null",
   digits = NA
 )
-log_path <- file.path(log_dir, "00000000000000000000.json")
+log_path <- fs::path(log_dir, "00000000000000000000.json")
 writeLines(lines, log_path, useBytes = TRUE)
 
 hash_paths <- c(
   "part-00000.parquet",
-  file.path("_delta_log", basename(log_path))
+  fs::path("_delta_log", fs::path_file(log_path))
 )
-hashes <- vapply(
-  file.path(fixture_dir, hash_paths),
+hashes <- purrr::map_chr(
+  fs::path(fixture_dir, hash_paths),
   function(path) {
-    bytes <- readBin(path, what = "raw", n = file.info(path)$size)
+    bytes <- readBin(path, what = "raw", n = as.double(fs::file_size(path)))
     unclass(as.character(openssl::sha256(bytes)))
-  },
-  character(1)
+  }
 )
 writeLines(
   paste0(unname(hashes), "  ", hash_paths),
-  file.path(fixture_dir, "SHA256SUMS"),
+  fs::path(fixture_dir, "SHA256SUMS"),
   useBytes = TRUE
 )
 

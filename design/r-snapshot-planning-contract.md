@@ -44,10 +44,9 @@ lags the provider wire model. Projection is not a Query Table body field. It
 is a Kernel scan option. A validated limit through the protocol's signed
 32-bit ceiling is sent unchanged as the best-effort `limitHint`. A larger
 supported limit is omitted from the request rather than clamped, because
-clamping could make the server return too few files. The exact limit (through
-the descriptor's 2^53 ceiling) is always retained for the Arrow/Kernel
-boundary and diagnostics report only the hint actually sent. The deprecated SQL
-`predicateHints` field is not generated.
+clamping could make the server return too few files. The exact limit is always
+retained for the Arrow/Kernel boundary and diagnostics report only the hint
+actually sent. The deprecated SQL `predicateHints` field is not generated.
 
 A returned refresh token is accepted and retained privately for a later
 refresh implementation.

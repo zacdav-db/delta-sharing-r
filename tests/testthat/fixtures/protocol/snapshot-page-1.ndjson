@@ -1,4 +1,0 @@
-{"protocol":{"deltaProtocol":{"minReaderVersion":1,"minWriterVersion":2,"readerFeatures":[],"writerFeatures":[]}}}
-{"metaData":{"version":42,"size":100,"numFiles":2,"deltaMetadata":{"id":"paged-table","name":"orders","description":"Paginated snapshot fixture","format":{"provider":"parquet","options":{}},"schemaString":"{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"long\",\"nullable\":false,\"metadata\":{}}]}","partitionColumns":[],"configuration":{}}}}
-{"file":{"id":"file-a","expirationTimestamp":4102444800000,"deltaSingleAction":{"add":{"path":"https://objects.example.test/a.parquet?sig=page-one-signed-url-secret","partitionValues":{},"size":50,"modificationTime":1700000000000,"dataChange":true,"stats":"{\"numRecords\":1}"}}}}
-{"refreshToken":"refresh-token-private-secret","nextPageToken":"next-page-token-private-secret","minUrlExpirationTimestamp":4102444800000}

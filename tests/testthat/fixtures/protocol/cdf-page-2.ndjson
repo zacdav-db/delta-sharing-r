@@ -1,4 +1,0 @@
-{"protocol":{"version":1,"deltaProtocol":{"minReaderVersion":1,"minWriterVersion":7,"writerFeatures":["changeDataFeed"]}}}
-{"metaData":{"version":1,"deltaMetadata":{"id":"cdf-table","format":{"provider":"parquet","options":{}},"schemaString":"{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}}]}","partitionColumns":[],"configuration":{"delta.enableChangeDataFeed":"true"}}}}
-{"file":{"id":"changed-two","version":2,"timestamp":1734480106177,"expirationTimestamp":1790000000000,"deltaSingleAction":{"cdc":{"path":"https://storage.example.test/changed-two.parquet?sig=redacted","partitionValues":{},"size":786,"dataChange":false}}}}
-{"endStreamAction":{}}
