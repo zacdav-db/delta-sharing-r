@@ -22,6 +22,7 @@ test_that("kernel reads a local table to a data frame", {
   # row content survives the round trip
   expect_true(1 %in% df$id)
   expect_true("alpha" %in% df$group)
+  expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
 test_that("data-frame materialization can report read progress", {
@@ -35,6 +36,7 @@ test_that("data-frame materialization can report read progress", {
   expect_s3_class(df, "data.frame")
   expect_equal(nrow(df), 6L)
   expect_equal(native_collect_active(), 0)
+  expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
 test_that("read progress preserves typed stream failures", {
@@ -104,6 +106,7 @@ test_that("Arrow materialization can report read progress", {
 
   expect_s3_class(table, "Table")
   expect_equal(nrow(table), 7L)
+  expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
 test_that("projection selects and orders columns", {

@@ -1,9 +1,11 @@
 # Delta Sharing R — Handover
 
-Date: 2026-07-29
-Branch: `codex/delta-kernel-s7-overhaul` (current refactor work is uncommitted)
-Status: snapshot and CDF reads complete; version- and timestamp-bounded CDF are
-proven live.
+Date: 2026-07-30
+Branch: `codex/delta-kernel-s7-overhaul`
+Current recorded head: `92c4068` (`Keep eager read progress live between batches`)
+Status: the lean R6 snapshot/CDF implementation is committed and live-proven;
+the remaining work is release hardening, portability, lifecycle evidence, and
+targeted R-side performance work.
 
 ---
 
@@ -15,9 +17,10 @@ A ground-up redesign of the `delta.sharing` R package. The old package (on
 branch) over-engineered it into ~12,800 lines of S7 classes with heavy
 abstraction layers.
 
-This branch rebuilds it as a **small, clean R6 package** (~2,300 lines of R)
+This branch rebuilds it as a **small, clean R6 package**
 that leans on:
-- **Delta Kernel** (Rust, via a narrow C ABI + nanoarrow) for the row-scan hot path,
+- **Delta Kernel 0.26 / Arrow 58** (Rust, via a narrow C ABI + nanoarrow) for
+  the row-scan hot path,
 - **httr2 / openssl** for HTTP + auth,
 - **cli / rlang / purrr / tibble** for idiomatic R plumbing.
 
@@ -50,7 +53,11 @@ sharing_client(profile)                  # SharingClient (R6)
 
 Reads flow through **one** kernel Arrow stream; eager forms are adapters over
 the lazy `to_arrow_stream()`, while `to_arrow_reader()` transfers ownership of
-that stream to an Arrow `RecordBatchReader`.
+that stream to an Arrow `RecordBatchReader`. Eager reads with progress enabled
+move that already-created C stream to one native collection worker so R can
+repaint the CLI indicator while Kernel is blocked on object-store I/O. This
+worker is Arrow/lifecycle glue only: it does not implement protocol, HTTP,
+planning, or materialization policy.
 
 ## 3. Public API surface (exported)
 
@@ -81,7 +88,8 @@ Condition classes (public contract): `delta_sharing_error` + subclasses
 | `conditions.R` | `abort()` on `cli::cli_abort` with typed classes |
 | `zzz.R` | `.onUnload`, useDynLib, importFrom |
 
-Rust: `src/rust/src/{lib.rs (C ABI), kernel/adapter.rs, stream/mod.rs}`.
+Rust: `src/rust/src/{lib.rs (C ABI), collect.rs (progress worker),
+kernel/adapter.rs, stream/mod.rs}`.
 C shim: `src/native.c`. Header: `src/rust/include/delta_sharing_native.h`.
 
 ## 5. What works and is proven
@@ -98,9 +106,17 @@ arrays, timestamps, binary, unicode), `empty_snapshot` (0 rows, correct schema),
 vectors).
 
 **Offline test suite passes with 7 integration tests skipped** (six public
-integration tests plus one credentialed CDF test). Rust: 34 tests. Style: air-clean
-(`air format --check R/ tests/`). Run tests with
+integration tests plus one credentialed CDF test). Rust: 38 tests; locked,
+offline tests, formatting, and strict Clippy pass with Kernel 0.26 and Arrow
+58.3. Run the R tests with
 `Rscript -e 'options(Ncpus=1); pkgload::load_all("."); devtools::test(".")'`.
+
+The 246,942-byte archive containing the current production implementation
+passes
+`R CMD check --as-cran --no-manual` on macOS arm64 with zero errors, zero
+warnings, and one expected note for a new submission/development version. A
+clean installed-package lifecycle gate passes repeated worker success, error,
+finalizer, cancellation, handoff, cleanup, unload, and reload.
 
 **Real bugs found via live testing and fixed** (all snapshot-path):
 - `version()` uses `HEAD` on the table path (reference server 404s `GET /version`).
@@ -116,6 +132,10 @@ integration tests plus one credentialed CDF test). Rust: 34 tests. Style: air-cl
   ISO-8601 strings; strings are passed through unchanged.
 - Delta metadata projects `size` and `numFiles` from the Sharing wrapper rather
   than the nested Delta action, matching Python and live Databricks responses.
+- Snapshot Query Table responses are consumed in bounded NDJSON chunks and
+  staged directly into the private synthetic log. A 100,000-file benchmark
+  reduced maximum RSS by 44.3% and transformation time by 8.0% while producing
+  a byte-identical commit.
 
 Profile parsing now follows Python's structural level: it extracts the fields
 required by the selected profile shape and defers credential content checks to
@@ -175,6 +195,10 @@ DELTA_SHARING_TEST_PROFILE=~/Desktop/config.share \
 Rscript -e 'pkgload::load_all("."); testthat::test_file("tests/testthat/test-cdf-integration.R")'
 ```
 
+CDF progress is intentionally indeterminate. File-action statistics in the live
+CDF response implied 4,906 rows while Kernel correctly emitted 3,500 changes,
+so presenting those statistics as a percentage would be misleading.
+
 ### Debug-error decision still open
 `src/rust/src/kernel/adapter.rs` (~line 237): the CDF error map was changed from
 `.map_err(|_| "Delta Kernel CDF preparation failed".to_string())` to include the
@@ -199,31 +223,94 @@ The path handed to the kernel is `<root>/table`; `cleanup_root` is `<root>`.
 Snapshot expects exactly `00...0.json`; CDF's `try_new_cdf` expects the
 version-range JSONs (+ checkpoint bootstrap). Any layout drift = native failure.
 
-## 8. Known gaps / TODO
+## 8. Progress and performance
 
+Commits `1850bcc` and `92c4068`, plus the current manifest/lifecycle slice,
+contain the current performance work:
+
+- Kernel 0.26's configurable source batches changed an 8,388,608-row local read
+  from 8,448 approximately 1,000-row batches to 128 batches of 65,536 rows.
+- Direct Arrow materialization improved from a 0.3645-second median on Kernel
+  0.22 to 0.1425 seconds on Kernel 0.26.
+- The current progress worker completed the same local progress-enabled read in
+  a 0.2025-second median, down from 0.7790 seconds on the old synchronous
+  R-per-batch replay path.
+- On the live 250-million-row deletion-vector table, a 250,000-row bounded read
+  displayed continuous progress while waiting for I/O and finished with the
+  exact row count. Snapshot percentages are shown only when every returned file
+  has trustworthy row statistics; deletion-vector cardinality and the exact
+  limit are included. Otherwise the spinner remains live and reports rows
+  without inventing a percentage.
+- Lazy reads and eager reads with `progress = FALSE` remain on the direct Arrow
+  C Stream path.
+- Snapshot manifests no longer retain the complete nested action graph. At
+  100,000 files, bounded R staging reduced maximum RSS from 398.6 MB to
+  222.0 MB and transformation time from 21.950 to 20.196 seconds; the reported
+  peak memory footprint fell by 63.1%.
+- Bounded per-version CDF spooling was tested and rejected: it reduced maximum
+  RSS by 24.9% but was 63.2% slower at 100,000 actions. Production CDF keeps
+  the concise retained Python-style path until a representative workload
+  justifies a different trade-off.
+- A current same-profile matrix against Python `delta-sharing` 1.4.1 matched
+  every result shape. R was within 2% on the 1M-row partitioned table and
+  5–13% faster on the other non-empty snapshot sources tested. The empty
+  control was 11% slower. One CDF 1–4 run took 318 seconds in R versus
+  356 seconds in Python; both are dominated by hundreds of tiny remote files.
+
+These results support the accepted boundary. No client, protocol, HTTP, or
+planning responsibility should move to Rust. See
+`design/performance-assessment-2026-07-29.md` for the measurements and caveats.
+
+## 9. Known gaps / next gates
+
+- **CDF large-manifest trade-off**: production CDF still retains its response
+  actions. The bounded prototype was byte-equivalent and live-correct but
+  failed the performance gate, so it was deliberately not integrated.
+- **Progress lifecycle hardening**: local subprocess gates now prove typed
+  SIGINT cancellation, cleanup, garbage collection, completed-worker
+  unload/reload, detached-worker library pinning, and clean installed-package
+  reuse. A genuinely blocked credentialed interrupt and hosted sanitizer/
+  cross-platform evidence, especially Windows, remain open.
+- **Cross-platform package proof**: minimum/release/development R and macOS,
+  Linux, and Windows source/binary builds still require current-head evidence.
+- **R coverage**: the first whole-tree measurement of the lean R6 rewrite is
+  70.46%. The historical 91.83% S7 result is superseded; focused current-R6
+  tests must raise this to the 90% release gate.
+- **Credential rotation/history cleanup**: commit `f047384` copied the Desktop
+  bearer token into `tools/spin-live.R`. The current tree now reads
+  `~/Desktop/config.share`, but the credential remains in local branch history.
+  Rotate it and clean that commit before any push or external handoff.
+- **Release performance gates**: rerun controlled direct, progress, first-batch,
+  RSS, backpressure, and cancellation benchmarks on the final candidate.
+- **Optional integrations**: `{duckdb}` tests require the package to be
+  installed; public CDF is unavailable, so credentialed CDF remains opt-in.
+- **Provider-signed deletion vectors**: genuine signed-URL behavior still needs
+  hosted, cross-platform proof.
 - **CDF integration environment**: the public endpoint has no CDF table, so the
-  live CDF test requires the credentialed E2 profile and remains opt-in.
-- **`R CMD check` + pkgdown**: not run locally (no Pandoc in this env). CI has
-  Pandoc. pkgdown config (`_pkgdown.yml`) + workflow exist.
-- **Commit**: nothing committed. When ready: branch is
-  `codex/delta-kernel-s7-overhaul`; end commit messages with the required
-  Co-authored-by trailer.
-- **ADRs**: `design/adr-004-r6-object-system.md` records the R6-over-S7 decision
-  (supersedes adr-001). ADR-002/003 (Rust/Arrow boundary, R-first scope) still hold.
-- Full running notes: the agent memory file
-  `~/.claude/projects/.../memory/delta-sharing-r6-redesign.md` has the blow-by-blow.
+  live CDF test requires the credentialed Desktop profile and remains opt-in.
+- **Debug-error decision**: `kernel/adapter.rs` currently includes the
+  underlying Kernel error in CDF preparation failures. Confirm before release
+  that this cannot expose a temporary local path.
 
-## 9. Licensing note
+`design/adr-004-r6-object-system.md` is the governing object-system decision
+and supersedes ADR 001. ADR 002/003 continue to govern the Rust/Arrow boundary
+and R-first scope.
 
-Attribution was corrected this session: the package is copyright **Zac Davies**
-(not Databricks — it is not Databricks-funded). LICENSE is Apache-2.0,
-`DESCRIPTION` lists Zac as `aut, cre, cph`, contact `zac@databricks.com`
-(contact only, not a copyright claim).
+## 10. Licensing note
 
-## 10. Dev helpers
+The package is copyright **Zac Davies** (not Databricks — it is not
+Databricks-funded). LICENSE is Apache-2.0. `DESCRIPTION` lists Zac as
+`aut, cre, cph`; `zac@databricks.com` is a contact address only, not a
+Databricks copyright claim.
+
+## 11. Dev helpers
 
 - `tools/spin.R` — offline spin against local fixtures.
 - `tools/spin-live.R` — progress-enabled live spin against the credentialed
   250M-row deletion-vector and nested-data fixture.
+- `tools/compare_connector.{R,py}` — same-profile snapshot/CDF timing harnesses
+  for the development package and official Python connector.
+- `tools/{snapshot,cdf}_manifest_benchmark_worker.R` — fresh-process retained
+  versus bounded-staging memory/time evidence.
 - `tests/testthat/fixtures/delta/` — real local Delta tables (snapshot + cdf)
   for kernel tests that need no network.

@@ -47,8 +47,13 @@ class InstalledSanitizerGateTests(unittest.TestCase):
             "synthetic finalizer iteration",
             "Kernel early release iteration",
             "Kernel exhaustion iteration",
-            "current$active_streams",
-            "current$pending_cleanups",
+            "progress success iteration",
+            "progress failure iteration",
+            "completed worker finalizer iteration",
+            "completed worker cancellation iteration",
+            "worker handoff iteration",
+            "native_collect_active()",
+            "native_reap_pending_cleanups()",
         )
         for fragment in required:
             with self.subTest(fragment=fragment):

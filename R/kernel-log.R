@@ -40,16 +40,14 @@ log_json_line <- function(action) {
   ))
 }
 
-# Turn a parsed Query Table response into the ordered JSON lines of the
-# synthetic commit: protocol, metadata, then one line per file action.
-synthetic_log_lines <- function(
+# Encode the protocol and metadata lines that begin a snapshot commit.
+synthetic_log_header <- function(
   response_format,
   protocol,
   metadata,
-  files,
   operation = "read"
 ) {
-  header <- if (identical(response_format, "delta")) {
+  if (identical(response_format, "delta")) {
     c(
       log_json_line(list(protocol = protocol$deltaProtocol %||% protocol)),
       log_json_line(list(metaData = metadata$deltaMetadata %||% metadata))
@@ -62,13 +60,32 @@ synthetic_log_lines <- function(
       ))
     )
   }
+}
+
+# Turn a parsed Query Table response into the ordered JSON lines of the
+# synthetic commit: protocol, metadata, then one line per file action.
+synthetic_log_lines <- function(
+  response_format,
+  protocol,
+  metadata,
+  files,
+  operation = "read"
+) {
   file_lines <- purrr::map_chr(
     files,
     function(file) {
       log_json_line(synthetic_file_action(file, response_format, operation))
     }
   )
-  c(header, file_lines)
+  c(
+    synthetic_log_header(
+      response_format,
+      protocol,
+      metadata,
+      operation
+    ),
+    file_lines
+  )
 }
 
 # Delta format: the file action already carries a fully-formed single action.
@@ -116,6 +133,36 @@ prepare_synthetic_log <- function(lines) {
   prepare_log(function(log_dir) {
     writeLines(lines, fs::path(log_dir, log_commit_name), useBytes = TRUE)
   })
+}
+
+# Write a commit header followed by the bytes in one bounded action stage.
+write_staged_commit <- function(commit, header, staged_actions) {
+  local({
+    output <- file(commit, open = "wb")
+    on.exit(close(output), add = TRUE)
+    input <- file(staged_actions, open = "rb")
+    on.exit(close(input), add = TRUE)
+
+    writeLines(header, output, useBytes = TRUE)
+    repeat {
+      bytes <- readBin(input, what = "raw", n = 1024 * 1024)
+      if (length(bytes) == 0L) {
+        break
+      }
+      writeBin(bytes, output)
+    }
+  })
+  invisible(commit)
+}
+
+# Publish a snapshot commit from a bounded action staging file. The staging
+# file lives inside the private log root and is removed before native ownership
+# validation, leaving exactly the one commit expected by the cleanup guard.
+write_staged_snapshot_commit <- function(log_dir, header, staged_actions) {
+  commit <- fs::path(log_dir, log_commit_name)
+  write_staged_commit(commit, header, staged_actions)
+  fs::file_delete(staged_actions)
+  invisible(commit)
 }
 
 # Change data feed: the kernel's TableChanges reads a real multi-version log,
@@ -168,7 +215,7 @@ write_cdf_commit <- function(log_dir, version, actions, timestamp_ms = NULL) {
   commit <- fs::path(log_dir, cdf_commit_name(version))
   writeLines(purrr::map_chr(actions, log_json_line), commit, useBytes = TRUE)
 
-  if (!is.null(timestamp_ms) && is.finite(timestamp_ms)) {
+  if (length(timestamp_ms) == 1L && is.finite(timestamp_ms)) {
     timestamp <- as.POSIXct(
       timestamp_ms / 1000,
       origin = "1970-01-01",

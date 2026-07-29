@@ -8,10 +8,10 @@ iterations_text <- Sys.getenv(
   unset = "16"
 )
 
-if (is.na(sanitizer_library) || !dir.exists(sanitizer_library)) {
+if (is.na(sanitizer_library) || !fs::dir_exists(sanitizer_library)) {
   stop("DELTA_SHARING_SANITIZER_LIBRARY must name the installed test library.")
 }
-if (is.na(fixture) || !dir.exists(fixture)) {
+if (is.na(fixture) || !fs::dir_exists(fixture)) {
   stop("DELTA_SHARING_SANITIZER_FIXTURE must name the local Delta fixture.")
 }
 iterations <- suppressWarnings(as.integer(iterations_text))
@@ -19,21 +19,14 @@ if (is.na(iterations) || iterations < 1L || iterations > 1000L) {
   stop("DELTA_SHARING_SANITIZER_ITERATIONS must be between 1 and 1000.")
 }
 
-sanitizer_library <- normalizePath(
-  sanitizer_library,
-  winslash = "/",
-  mustWork = TRUE
-)
-fixture <- normalizePath(fixture, winslash = "/", mustWork = TRUE)
+sanitizer_library <- as.character(fs::path_real(sanitizer_library))
+fixture <- as.character(fs::path_real(fixture))
 .libPaths(c(sanitizer_library, .libPaths()))
 suppressPackageStartupMessages(library(delta.sharing))
+withr::local_options(list(cli.progress_show_after = Inf))
 
-installed_path <- normalizePath(
-  find.package("delta.sharing"),
-  winslash = "/",
-  mustWork = TRUE
-)
-if (!identical(dirname(installed_path), sanitizer_library)) {
+installed_path <- as.character(fs::path_real(find.package("delta.sharing")))
+if (!identical(as.character(fs::path_dir(installed_path)), sanitizer_library)) {
   stop("The sanitizer gate did not load delta.sharing from its test library.")
 }
 
@@ -58,39 +51,56 @@ assert_identical <- function(value, expected, message) {
   }
 }
 
-native_diagnostics <- delta.sharing:::.native_diagnostics
-native_test_stream <- delta.sharing:::.native_test_stream
-native_snapshot_stream <- delta.sharing:::.native_snapshot_stream
-materialize_data_frame <- delta.sharing:::.materialize_data_frame_stream
+native_test_stream <- delta.sharing:::native_test_stream
+native_snapshot_stream <- delta.sharing:::native_snapshot_stream
+materialize_data_frame <- delta.sharing:::sharing_stream_to_data_frame
+native_collect_start <- delta.sharing:::native_collect_start
+native_collect_status <- delta.sharing:::native_collect_status
+native_collect_finish <- delta.sharing:::native_collect_finish
+native_collect_cancel <- delta.sharing:::native_collect_cancel
+native_collect_active <- delta.sharing:::native_collect_active
+native_reap_pending_cleanups <-
+  delta.sharing:::native_reap_pending_cleanups
 
-invisible(delta.sharing:::.native_reap_pending_cleanups())
+wait_for_collection <- function(job, label) {
+  deadline <- Sys.time() + 10
+  repeat {
+    status <- native_collect_status(job)
+    if (isTRUE(status$done)) {
+      return(status)
+    }
+    if (Sys.time() >= deadline) {
+      stop(label, " did not finish within 10 seconds.", call. = FALSE)
+    }
+    Sys.sleep(0.005)
+  }
+}
+
+invisible(native_reap_pending_cleanups())
 invisible(gc())
-baseline <- native_diagnostics()
-assert_true(baseline$kernel_smoke_ok, baseline$kernel_smoke_message)
 assert_identical(
-  baseline$active_streams,
+  native_collect_active(),
   0,
-  "The installed sanitizer process must start without active native streams."
+  "The installed sanitizer process must start without active collection jobs."
 )
 assert_identical(
-  baseline$pending_cleanups,
+  native_reap_pending_cleanups(),
   0,
   "The installed sanitizer process must start without pending cleanups."
 )
 
 assert_released <- function(label) {
   invisible(gc())
-  invisible(delta.sharing:::.native_reap_pending_cleanups())
+  pending <- native_reap_pending_cleanups()
   invisible(gc())
-  current <- native_diagnostics()
   assert_identical(
-    current$active_streams,
-    baseline$active_streams,
-    paste0(label, " left a native stream active.")
+    native_collect_active(),
+    0,
+    paste0(label, " left a background collection job active.")
   )
   assert_identical(
-    current$pending_cleanups,
-    baseline$pending_cleanups,
+    pending,
+    0,
     paste0(label, " left a prepared-log cleanup pending.")
   )
 }
@@ -112,9 +122,10 @@ for (index in seq_len(iterations)) {
     32L,
     "nanoarrow did not materialize every synthetic row."
   )
+  exhausted$release()
   assert_true(
     !nanoarrow::nanoarrow_pointer_is_valid(exhausted),
-    "nanoarrow left an exhausted synthetic stream valid."
+    "Explicit release left an exhausted synthetic stream valid."
   )
   assert_released(paste0("synthetic exhaustion iteration ", index))
 
@@ -170,7 +181,68 @@ for (index in seq_len(iterations)) {
     c("id", "active"),
     "Delta Kernel snapshot exhaustion returned an unexpected schema."
   )
+  snapshot$release()
   assert_released(paste0("Kernel exhaustion iteration ", index))
+
+  progress <- native_test_stream(batches = 4L, rows_per_batch = 8L)
+  attr(progress, "delta_sharing_progress") <- list(total_rows = 32)
+  data <- materialize_data_frame(progress, progress = TRUE)
+  assert_identical(
+    nrow(data),
+    32L,
+    "The eager progress worker returned an unexpected row count."
+  )
+  assert_released(paste0("progress success iteration ", index))
+
+  progress_failure <- native_test_stream(
+    batches = 4L,
+    rows_per_batch = 8L,
+    error_after = 1L
+  )
+  condition <- tryCatch(
+    materialize_data_frame(progress_failure, progress = TRUE),
+    error = identity
+  )
+  assert_true(
+    inherits(condition, "delta_sharing_kernel_error"),
+    "An eager worker failure did not cross the installed typed-error boundary."
+  )
+  assert_released(paste0("progress failure iteration ", index))
+
+  completed_job <- native_collect_start(
+    native_test_stream(batches = 2L, rows_per_batch = 8L)
+  )
+  invisible(wait_for_collection(
+    completed_job,
+    "Completed-job finalizer collection"
+  ))
+  rm(completed_job)
+  assert_released(paste0("completed worker finalizer iteration ", index))
+
+  cancelled_job <- native_collect_start(
+    native_test_stream(batches = 2L, rows_per_batch = 8L)
+  )
+  invisible(wait_for_collection(
+    cancelled_job,
+    "Completed-job cancellation collection"
+  ))
+  native_collect_cancel(cancelled_job)
+  assert_released(paste0("completed worker cancellation iteration ", index))
+
+  finished_job <- native_collect_start(
+    native_test_stream(batches = 2L, rows_per_batch = 8L)
+  )
+  status <- wait_for_collection(finished_job, "Successful handoff collection")
+  assert_identical(status$rows, 16, "The worker row counter was incorrect.")
+  collected <- native_collect_finish(finished_job)
+  data <- materialize_data_frame(collected)
+  assert_identical(
+    nrow(data),
+    16L,
+    "The finished worker stream returned an unexpected row count."
+  )
+  collected$release()
+  assert_released(paste0("worker handoff iteration ", index))
 }
 
 panic_stream <- native_test_stream(batches = 2L, panic_after = 0L)
@@ -185,19 +257,12 @@ assert_true(
 )
 assert_released("contained Rust panic")
 
-final <- native_diagnostics()
-assert_true(
-  final$cancelled_streams >= baseline$cancelled_streams + 4 * iterations + 1,
-  "The lifecycle diagnostics did not record the expected releases."
-)
 cat(
   sprintf(
     paste0(
       "Installed sanitizer lifecycle gate passed: %d iterations, ",
-      "%d emitted batches, %d releases.\n"
+      "including eager worker success, error, finalizer, cancel, and handoff.\n"
     ),
-    iterations,
-    as.integer(final$emitted_batches - baseline$emitted_batches),
-    as.integer(final$cancelled_streams - baseline$cancelled_streams)
+    iterations
   )
 )

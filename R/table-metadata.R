@@ -98,7 +98,7 @@ parse_version_header <- function(resp, operation) {
 
 # Split an NDJSON body into parsed JSON objects (one per non-empty line).
 parse_ndjson_lines <- function(text, operation) {
-  lines <- strsplit(text, "\n", fixed = TRUE)[[1]]
+  lines <- purrr::list_c(strsplit(text, "\n", fixed = TRUE))
   lines <- lines[nzchar(trimws(lines))]
   purrr::map(lines, function(line) {
     parsed <- tryCatch(

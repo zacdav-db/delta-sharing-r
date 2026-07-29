@@ -12,18 +12,23 @@ query_capabilities <- function(format, for_cdf = FALSE) {
   )
 }
 
-# Query a table's files and return parsed { protocol, metadata, files }.
-# `format` is already resolved to "delta" or "parquet". Files are collected
-# across pages because the kernel needs the full manifest to scan.
-sharing_query_table <- function(
+# Stream Query Table pages into one bounded action staging connection. Only the
+# latest protocol/metadata wrappers, progress counters, and page token remain
+# in memory; file actions are normalized and written as each chunk arrives.
+stream_snapshot_query <- function(
   profile,
   auth,
   identifier,
   spec,
-  format
+  format,
+  output
 ) {
-  actions <- list()
+  protocol <- NULL
+  metadata <- NULL
+  total_rows <- 0
+  total_rows_known <- TRUE
   page_token <- NULL
+
   repeat {
     req <- sharing_request(
       profile,
@@ -37,15 +42,110 @@ sharing_query_table <- function(
       `delta-sharing-capabilities` = query_capabilities(format)
     )
     req <- httr2::req_body_json(req, query_body(spec, page_token))
-    resp <- sharing_perform(req)
-    page_actions <- parse_ndjson_lines(httr2::resp_body_string(resp), "read")
-    actions <- c(actions, page_actions)
-    page_token <- find_next_page_token(page_actions)
+    next_page_token <- NULL
+
+    sharing_stream_lines(req, function(lines) {
+      actions <- parse_ndjson_lines(lines, "read")
+      purrr::walk(actions, function(action) {
+        if (!is.null(action$protocol)) {
+          protocol <<- action$protocol
+        } else if (!is.null(action$metaData)) {
+          metadata <<- action$metaData
+        }
+        token <- action$nextPageToken
+        if (is_scalar_character(token) && nzchar(token)) {
+          next_page_token <<- token
+        }
+      })
+
+      files <- purrr::map(
+        purrr::keep(actions, function(action) !is.null(action$file)),
+        "file"
+      )
+      if (length(files) == 0L) {
+        return(invisible(NULL))
+      }
+
+      file_lines <- purrr::map_chr(files, function(file) {
+        log_json_line(synthetic_file_action(file, format, "read"))
+      })
+      writeLines(file_lines, output, useBytes = TRUE)
+
+      rows <- purrr::map_dbl(files, snapshot_file_rows, format = format)
+      if (anyNA(rows)) {
+        total_rows_known <<- FALSE
+      } else if (total_rows_known) {
+        total_rows <<- total_rows + sum(rows)
+        if (!is.finite(total_rows) || total_rows > 2^53) {
+          total_rows_known <<- FALSE
+        }
+      }
+      invisible(NULL)
+    })
+
+    page_token <- next_page_token
     if (is.null(page_token)) {
       break
     }
   }
-  split_query_actions(actions, "read")
+
+  if (is.null(protocol) || is.null(metadata)) {
+    abort(
+      "The query response did not include protocol and metadata.",
+      type = "protocol",
+      operation = "read"
+    )
+  }
+
+  if (!is.null(spec$limit) && spec$limit == 0) {
+    total_rows <- 0
+    total_rows_known <- TRUE
+  } else if (total_rows_known && !is.null(spec$limit)) {
+    total_rows <- min(total_rows, spec$limit)
+  }
+
+  list(
+    protocol = protocol,
+    metadata = metadata,
+    total_rows = if (total_rows_known) total_rows else NULL
+  )
+}
+
+# Prepare the private snapshot log while the HTTP response is being consumed.
+# The staging file is inside the private root and is removed before the handle
+# transfers to the native cleanup guard.
+prepare_snapshot_query_log <- function(
+  profile,
+  auth,
+  identifier,
+  spec,
+  format
+) {
+  query_result <- NULL
+  log <- prepare_log(function(log_dir) {
+    staged_actions <- fs::path(log_dir, ".snapshot-actions")
+    query_result <<- local({
+      output <- file(staged_actions, open = "wb")
+      on.exit(close(output), add = TRUE)
+      stream_snapshot_query(
+        profile,
+        auth,
+        identifier,
+        spec,
+        format,
+        output
+      )
+    })
+    header <- synthetic_log_header(
+      format,
+      query_result$protocol,
+      query_result$metadata,
+      "read"
+    )
+    write_staged_snapshot_commit(log_dir, header, staged_actions)
+  })
+  log$total_rows <- query_result$total_rows
+  log
 }
 
 changes_query <- function(spec, page_token) {
@@ -104,6 +204,14 @@ sharing_query_changes <- function(profile, auth, identifier, spec) {
     spec$starting_version,
     spec$ending_version
   )
+}
+
+find_next_page_token <- function(actions) {
+  action <- purrr::detect(actions, function(action) {
+    token <- action$nextPageToken
+    is_scalar_character(token) && nzchar(token)
+  })
+  action$nextPageToken %||% NULL
 }
 
 bucket_cdf_actions <- function(actions, start_version, end_version) {
@@ -216,46 +324,6 @@ query_body <- function(spec, page_token) {
   body
 }
 
-find_next_page_token <- function(actions) {
-  action <- purrr::detect(actions, function(action) {
-    token <- action$nextPageToken
-    is_scalar_character(token) && nzchar(token)
-  })
-  action$nextPageToken %||% NULL
-}
-
-# Separate protocol/metadata/file actions and detect the response format.
-split_query_actions <- function(actions, operation) {
-  protocol <- NULL
-  metadata <- NULL
-  files <- list()
-  response_format <- "parquet"
-  for (action in actions) {
-    if (!is.null(action$protocol)) {
-      protocol <- action$protocol
-      if (!is.null(protocol$deltaProtocol)) response_format <- "delta"
-    } else if (!is.null(action$metaData)) {
-      metadata <- action$metaData
-      if (!is.null(metadata$deltaMetadata)) response_format <- "delta"
-    } else if (!is.null(action$file)) {
-      files[[length(files) + 1L]] <- action$file
-    }
-  }
-  if (is.null(protocol) || is.null(metadata)) {
-    abort(
-      "The query response did not include protocol and metadata.",
-      type = "protocol",
-      operation = operation
-    )
-  }
-  list(
-    response_format = response_format,
-    protocol = protocol,
-    metadata = metadata,
-    files = files
-  )
-}
-
 # Return the logical row count for one snapshot file action. Delta statistics
 # are JSON strings; parquet responses expose the same field on the file wrapper.
 snapshot_file_rows <- function(file, format) {
@@ -321,23 +389,14 @@ sharing_snapshot_stream <- function(
     spec$response_format,
     "read"
   )
-  parsed <- sharing_query_table(
+  log <- prepare_snapshot_query_log(
     profile,
     auth,
     identifier,
     spec,
     format = fmt
   )
-  total_rows <- snapshot_total_rows(parsed$files, fmt, spec$limit)
-
-  lines <- synthetic_log_lines(
-    fmt,
-    parsed$protocol,
-    parsed$metadata,
-    parsed$files,
-    "read"
-  )
-  log <- prepare_synthetic_log(lines)
+  total_rows <- log$total_rows
 
   # If native construction fails, clean up here; on success the native stream
   # owns the temp log root and deletes it on release.
@@ -448,13 +507,13 @@ collect_stream_with_progress <- function(stream, progress_info = NULL) {
       "| {cli::pb_current}/{cli::pb_total} rows | ETA {cli::pb_eta}"
     )
   } else {
-      "{cli::pb_spin} {cli::pb_name} {cli::pb_current} rows"
+    "{cli::pb_spin} {cli::pb_name} {cli::pb_current} rows"
   }
   name <- if (is.null(progress_info$versions)) {
     "Reading rows"
   } else {
     sprintf(
-      "Reading rows (versions %.0f–%.0f)",
+      "Reading rows (versions %.0f-%.0f)",
       progress_info$versions[[1]],
       progress_info$versions[[2]]
     )
@@ -512,6 +571,7 @@ collect_stream_with_progress <- function(stream, progress_info = NULL) {
 
 sharing_stream_to_arrow <- function(stream, progress = FALSE) {
   require_arrow("to_arrow")
+  on.exit(release_materializer_stream(stream), add = TRUE)
   if (isTRUE(progress)) {
     stream <- collect_stream_with_progress(
       stream,
@@ -523,6 +583,7 @@ sharing_stream_to_arrow <- function(stream, progress = FALSE) {
 }
 
 sharing_stream_to_data_frame <- function(stream, progress = FALSE) {
+  on.exit(release_materializer_stream(stream), add = TRUE)
   if (isTRUE(progress)) {
     stream <- collect_stream_with_progress(
       stream,

@@ -1,7 +1,7 @@
 # delta.sharing <img src="https://user-images.githubusercontent.com/1446829/144671151-b095e1b9-2d24-4d3b-b3c6-a7041e491077.png" align="right" width="180" alt="Delta Sharing logo" />
 
 An R client for [Delta Sharing](https://delta.io/sharing/), backed by
-[Delta Kernel](https://delta.io/delta-kernel/) and Arrow.
+[Delta Kernel](https://docs.delta.io/kernel/rust/introduction.html) and Arrow.
 
 ## Installation
 

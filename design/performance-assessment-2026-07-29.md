@@ -2,10 +2,12 @@
 
 ## Status and scope
 
-This note captures a read-only performance review of the R6/Delta Kernel
+This note began as a read-only performance review of the R6/Delta Kernel
 implementation at commit `e56404c` on
-`codex/delta-kernel-s7-overhaul`. The implementation was committed before the
-assessment. No performance changes described here have been applied.
+`codex/delta-kernel-s7-overhaul`. Its final sections record the experiments
+subsequently implemented on the integration branch. Descriptions of the
+"current" path in the original assessment are therefore baseline descriptions;
+the implemented-experiment sections state the resulting decisions.
 
 The review follows ADR 003:
 
@@ -33,7 +35,7 @@ nested/deletion-vector workload, the direct R implementation was directionally
 faster than the Python connector. The native exact row limit is also better
 suited to bounded reads than the Python path assessed here.
 
-The meaningful opportunities are concentrated in four boundaries:
+The original assessment identified four concentrated boundaries:
 
 1. **Large snapshot and CDF manifests:** R currently materializes the HTTP body,
    parsed actions, file lists, and re-encoded synthetic-log lines. At 100,000
@@ -53,12 +55,13 @@ The meaningful opportunities are concentrated in four boundaries:
    live read. Explicit Delta format avoids it today; careful table-level caching
    could avoid it without changing the public API.
 
-The first and fourth opportunities are R work. The second may need only a small
-native batch-coalescing change if a corrected prototype clears ADR 003. The
-third should begin with a Delta Kernel upgrade experiment, not a custom Rust
-HTTP implementation.
+The resulting work kept the ownership boundary intact. Snapshot manifests now
+use bounded R staging; the equivalent CDF prototype was rejected because its
+memory reduction did not justify its wall-time cost. Kernel 0.26 supplied larger
+source batches, and the progress worker remains narrow Arrow/lifecycle glue.
+Metadata caching remains a possible R-side experiment.
 
-## Current execution model
+## Baseline execution model at `e56404c`
 
 A snapshot read currently does the following:
 
@@ -410,7 +413,7 @@ benchmarks.
 - The C boundary checks R interrupts once per emitted batch. That is desirable
   responsiveness and not a current optimization target.
 
-## Recommended experiment order
+## Original recommended experiment order
 
 1. Add durable, reproducible benchmark fixtures and record wall time, first
    batch, emitted batches, bytes transferred where observable, and peak RSS.
@@ -518,3 +521,104 @@ pinned for the rest of the R process rather than risking execution through an
 unloaded DLL. Native tests cover a gated no-batch interval, successful joined
 handoff, repeated finish, cancellation, detached-worker pinning, panic
 containment, and active-job completion.
+
+## Implemented experiment: bounded snapshot manifests in R
+
+Snapshot Query Table responses are now consumed through httr2's pull-based
+response connection in groups of at most 256 complete NDJSON lines. R retains
+only protocol, metadata, pagination state, progress counters, and the current
+chunk. Normalized file actions are written to a private staging file and copied
+behind the protocol/metadata header in the final commit. The stage lives inside
+the ownership-marked log root and is deleted before the native cleanup guard
+receives that root.
+
+Focused tests cover both real `StreamingBody` behavior and httr2's in-memory
+mock fallback, pagination, Delta and Parquet responses, deletion-vector row
+counts, exact zero limits, malformed later-page cleanup, and the final private
+layout. The generated commit remains byte-identical to the retained baseline.
+
+Fresh-process `/usr/bin/time -l` measurements used realistic Delta adds with
+statistics, partition values, signed-looking URLs, and periodic deletion
+vectors:
+
+| File actions | Path | Transform time | Maximum RSS | Peak memory footprint | Commit bytes |
+|---:|---|---:|---:|---:|---:|
+| 1,000 | Retained | 0.253 s | 97.6 MB | — | 246,563 |
+| 1,000 | Staged | 0.259 s | 101.3 MB | — | 246,563 |
+| 100,000 | Retained | 21.950 s | 398.6 MB | 340.9 MB | 24,829,165 |
+| 100,000 | Staged | 20.196 s | 222.0 MB | 125.7 MB | 24,829,165 |
+
+At 100,000 files, bounded staging reduced maximum RSS by 44.3%, reduced the
+reported peak memory footprint by 63.1%, and reduced transformation time by
+8.0%. Ordinary 1,000-file cost was effectively unchanged. This is a clear
+R-first improvement, so the staged snapshot path was retained.
+
+Reproduce with:
+
+```sh
+/usr/bin/time -l Rscript tools/snapshot_manifest_benchmark_worker.R retained 100000
+/usr/bin/time -l Rscript tools/snapshot_manifest_benchmark_worker.R staged 100000
+```
+
+## Rejected experiment: bounded CDF spooling
+
+The same principle was prototyped for CDF using one private staging file per
+represented version and a compact version/timestamp index. It preserved
+protocol placement, metadata evolution, action order within each version,
+empty interior commits, timestamps, effective bounds, and the checkpoint
+bootstrap. The complete credentialed CDF test also passed with the prototype:
+version range, exact timestamp range, metadata-only open end, and all four
+change types.
+
+The 100,000-action, 100-version fresh-process comparison produced byte-identical
+15,400,277-byte commit sets:
+
+| Path | Transform time | Maximum RSS | Peak memory footprint |
+|---|---:|---:|---:|
+| Retained baseline | 14.527 s | 540.0 MB | 460.6 MB |
+| Per-version staging | 23.709 s | 405.5 MB | 320.6 MB |
+
+Spooling reduced maximum RSS by 24.9% and peak footprint by 30.4%, but made the
+transformation 63.2% slower. It cleared neither ADR 003 threshold and imposed a
+substantial wall-time regression. The production CDF path therefore remains
+the concise Python-style retained action list. The reproducible rejected
+prototype benchmark remains in
+`tools/cdf_manifest_benchmark_worker.R` so a future provider with materially
+larger CDF manifests can be assessed without guessing.
+
+## Current connector comparison across the Desktop share
+
+A fresh Python 3.13 environment used `delta-sharing` 1.4.1,
+`delta-kernel-rust-sharing-wrapper` 0.3.1, PyArrow 25.0.0, and pandas 3.0.3.
+Both connectors used the same Desktop profile, explicit Delta format, all
+columns, eager data-frame materialization, and the same row/version bounds.
+Snapshot entries are medians of three sequential remote reads; CDF is one read
+because each connector took more than five minutes. Every comparison produced
+the same row and column counts.
+
+| Source | Scope | R | Python | Direction |
+|---|---|---:|---:|---:|
+| `empty_snapshot` | all rows (0 × 6) | 1.906 s | 1.720 s | R 10.8% slower |
+| `small_snapshot` | all rows (25 × 6) | 32.256 s | 36.972 s | R 12.8% faster |
+| `partitioned_orders` | all rows (1,000,000 × 5) | 16.963 s | 17.280 s | R 1.8% faster |
+| `complex_types` | limit 1,000 (1,000 × 10) | 33.487 s | 36.591 s | R 8.5% faster |
+| `snapshot_narrow_250m` | limit 250,000 (250,000 × 6) | 6.080 s | 6.639 s | R 8.4% faster |
+| `dv_nested_events_250m` | limit 250,000 (250,000 × 5) | 10.418 s | 11.002 s | R 5.3% faster |
+| `cdf_dv_interop` | versions 1–4 (3,500 × 7) | 317.697 s | 355.853 s | R 10.7% faster |
+
+These are directional cloud measurements, not hard regression thresholds.
+Cold-cache and object-store variance are visible, especially on the narrow
+250-million-row source. The useful conclusion is parity: the R connector does
+not show a general materialization deficit versus Python, and moving additional
+client logic into Rust is not supported by this evidence.
+
+CDF is the clear outlier for both languages. The source has 513 current table
+files and the requested range represents hundreds of tiny change objects; its
+five-to-six-minute wall time is dominated by remote object opens. The rejected
+R spooling prototype cannot address that bottleneck. The next CDF performance
+experiment should therefore be a Delta Kernel/default-engine I/O investigation
+or a better-compacted provider fixture, not more R protocol complexity.
+
+Reproduce individual entries with `tools/compare_connector.R` and
+`tools/compare_connector.py`. Their third argument is `none`, a snapshot row
+limit, or `cdf:START:END`.

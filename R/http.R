@@ -87,6 +87,13 @@ with_sharing_errors <- function(req, code) {
         operation = operation,
         endpoint_host = req_host(req)
       )
+    },
+    httr2_streaming_error = function(cnd) {
+      abort(
+        "The server returned an NDJSON line larger than the supported limit.",
+        type = "protocol",
+        operation = operation
+      )
     }
   )
 }
@@ -94,6 +101,63 @@ with_sharing_errors <- function(req, code) {
 # Perform a single request, translating failures into typed conditions.
 sharing_perform <- function(req) {
   with_sharing_errors(req, httr2::req_perform(req))
+}
+
+# Perform a request through httr2's pull-based response connection and pass
+# bounded groups of complete NDJSON lines to `consume`. httr2 mocks return a
+# regular in-memory response, so tests use the same consumer in bounded chunks.
+sharing_stream_lines <- function(
+  req,
+  consume,
+  lines_per_chunk = 256L,
+  max_line_bytes = 8 * 1024^2
+) {
+  with_sharing_errors(req, {
+    resp <- httr2::req_perform_connection(req)
+    on.exit(close(resp), add = TRUE)
+
+    if (inherits(resp$body, "StreamingBody")) {
+      repeat {
+        lines <- httr2::resp_stream_lines(
+          resp,
+          lines = lines_per_chunk,
+          max_size = max_line_bytes
+        )
+        if (length(lines) > 0L) {
+          consume(lines)
+        }
+        if (httr2::resp_stream_is_complete(resp)) {
+          break
+        }
+      }
+    } else {
+      lines <- strsplit(
+        httr2::resp_body_string(resp),
+        "\n",
+        fixed = TRUE
+      )[[1L]]
+      if (length(lines) > 0L) {
+        if (any(nchar(lines, type = "bytes") > max_line_bytes)) {
+          abort(
+            "The server returned an NDJSON line larger than the supported limit.",
+            type = "protocol",
+            operation = attr(
+              req,
+              "delta_sharing_operation",
+              exact = TRUE
+            ) %||%
+              "request"
+          )
+        }
+        starts <- seq.int(1L, length(lines), by = lines_per_chunk)
+        purrr::walk(starts, function(start) {
+          end <- min(start + lines_per_chunk - 1L, length(lines))
+          consume(lines[seq.int(start, end)])
+        })
+      }
+    }
+    invisible(resp)
+  })
 }
 
 req_host <- function(req) {

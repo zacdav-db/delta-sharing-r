@@ -5,9 +5,8 @@ Authors@R:
   c(
     person(given = "Zac",
            family = "Davies",
-           role = c("aut", "cre"),
-           email = "zac@databricks.com"),
-    person("Databricks", role = c("cph", "fnd"))
+           role = c("aut", "cre", "cph"),
+           email = "zac@databricks.com")
   )
 Description: Connects R to Delta Sharing servers for share discovery, table
   metadata, snapshot reads, and change data feed reads.

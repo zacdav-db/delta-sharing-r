@@ -18,7 +18,7 @@ skip_if_no_integration <- function() {
     "Set DELTA_SHARING_RUN_INTEGRATION=1 to run integration tests."
   )
   reachable <- tryCatch(
-    !is.null(curl::nslookup("sharing.delta.io", error = FALSE)),
+    length(utils::nsl("sharing.delta.io")) > 0L,
     error = function(e) FALSE
   )
   testthat::skip_if_not(reachable, "sharing.delta.io is not reachable.")

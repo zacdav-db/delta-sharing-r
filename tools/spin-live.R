@@ -3,12 +3,6 @@
 # files, and about 1.8 GB of Parquet data.
 pkgload::load_all(".", quiet = TRUE)
 
-profile <- fs::path_expand("~/Desktop/config.share")
-if (!fs::file_exists(profile)) {
-  cli::cli_abort(
-    "The Delta Sharing profile was not found at {.path {profile}}."
-  )
-}
 
 client <- sharing_client("~/Desktop/config.share")
 
@@ -54,7 +48,7 @@ cat("payload fields:", paste(payload_fields, collapse = ", "), "\n")
 
 # This is large enough to display sustained progress without attempting to
 # materialize all 250 million nested rows into R memory.
-row_limit <- 250000
+row_limit <- 1000000
 cat(
   "\n== Kernel snapshot read (",
   format(row_limit, big.mark = ","),
