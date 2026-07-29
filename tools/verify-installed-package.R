@@ -46,8 +46,8 @@ stopifnot(
     as.character(utils::packageVersion("delta.sharing")),
     expected_version
   ),
-  identical(diagnostics$delta_kernel_version, "0.22.0"),
-  identical(diagnostics$arrow_rs_version, "57.3.0"),
+  identical(diagnostics$delta_kernel_version, "0.26.0"),
+  identical(diagnostics$arrow_rs_version, "58.3.0"),
   isTRUE(diagnostics$kernel_smoke_ok),
   diagnostics$active_streams == 0,
   diagnostics$pending_cleanups == 0

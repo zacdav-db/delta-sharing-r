@@ -82,8 +82,8 @@ exec "$engine" run \
             library(delta.sharing)
             info <- delta.sharing:::.native_diagnostics()
             stopifnot(
-                identical(info\$delta_kernel_version, \"0.22.0\"),
-                identical(info\$arrow_rs_version, \"57.3.0\"),
+                identical(info\$delta_kernel_version, \"0.26.0\"),
+                identical(info\$arrow_rs_version, \"58.3.0\"),
                 isTRUE(info\$kernel_smoke_ok),
                 info\$active_streams == 0
             )

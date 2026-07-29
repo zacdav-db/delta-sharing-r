@@ -11,17 +11,20 @@ name = "delta_sharing_native"
 crate-type = ["staticlib"]
 
 [dependencies]
-arrow-array = { version = "=57.3.0", features = ["ffi"] }
-arrow-schema = "=57.3.0"
-delta_kernel = { version = "=0.22.0", default-features = false, features = [
-  "arrow-57",
-  "default-engine-rustls",
+arrow-array = { version = "=58.3.0", features = ["ffi"] }
+arrow-schema = "=58.3.0"
+delta_kernel = { version = "=0.26.0", default-features = false, features = [
+  "arrow-58",
+] }
+delta_kernel_default_engine = { version = "=0.26.0", default-features = false, features = [
+  "arrow-58",
+  "rustls",
 ] }
 same-file = "=1.0.6"
 url = "=2.5.8"
 
 [dev-dependencies]
-parquet = { version = "=57.3.0", default-features = false, features = ["arrow", "snap"] }
+parquet = { version = "=58.3.0", default-features = false, features = ["arrow", "snap"] }
 
 [profile.release]
 lto = "thin"

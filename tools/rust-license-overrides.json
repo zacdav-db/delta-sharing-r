@@ -17,6 +17,16 @@
     },
     {
       "files": [
+        "LICENSE",
+        "NOTICE"
+      ],
+      "kind": "registry-sibling",
+      "reason": "The split default-engine workspace member omits the Apache license and NOTICE shipped by the exact locked Kernel crate.",
+      "source_package": "delta_kernel@0.26.0",
+      "target": "delta_kernel_default_engine@0.26.0"
+    },
+    {
+      "files": [
         {
           "local": "flatbuffers/LICENSE",
           "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",

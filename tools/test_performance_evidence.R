@@ -169,6 +169,28 @@ stopifnot(identical(gates[[3L]]$status, "not_evaluable"))
 stopifnot(identical(gates[[4L]]$status, "fail"))
 stopifnot(identical(gates[[5L]]$status, "pass"))
 
+eligible_comparison <- comparison
+eligible_comparison$r_observed_maximum_batch_rows <- 65536
+eligible_comparison$rust_observed_maximum_batch_rows <- 65536
+eligible_comparison$median_total_time_overhead_fraction <- 0.01
+eligible_gates <- pe_evaluate_gates(
+  eligible_comparison,
+  rss_scaling,
+  list(pass = TRUE),
+  config
+)
+stopifnot(identical(eligible_gates[[3L]]$status, "pass"))
+stopifnot(is.null(eligible_gates[[3L]]$reason))
+
+eligible_comparison$median_total_time_overhead_fraction <- 0.02
+eligible_gates <- pe_evaluate_gates(
+  eligible_comparison,
+  rss_scaling,
+  list(pass = TRUE),
+  config
+)
+stopifnot(identical(eligible_gates[[3L]]$status, "fail"))
+
 artifact <- list(
   schema_version = 1L,
   environment = list(),

@@ -119,7 +119,7 @@ fn generate(config: &Config) -> Result<(), String> {
     let schema = schema();
     let properties = WriterProperties::builder()
         .set_compression(Compression::SNAPPY)
-        .set_max_row_group_size(config.row_group_size)
+        .set_max_row_group_row_count(Some(config.row_group_size))
         .build();
     let file = File::create(&parquet_path)
         .map_err(|error| format!("could not create benchmark Parquet file: {error}"))?;

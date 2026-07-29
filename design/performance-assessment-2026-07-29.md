@@ -443,3 +443,37 @@ The evidence supports the accepted architecture: optimize the R control plane
 where it retains too much state, keep ordinary reads Arrow-native, and use Rust
 only where Delta Kernel or the Arrow batch/lifecycle boundary demonstrably
 requires it.
+
+## Implemented experiment: Kernel 0.26 source batches
+
+On 2026-07-30 the integration branch upgraded from Delta Kernel 0.22 with
+Arrow 57 to Delta Kernel 0.26 with Arrow 58. Kernel 0.26's split default engine
+accepts a Parquet batch size, so the package adapter can request a bounded
+source batch without implementing package-owned Arrow concatenation. The
+source request follows the public output size, clamped to 1,000–65,536 rows;
+the existing adapter still slices output when the caller requests a smaller
+batch.
+
+The paired installed-package benchmark used the same generated local Delta
+table throughout: 8,388,608 rows, four columns, eight Parquet files, and a
+requested output batch size of 65,536. Each timing series contained eight
+eager Arrow materializations. The first cold observation is retained in the
+raw series and the median is reported.
+
+| Path | Kernel 0.22 median | Kernel 0.26 median | Change |
+|---|---:|---:|---:|
+| Direct Arrow materialization | 0.3645 s | 0.1425 s | 60.9% faster |
+| Progress-enabled Arrow materialization | 0.7790 s | 0.1500 s | 80.7% faster |
+
+The emitted native stream changed from 8,448 batches (maximum 1,000 rows) to
+128 batches of exactly 65,536 rows. This clears ADR 003's 25% end-to-end time
+gate while keeping the extra Rust surface limited to Delta Kernel engine
+configuration. The upgrade also preserves the Rust 1.88 MSRV, passes all 35
+native unit tests and strict Clippy, and resolves successfully from the
+generated offline vendor archive.
+
+This result supersedes the earlier recommendation to prototype a custom
+coalescer. It materially reduces R/native crossings and progress callback
+overhead, but it does not animate the CLI spinner while a single synchronous
+Kernel pull is blocked on I/O. Continuous animation remains a distinct
+lifecycle experiment rather than a reason to add a second batching layer.

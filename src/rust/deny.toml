@@ -3,10 +3,9 @@ all-features = true
 
 [advisories]
 ignore = [
-  { id = "RUSTSEC-2024-0436", reason = "paste is a build-time Parquet transitive dependency; Delta Kernel 0.22/Arrow 57 cannot replace it" },
-  { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile is an unmaintained object_store GCP transitive dependency; vNext keeps profile and cloud authentication in R" },
-  { id = "RUSTSEC-2026-0194", reason = "quick-xml is pinned by object_store 0.12; vNext data URLs use bounded HTTP GET/range reads, not XML cloud/WebDAV listing APIs" },
-  { id = "RUSTSEC-2026-0195", reason = "quick-xml is pinned by object_store 0.12; vNext data URLs use bounded HTTP GET/range reads, not XML cloud/WebDAV listing APIs" },
+  { id = "RUSTSEC-2024-0436", reason = "paste is a build-time Parquet 58 transitive dependency; the locked Arrow line has not replaced it" },
+  { id = "RUSTSEC-2026-0194", reason = "quick-xml is pinned by object_store 0.13; vNext data URLs use bounded HTTP reads, not XML cloud or WebDAV listing APIs" },
+  { id = "RUSTSEC-2026-0195", reason = "quick-xml is pinned by object_store 0.13; vNext data URLs use bounded HTTP reads, not XML cloud or WebDAV listing APIs" },
 ]
 git-fetch-with-cli = true
 

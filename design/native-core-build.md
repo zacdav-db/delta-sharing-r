@@ -54,9 +54,10 @@ discarded at the constructor, Arrow callback, and outer FFI boundaries.
 
 ## Pinned dependency stack
 
-- `delta_kernel = 0.22.0`, with Arrow 57 and the default rustls engine
-- `arrow-array = 57.3.0`
-- `arrow-schema = 57.3.0`
+- `delta_kernel = 0.26.0`
+- `delta_kernel_default_engine = 0.26.0`, with Arrow 58 and rustls
+- `arrow-array = 58.3.0`
+- `arrow-schema = 58.3.0`
 - `same-file = 1.0.6` for stable cross-platform root identity (already in the
   locked Kernel graph, so this adds no resolved package)
 - Rust MSRV 1.88
@@ -68,13 +69,12 @@ offered no end-to-end scan evidence to justify its source-build cost, while
 disabling LTO produced a 45 MiB local shared library. Thin LTO is the bounded
 packaging compromise until scan benchmarks can justify another profile.
 
-The Kernel 0.22 pin is intentional interoperability scope, not a claim that it
-is the newest crate: the official Delta Sharing Python wrapper on the current
-delta-sharing integration line also pins Delta Kernel 0.22 with Arrow 57 and
-the rustls default engine. Moving to Kernel 0.25 and its split default-engine
-crate changes the API and packaging surface. Evaluate that as a dedicated
-upgrade only with a new lockfile audit, MSRV check, offline archive measurement,
-cross-platform link proof, and parity tests against the official wrapper.
+Kernel 0.26 is a deliberate performance upgrade. Its split default-engine
+crate exposes a bounded Parquet batch-size control, which lets the existing
+adapter request larger source batches without adding a package-owned
+coalescing layer. The upgrade retains the Rust 1.88 MSRV and requires the same
+lockfile audit, offline archive, cross-platform link, and parity gates as any
+future Kernel or Arrow change.
 
 Delta Kernel's default rustls engine transitively builds `aws-lc-sys`, which
 requires a working C/CMake toolchain. Its complete source-build and native-link

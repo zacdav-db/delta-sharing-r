@@ -775,6 +775,28 @@ pe_evaluate_gates <- function(comparisons, rss_scaling, provenance, config) {
   } else {
     "fail"
   }
+  ffi_evaluable <-
+    comparisons$r_observed_maximum_batch_rows >= 65536 &&
+      comparisons$rust_observed_maximum_batch_rows >= 65536
+  ffi_status <- if (!ffi_evaluable) {
+    "not_evaluable"
+  } else if (comparisons$median_total_time_overhead_fraction < 0.02) {
+    "pass"
+  } else {
+    "fail"
+  }
+  ffi_reason <- if (!ffi_evaluable) {
+    paste(
+      "The 64K+ batch precondition was not met. Observed maximums were",
+      sprintf(
+        "%d R rows and %d Rust rows per batch.",
+        as.integer(comparisons$r_observed_maximum_batch_rows),
+        as.integer(comparisons$rust_observed_maximum_batch_rows)
+      )
+    )
+  } else {
+    NULL
+  }
   list(
     pe_gate(
       "comparator-provenance",
@@ -797,21 +819,10 @@ pe_evaluate_gates <- function(comparisons, rss_scaling, provenance, config) {
     pe_gate(
       "NFR-PERF-02-ffi-overhead",
       "R/FFI overhead for 64K+ batches is below the Rust-only scan.",
-      "not_evaluable",
+      ffi_status,
       comparisons,
       "< 2% overhead versus the same Rust-only 64K+ scan",
-      paste(
-        "The direct comparator and generated large table are available, but",
-        "Delta Kernel 0.22's DefaultEngine fixes Parquet input batches at",
-        "1,000 rows and the package adapter only slices them. The observed",
-        sprintf(
-          "maximums were %d R rows and %d Rust rows per batch.",
-          as.integer(comparisons$r_observed_maximum_batch_rows),
-          as.integer(comparisons$rust_observed_maximum_batch_rows)
-        ),
-        "Meeting the 64K+ precondition requires production coalescing or a",
-        "custom Kernel engine, both outside this evidence-only scope."
-      )
+      ffi_reason
     ),
     pe_gate(
       "NFR-PERF-03-throughput",
@@ -983,7 +994,7 @@ pe_run <- function(repo_root, base_path, config, output) {
       "R and Rust samples alternate order but still run sequentially; scheduler, thermal, and filesystem-cache noise remain.",
       "Darwin `/usr/bin/time -l` reports bytes; GNU time `-v` reports KiB and is converted to bytes.",
       "Peak RSS includes R startup, loaded package/native libraries, Delta Kernel, Arrow, allocators, and the workload; each sample uses a fresh subprocess.",
-      "Delta Kernel 0.22 DefaultEngine emits at most 1,000 Parquet rows per input batch, so NFR-PERF-02's 64K+ precondition cannot be exercised without a production architecture change.",
+      "Delta Kernel 0.26 can emit 64K Parquet input batches; the evidence gate remains not evaluable whenever either the R or direct Rust comparator observes a smaller maximum batch.",
       "Generated tables cover a deterministic four-column local Parquet scan; cloud/object-store, wide/nested, deletion-vector, and CDF workloads remain release evidence.",
       "Windows and non-GNU Linux time backends are explicitly unavailable rather than assigned guessed units.",
       "No alternative Rust implementation is benchmarked, so this evidence cannot authorize ADR 003 scope expansion."

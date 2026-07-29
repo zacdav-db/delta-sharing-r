@@ -5,6 +5,7 @@
 //! scan controls, then exposes logical Arrow record batches.
 
 use std::collections::HashSet;
+use std::num::NonZeroUsize;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -12,13 +13,15 @@ use arrow_array::{RecordBatch, RecordBatchReader};
 use arrow_schema::{ArrowError, Schema, SchemaRef as ArrowSchemaRef};
 use delta_kernel::engine::arrow_conversion::TryIntoArrow;
 use delta_kernel::engine::arrow_data::EngineDataArrowExt;
-use delta_kernel::engine::default::DefaultEngineBuilder;
 use delta_kernel::object_store::local::LocalFileSystem;
 use delta_kernel::table_changes::TableChanges;
 use delta_kernel::{DeltaResult, Engine, EngineData, Snapshot, SnapshotRef};
+use delta_kernel_default_engine::DefaultEngineBuilder;
 use url::Url;
 
 const MAX_BATCH_SIZE: usize = 1_000_000;
+const MIN_SOURCE_BATCH_SIZE: usize = 1_000;
+const MAX_SOURCE_BATCH_SIZE: usize = 65_536;
 const MAX_PROJECTION_COLUMNS: usize = 10_000;
 const MAX_TABLE_LOCATION_BYTES: usize = 32_768;
 
@@ -153,11 +156,23 @@ fn validate_table_location(table_location: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn source_batch_size(batch_size: usize) -> NonZeroUsize {
+    NonZeroUsize::new(batch_size.clamp(MIN_SOURCE_BATCH_SIZE, MAX_SOURCE_BATCH_SIZE))
+        .expect("source batch size is always non-zero")
+}
+
+fn default_engine(batch_size: usize) -> Arc<dyn Engine> {
+    Arc::new(
+        DefaultEngineBuilder::new(Arc::new(LocalFileSystem::new()))
+            .with_batch_size(source_batch_size(batch_size))
+            .build(),
+    )
+}
+
 pub(crate) fn snapshot_reader(
     options: SnapshotReadOptions,
 ) -> Result<Box<dyn RecordBatchReader + Send>, String> {
-    let engine: Arc<dyn Engine> =
-        Arc::new(DefaultEngineBuilder::new(Arc::new(LocalFileSystem::new())).build());
+    let engine = default_engine(options.batch_size);
     let snapshot = Snapshot::builder_for(&options.table_location)
         .build(engine.as_ref())
         .map_err(|_| "Delta Kernel snapshot preparation failed".to_string())?;
@@ -224,8 +239,7 @@ pub(crate) fn cdf_reader(
 ) -> Result<Box<dyn RecordBatchReader + Send>, String> {
     const CDF_COLUMNS: [&str; 3] = ["_change_type", "_commit_version", "_commit_timestamp"];
 
-    let engine: Arc<dyn Engine> =
-        Arc::new(DefaultEngineBuilder::new(Arc::new(LocalFileSystem::new())).build());
+    let engine = default_engine(options.batch_size);
     let table_root = local_table_url(&options.table_location)?;
     let changes = Arc::new(
         TableChanges::try_new(
@@ -577,6 +591,16 @@ mod tests {
         let store = Arc::new(delta_kernel::object_store::memory::InMemory::new());
         let _engine = DefaultEngineBuilder::new(store).build();
         let _snapshot_builder = Snapshot::builder_for("memory:///delta-sharing-r-smoke");
+    }
+
+    #[test]
+    fn source_batch_size_is_bounded_for_small_and_large_output_batches() {
+        assert_eq!(source_batch_size(1).get(), MIN_SOURCE_BATCH_SIZE);
+        assert_eq!(source_batch_size(4096).get(), 4096);
+        assert_eq!(
+            source_batch_size(MAX_BATCH_SIZE).get(),
+            MAX_SOURCE_BATCH_SIZE
+        );
     }
 
     #[test]

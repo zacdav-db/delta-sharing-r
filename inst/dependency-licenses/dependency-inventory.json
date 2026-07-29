@@ -146,14 +146,14 @@
     }
   ],
   "rust": {
-    "cargo_lock_sha256": "185f48a34aac0bc0d2bf3c538ad4c555a82d8e0330c7f763202dbad2127633b1",
+    "cargo_lock_sha256": "374ffddb89d755ac79fc0afa3e15326375c9bb26ac923adbc6542c2dc5f4970b",
     "license_bundle": {
-      "bytes": 45916,
+      "bytes": 45480,
       "path": "rust-license-texts.tar.xz",
-      "sha256": "213f3c7af6f1cc4a7834520f59bb2527bc604f72f397d8532b641477bed98161"
+      "sha256": "84bcf6597b2f65b32708ba4e9d9086718dea5347062e317544456cc7819eee26"
     },
-    "locked_sibling_override_package_count": 1,
-    "package_count_requiring_override": 14,
+    "locked_sibling_override_package_count": 2,
+    "package_count_requiring_override": 15,
     "packages": [
       {
         "authors": [
@@ -352,7 +352,7 @@
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "f7b3141e0ec5145a22d8694ea8b6d6f69305971c4fa1c1a13ef0195aef2d678b",
+        "checksum": "a0ab212d2c1886e802f51c5212d78ebbcbb0bec980fff9dadc1eb8d45cd0b738",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -362,9 +362,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -373,15 +373,21 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "4c8955af33b25f3b175ee10af580577280b4bd01f7e823d94c7cdef7cf8c9aef",
-        "declared_license": "Apache-2.0",
+        "checksum": "cfd33d3e92f207444098c75b42de99d329562be0cf686b307b097cc52b4e999e",
+        "declared_license": "Apache-2.0 AND MIT",
         "legal_files": [
+          {
+            "bundle_member": "rust-license-texts/a01a418b6ffb1de8f4c3814e386b35e1a93a14529b68f17d286550f355b298e1",
+            "path": "LICENSE-MIT",
+            "sha256": "a01a418b6ffb1de8f4c3814e386b35e1a93a14529b68f17d286550f355b298e1",
+            "source": "vendored-crate"
+          },
           {
             "bundle_member": "rust-license-texts/cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
             "path": "LICENSE.txt",
@@ -389,9 +395,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -400,13 +406,13 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "c697ddca96183182f35b3a18e50b9110b11e916d7b7799cbfd4d34662f2c56c2",
+        "checksum": "0c6cd424c2693bcdbc150d843dc9d4d137dd2de4782ce6df491ad11a3a0416c0",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -416,9 +422,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -427,13 +433,13 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "646bbb821e86fd57189c10b4fcdaa941deaf4181924917b0daa92735baa6ada5",
+        "checksum": "4c5aefb56a2c02e9e2b30746241058b85f8983f0fcff2ba0c6d09006e1cded7f",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -443,9 +449,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -454,13 +460,13 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "8da746f4180004e3ce7b83c977daf6394d768332349d3d913998b10a120b790a",
+        "checksum": "e94e8cf7e517657a52b91ea1263acf38c4ca62a84655d72458a3359b12ab97de",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -470,9 +476,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -481,13 +487,13 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "1fdd994a9d28e6365aa78e15da3f3950c0fdcea6b963a12fa1c391afb637b304",
+        "checksum": "3c88210023a2bfee1896af366309a3028fc3bcbd6515fa29a7990ee1baa08ee0",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -497,9 +503,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -508,13 +514,13 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "abf7df950701ab528bf7c0cf7eeadc0445d03ef5d6ffc151eaae6b38a58feff1",
+        "checksum": "238438f0834483703d88896db6fe5a7138b2230debc31b34c0336c2996e3c64f",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -524,9 +530,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -535,13 +541,13 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "0ff8357658bedc49792b13e2e862b80df908171275f8e6e075c460da5ee4bf86",
+        "checksum": "205ca2119e6d679d5c133c6f30e68f027738d95ed948cf77677ea69c7800036b",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -551,9 +557,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -562,13 +568,13 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "f7d8f1870e03d4cbed632959498bcc84083b5a24bded52905ae1695bd29da45b",
+        "checksum": "1bffd8fd2579286a5d63bac898159873e5094a79009940bcb42bbfce4f19f1d0",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -578,9 +584,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -589,13 +595,13 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "18228633bad92bff92a95746bbeb16e5fc318e8382b75619dec26db79e4de4c0",
+        "checksum": "bab5994731204603c73ba69267616c50f80780774c6bb0476f1f830625115e0c",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -605,9 +611,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -616,13 +622,13 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "8c872d36b7bf2a6a6a2b40de9156265f0242910791db366a2c17476ba8330d68",
+        "checksum": "f633dbfdf39c039ada1bf9e34c694816eb71fbb7dc78f613993b7245e078a1ed",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -632,9 +638,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -643,13 +649,13 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "68bf3e3efbd1278f770d67e5dc410257300b161b93baedb3aae836144edcaf4b",
+        "checksum": "8cd065c54172ac787cf3f2f8d4107e0d3fdc26edba76fdf4f4cc170258942222",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -659,9 +665,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -670,13 +676,13 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "85e968097061b3c0e9fe3079cf2e703e487890700546b5b0647f60fca1b5a8d8",
+        "checksum": "29dd7cda3ab9692f43a2e4acc444d760cc17b12bb6d8232ddf64e9bab7c06b42",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -686,9 +692,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -697,13 +703,13 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "e4754a624e5ae42081f464514be454b39711daae0458906dacde5f4c632f33a8",
+        "checksum": "378530e55cd479eda3c14eb345310799717e6f76d0c332041e8487022166b471",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -713,9 +719,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -724,7 +730,49 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
+      },
+      {
+        "authors": [
+          "Carl Lerche <me@carllerche.com>"
+        ],
+        "checksum": "c7c24de15d275a1ecfd47a380fb4d5ec9bfe0933f309ed5e705b775596a3574d",
+        "declared_license": "MIT",
+        "legal_files": [
+          {
+            "bundle_member": "rust-license-texts/157d381f6304eba77459fc10dfb5b1b22fc0d04e384a32865f32d8e67a34c0eb",
+            "path": "LICENSE",
+            "sha256": "157d381f6304eba77459fc10dfb5b1b22fc0d04e384a32865f32d8e67a34c0eb",
+            "source": "vendored-crate"
+          }
+        ],
+        "license_file": null,
+        "name": "async-stream-impl",
+        "repository": "https://github.com/tokio-rs/async-stream",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "vcs_revision": "b0b2f22df8e87b7fed7b2fa234509797adbff7db",
+        "version": "0.3.6"
+      },
+      {
+        "authors": [
+          "Carl Lerche <me@carllerche.com>"
+        ],
+        "checksum": "0b5a71a6f37880a80d1d7f19efd781e4b5de42c88f0722cc13bcb6cc2cfe8476",
+        "declared_license": "MIT",
+        "legal_files": [
+          {
+            "bundle_member": "rust-license-texts/157d381f6304eba77459fc10dfb5b1b22fc0d04e384a32865f32d8e67a34c0eb",
+            "path": "LICENSE",
+            "sha256": "157d381f6304eba77459fc10dfb5b1b22fc0d04e384a32865f32d8e67a34c0eb",
+            "source": "vendored-crate"
+          }
+        ],
+        "license_file": null,
+        "name": "async-stream",
+        "repository": "https://github.com/tokio-rs/async-stream",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "vcs_revision": "b0b2f22df8e87b7fed7b2fa234509797adbff7db",
+        "version": "0.3.6"
       },
       {
         "authors": [
@@ -1656,7 +1704,7 @@
       },
       {
         "authors": [],
-        "checksum": "240042cf34c5db4e0ec57cce83368391471bee55c6f70a94e3d165b37ff4ff63",
+        "checksum": "df6b41a20d602dee48f62b01e952d45fcd352472c8daf7db3d2e80848d584190",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -1676,12 +1724,39 @@
         "name": "delta_kernel",
         "repository": "https://github.com/delta-io/delta-kernel-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "1c876015bb16902ae94f10916c7e78d7e6ced25e",
-        "version": "0.22.0"
+        "vcs_revision": "b14b4b854af636d4b94d048ebafa7a21048084c9",
+        "version": "0.26.0"
       },
       {
         "authors": [],
-        "checksum": "e4681f56effa50fc71ce8a7092a9e1583f2faa937a567979d432f996ec8661a7",
+        "checksum": "bc680764fd9973ccced76536ba93301522c502db9c9327de7f46cea4a08470c0",
+        "declared_license": "Apache-2.0",
+        "legal_files": [
+          {
+            "bundle_member": "rust-license-texts/c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+            "override_reason": "The split default-engine workspace member omits the Apache license and NOTICE shipped by the exact locked Kernel crate.",
+            "path": "LICENSE",
+            "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+            "source": "locked-registry-sibling:delta_kernel@0.26.0"
+          },
+          {
+            "bundle_member": "rust-license-texts/5939690f74b26ce550e4c6d40f2944a0103760c8ecc76efd3a7521f779e19a11",
+            "override_reason": "The split default-engine workspace member omits the Apache license and NOTICE shipped by the exact locked Kernel crate.",
+            "path": "NOTICE",
+            "sha256": "5939690f74b26ce550e4c6d40f2944a0103760c8ecc76efd3a7521f779e19a11",
+            "source": "locked-registry-sibling:delta_kernel@0.26.0"
+          }
+        ],
+        "license_file": null,
+        "name": "delta_kernel_default_engine",
+        "repository": "https://github.com/delta-io/delta-kernel-rs",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "vcs_revision": "b14b4b854af636d4b94d048ebafa7a21048084c9",
+        "version": "0.26.0"
+      },
+      {
+        "authors": [],
+        "checksum": "26de6d6e2ce024fac6aa0a08a0179f4d637052019f8dd4a7659662516bc041f4",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -1701,8 +1776,8 @@
         "name": "delta_kernel_derive",
         "repository": "https://github.com/delta-io/delta-kernel-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "1c876015bb16902ae94f10916c7e78d7e6ced25e",
-        "version": "0.22.0"
+        "vcs_revision": "b14b4b854af636d4b94d048ebafa7a21048084c9",
+        "version": "0.26.0"
       },
       {
         "authors": [],
@@ -2491,6 +2566,31 @@
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": "1876e4f02708b93903d55ef598f68e82a826518f",
         "version": "0.16.1"
+      },
+      {
+        "authors": [],
+        "checksum": "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a",
+        "declared_license": "MIT OR Apache-2.0",
+        "legal_files": [
+          {
+            "bundle_member": "rust-license-texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+            "path": "LICENSE-APACHE",
+            "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+            "source": "vendored-crate"
+          },
+          {
+            "bundle_member": "rust-license-texts/ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2",
+            "path": "LICENSE-MIT",
+            "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2",
+            "source": "vendored-crate"
+          }
+        ],
+        "license_file": null,
+        "name": "hashbrown",
+        "repository": "https://github.com/rust-lang/hashbrown",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "vcs_revision": "c62a63a61b7caf2de8f9ecb7b06a66b0ab6bdf3d",
+        "version": "0.17.1"
       },
       {
         "authors": [],
@@ -3719,7 +3819,7 @@
           "Arthur Silva <arthurprs@gmail.com>",
           "ticki <Ticki@users.noreply.github.com>"
         ],
-        "checksum": "98c23545df7ecf1b16c303910a69b079e8e251d60f7dd2cc9b4177f2afaf1746",
+        "checksum": "7ef0d4ed8669f8f8826eb00dc878084aa8f253506c4fd5e8f58f5bce72ddb97e",
         "declared_license": "MIT",
         "legal_files": [
           {
@@ -3733,8 +3833,8 @@
         "name": "lz4_flex",
         "repository": "https://github.com/pseitz/lz4_flex",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "fa48c987a88df5059a49fe7519c028d6f2b8caf4",
-        "version": "0.12.1"
+        "vcs_revision": "8507d2e68ba2477fd087b7fa55d6806ca63f8138",
+        "version": "0.13.1"
       },
       {
         "authors": [
@@ -4022,7 +4122,7 @@
       },
       {
         "authors": [],
-        "checksum": "fbfbfff40aeccab00ec8a910b57ca8ecf4319b335c542f2edcd19dd25a1e2a00",
+        "checksum": "622acbc9100d3c10e2ee15804b0caa40e55c933d5aa53814cd520805b7958a49",
         "declared_license": "MIT/Apache-2.0",
         "legal_files": [
           {
@@ -4043,7 +4143,7 @@
         "repository": "https://github.com/apache/arrow-rs-object-store",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "0.12.5"
+        "version": "0.13.2"
       },
       {
         "authors": [
@@ -4179,7 +4279,7 @@
         "authors": [
           "Apache Arrow <dev@arrow.apache.org>"
         ],
-        "checksum": "6ee96b29972a257b855ff2341b37e61af5f12d6af1158b6dcdb5b31ea07bb3cb",
+        "checksum": "5dafa7d01085b62a47dd0c1829550a0a36710ea9c4fe358a05a85477cec8a908",
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
@@ -4189,9 +4289,9 @@
             "source": "vendored-crate"
           },
           {
-            "bundle_member": "rust-license-texts/f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "bundle_member": "rust-license-texts/e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "path": "NOTICE.txt",
-            "sha256": "f5b6a58f5d2082e403c49663d87566328d40cf03f16abb01f52632a09b97c55e",
+            "sha256": "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6",
             "source": "vendored-crate"
           }
         ],
@@ -4200,7 +4300,7 @@
         "repository": "https://github.com/apache/arrow-rs",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": null,
-        "version": "57.3.0"
+        "version": "58.3.0"
       },
       {
         "authors": [
@@ -4455,7 +4555,7 @@
       },
       {
         "authors": [],
-        "checksum": "b66c2058c55a409d601666cffe35f04333cf1013010882cec174a7467cd4e21c",
+        "checksum": "cdcc8dd4e2f670d309a5f0e83fe36dfdc05af317008fea29144da1a2ac858e5e",
         "declared_license": "MIT",
         "legal_files": [
           {
@@ -4469,8 +4569,8 @@
         "name": "quick-xml",
         "repository": "https://github.com/tafia/quick-xml",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "595033e6d1b8078c15da89ed6acf2ae6b45b1918",
-        "version": "0.38.4"
+        "vcs_revision": "f72e8b3718f4e13c949934549bbe4290e65085b1",
+        "version": "0.39.4"
       },
       {
         "authors": [],
@@ -5112,43 +5212,6 @@
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": "71e4dd82ad584ac93c41a5ec694f255530da97d3",
         "version": "0.8.3"
-      },
-      {
-        "authors": [],
-        "checksum": "dce314e5fee3f39953d46bb63bb8a46d40c2f8fb7cc5a3b6cab2bde9721d6e50",
-        "declared_license": "Apache-2.0 OR ISC OR MIT",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/c5dae4585d8520d1bc3d435dc5dd813be63046ebccc3c4eb866044eff304f0f0",
-            "path": "LICENSE",
-            "sha256": "c5dae4585d8520d1bc3d435dc5dd813be63046ebccc3c4eb866044eff304f0f0",
-            "source": "vendored-crate"
-          },
-          {
-            "bundle_member": "rust-license-texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-            "path": "LICENSE-APACHE",
-            "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-            "source": "vendored-crate"
-          },
-          {
-            "bundle_member": "rust-license-texts/7cfafc877eccc46c0e346ccbaa5c51bb6b894d2b818e617d970211e232785ad4",
-            "path": "LICENSE-ISC",
-            "sha256": "7cfafc877eccc46c0e346ccbaa5c51bb6b894d2b818e617d970211e232785ad4",
-            "source": "vendored-crate"
-          },
-          {
-            "bundle_member": "rust-license-texts/709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c",
-            "path": "LICENSE-MIT",
-            "sha256": "709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c",
-            "source": "vendored-crate"
-          }
-        ],
-        "license_file": null,
-        "name": "rustls-pemfile",
-        "repository": "https://github.com/rustls/pemfile",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "0f37efe74407143d72ba21428cc2ca4e36257850",
-        "version": "2.2.0"
       },
       {
         "authors": [],
@@ -5945,7 +6008,7 @@
         "authors": [
           "Peter Glotfelty <peter.glotfelty@microsoft.com>"
         ],
-        "checksum": "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf",
+        "checksum": "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd",
         "declared_license": "MIT",
         "legal_files": [
           {
@@ -5959,14 +6022,14 @@
         "name": "strum",
         "repository": "https://github.com/Peternator7/strum",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "c8d6241123d68b2e56a8d546300508294338f69a",
-        "version": "0.27.2"
+        "vcs_revision": "7376771128834d28bb9beba5c39846cba62e71ec",
+        "version": "0.28.0"
       },
       {
         "authors": [
           "Peter Glotfelty <peter.glotfelty@microsoft.com>"
         ],
-        "checksum": "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7",
+        "checksum": "ab85eea0270ee17587ed4156089e10b9e6880ee688791d45a905f5b1ca36f664",
         "declared_license": "MIT",
         "legal_files": [
           {
@@ -5980,8 +6043,8 @@
         "name": "strum_macros",
         "repository": "https://github.com/Peternator7/strum",
         "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "c8d6241123d68b2e56a8d546300508294338f69a",
-        "version": "0.27.2"
+        "vcs_revision": "7376771128834d28bb9beba5c39846cba62e71ec",
+        "version": "0.28.0"
       },
       {
         "authors": [
@@ -8852,9 +8915,9 @@
       }
     ],
     "pinned_vcs_override_package_count": 13,
-    "registry_package_count": 325,
-    "resolved_package_count": 326,
-    "unique_legal_text_count": 214
+    "registry_package_count": 328,
+    "resolved_package_count": 329,
+    "unique_legal_text_count": 215
   },
   "schema_version": 1
 }
