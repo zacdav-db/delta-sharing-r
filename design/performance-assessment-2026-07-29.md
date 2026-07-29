@@ -7,7 +7,9 @@ implementation at commit `e56404c` on
 `codex/delta-kernel-s7-overhaul`. Its final sections record the experiments
 subsequently implemented on the integration branch. Descriptions of the
 "current" path in the original assessment are therefore baseline descriptions;
-the implemented-experiment sections state the resulting decisions.
+the experiment sections record what was tested. The final decision removed
+progress indicators and their native collection worker, leaving every public
+materializer on the direct Arrow stream.
 
 The review follows ADR 003:
 
@@ -41,10 +43,10 @@ The original assessment identified four concentrated boundaries:
    parsed actions, file lists, and re-encoded synthetic-log lines. At 100,000
    file actions, the benchmark retained roughly 179 MiB in the parsed file
    objects alone and spent 17 seconds re-encoding them.
-2. **Progress-enabled eager reads:** progress currently turns a direct C-stream
-   materialization into one R call per Kernel batch, retains every batch, then
-   replays them. It was about 19% slower in a live paired comparison and
-   1.8–2.3 times slower in local eager-materialization tests.
+2. **Progress-enabled eager reads:** at the baseline, progress turned a direct
+   C-stream materialization into one R call per Kernel batch, retained every
+   batch, then replayed them. It was about 19% slower in a live paired
+   comparison and 1.8–2.3 times slower in local eager-materialization tests.
 3. **Presigned Parquet I/O inside Delta Kernel 0.22:** the Kernel default engine
    fetches each presigned Parquet object into one in-memory byte buffer before
    decoding it and overlaps only the next file with the current scan. This can
@@ -55,11 +57,12 @@ The original assessment identified four concentrated boundaries:
    live read. Explicit Delta format avoids it today; careful table-level caching
    could avoid it without changing the public API.
 
-The resulting work kept the ownership boundary intact. Snapshot manifests now
-use bounded R staging; the equivalent CDF prototype was rejected because its
-memory reduction did not justify its wall-time cost. Kernel 0.26 supplied larger
-source batches, and the progress worker remains narrow Arrow/lifecycle glue.
-Metadata caching remains a possible R-side experiment.
+The resulting work kept the ownership boundary intact. Snapshot manifests use
+bounded R staging; the equivalent CDF prototype was rejected because its memory
+reduction did not justify its wall-time cost. Kernel 0.26 supplied larger source
+batches. The progress worker was tested and then removed because its modest UX
+benefit did not justify a second materialization and lifecycle path. Metadata
+caching remains a possible R-side experiment.
 
 ## Baseline execution model at `e56404c`
 
@@ -75,8 +78,8 @@ A snapshot read currently does the following:
 5. Give the local log path to Delta Kernel in Rust.
 6. Expose the resulting record batches as an Arrow C stream.
 
-The direct `to_arrow_stream()`, `to_arrow_reader()`, non-progress `to_arrow()`,
-and non-progress `to_data_frame()` paths preserve the native C-stream boundary.
+The direct `to_arrow_stream()`, `to_arrow_reader()`, `to_arrow()`, and
+`to_data_frame()` paths preserved the native C-stream boundary.
 The progress path instead calls `$get_next()` in R for every batch, retains all
 batches in a list, creates a second nanoarrow stream, and then materializes it.
 
@@ -481,14 +484,14 @@ overhead, but it does not animate the CLI spinner while a single synchronous
 Kernel pull is blocked on I/O. Continuous animation remains a distinct
 lifecycle experiment rather than a reason to add a second batching layer.
 
-## Implemented experiment: live eager-read progress
+## Retired experiment: live eager-read progress
 
-The progress path now moves an already-created Arrow C stream to one native
+The progress experiment moved an already-created Arrow C stream to one native
 worker for eager collection. R polls only atomic row, batch, and completion
 counters every 50 milliseconds, forcing a CLI repaint even when the next
 Kernel batch is still blocked on object-store I/O. When collection completes,
 the worker returns the retained Arrow record batches through the same Arrow C
-Stream ABI. Lazy readers and eager reads with `progress = FALSE` remain on the
+Stream ABI. Lazy readers and eager reads with progress disabled remained on the
 direct path.
 
 For snapshots, the R query layer computes an exact denominator only when every
@@ -522,12 +525,19 @@ unloaded DLL. Native tests cover a gated no-batch interval, successful joined
 handoff, repeated finish, cancellation, detached-worker pinning, panic
 containment, and active-job completion.
 
+The experiment was subsequently removed. Its 0.2025-second local median was
+15.7% slower than the paired 0.1750-second direct path, while the background
+worker required separate FFI, cancellation, unload, and retained-batch
+lifecycles. The clean vNext API now has no `progress` arguments: eager and lazy
+materializers all consume the direct Arrow stream. Snapshot staging also no
+longer parses per-file statistics solely to construct a progress denominator.
+
 ## Implemented experiment: bounded snapshot manifests in R
 
 Snapshot Query Table responses are now consumed through httr2's pull-based
 response connection in groups of at most 256 complete NDJSON lines. R retains
-only protocol, metadata, pagination state, progress counters, and the current
-chunk. Normalized file actions are written to a private staging file and copied
+only protocol, metadata, pagination state, and the current chunk. Normalized
+file actions are written to a private staging file and copied
 behind the protocol/metadata header in the final commit. The stage lives inside
 the ownership-marked log root and is deleted before the native cleanup guard
 receives that root.

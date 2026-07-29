@@ -29,20 +29,13 @@ its Arrow and data-frame materializers.
 \subsection{Method \code{to_arrow()}}{
 Materialize as an Arrow table (requires \code{{arrow}}).
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_arrow(
-  batch_size = DEFAULT_BATCH_SIZE,
-  progress = interactive()
-)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_arrow(batch_size = DEFAULT_BATCH_SIZE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{batch_size}}{Rows per batch.}
-
-\item{\code{progress}}{Show live rows and, when snapshot statistics are
-complete, an exact percentage. Defaults to \code{TRUE} in interactive R
-sessions.}
 }
 \if{html}{\out{</div>}}
 }
@@ -78,20 +71,13 @@ An \code{arrow::RecordBatchReader}.
 \subsection{Method \code{to_data_frame()}}{
 Materialize as a base data frame.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_data_frame(
-  batch_size = DEFAULT_BATCH_SIZE,
-  progress = interactive()
-)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_data_frame(batch_size = DEFAULT_BATCH_SIZE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{batch_size}}{Rows per batch.}
-
-\item{\code{progress}}{Show live rows and, when snapshot statistics are
-complete, an exact percentage. Defaults to \code{TRUE} in interactive R
-sessions.}
 }
 \if{html}{\out{</div>}}
 }

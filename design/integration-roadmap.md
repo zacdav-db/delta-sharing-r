@@ -2,7 +2,7 @@
 
 Status: active branch checklist
 Integration branch: `codex/delta-kernel-s7-overhaul`
-Current recorded head: `8d1ed40`
+Current implementation: direct Arrow materialization; see branch `HEAD`
 Last integration update: 2026-07-30
 
 This is the branch-local execution plan for the vNext overhaul. The integration
@@ -25,12 +25,12 @@ against `main` without separate maintainer authorization.
 - There are no aliases, transition wrappers, deprecation layers, migration
   warnings, or prior-version parity tests.
 - Profiles, authentication, HTTP, retry, protocol parsing, pagination,
-  planning, synthetic logs, diagnostics, progress semantics, and public
-  adapters are implemented in R.
+  planning, synthetic logs, diagnostics, and public adapters are implemented
+  in R.
 - Rust is limited to Delta Kernel invocation and the minimum Arrow/native
-  lifecycle glue required to expose and safely collect Kernel output.
-- Kernel-coupled scan state, cancellation, native worker state, and Arrow
-  buffers may be owned by Rust while a stream or progress collection is active.
+  lifecycle glue required to expose Kernel output.
+- Kernel-coupled scan state, cancellation, and Arrow buffers may be owned by
+  Rust while a stream is active.
 - Expanding Rust beyond that boundary requires the representative benchmark,
   ADR, and maintainer approval described in ADR 003.
 - Delta-format and protocol Parquet-format reads both use Delta Kernel through
@@ -79,18 +79,13 @@ R owns:
 - table discovery and metadata;
 - snapshot and CDF planning;
 - protocol action normalization and synthetic-log creation;
-- public validation, conditions, progress semantics, and materializers.
+- public validation, conditions, and materializers.
 
 Rust owns only:
 
 - Delta Kernel snapshot/CDF construction and scanning;
 - the Arrow C Stream adapter, exact batch/row limits, and prepared-log cleanup;
-- panic/error containment at the C ABI;
-- the native eager-progress worker and its cancellation/library-lifetime guard.
-
-The progress worker accepts an already-created Arrow C stream. It does not
-perform HTTP, parse protocol actions, choose formats, or duplicate snapshot/CDF
-planning.
+- panic/error containment at the C ABI.
 
 ## Integration rules
 
@@ -114,15 +109,15 @@ planning.
 9. A phase is complete only when its evidence passes on the integration branch,
    not merely in a specialist worktree.
 10. Old S7-era coverage, package-check, or platform evidence does not by itself
-    close a gate after the lean R6 rewrite or the new progress worker.
+    close a gate after the lean R6 rewrite or direct-materializer cleanup.
 
 ## Current evidence
 
-At `dbb538c`:
+At the current direct-materialization implementation:
 
 - The ordinary R suite passes with seven explicitly gated integration skips:
   six public endpoint tests and one credentialed CDF test.
-- The locked, offline Rust suite passes all 38 tests.
+- The locked, offline Rust suite passes all 35 tests.
 - `cargo fmt --check` and strict Clippy pass.
 - A clean source installation and the installed-package R suite pass locally on
   macOS arm64.
@@ -131,11 +126,8 @@ At `dbb538c`:
 - Credentialed CDF versions 1 through 4 return the expected 3,500 rows across
   insert, delete, update-preimage, and update-postimage changes. Timestamp-
   bounded deletion and an open-ended empty result are also live-proven.
-- Snapshot progress continues animating while the next Kernel batch is blocked.
-  It shows a percentage only when all file row statistics are trustworthy,
-  subtracts deletion-vector cardinality, and respects the exact limit.
-- CDF progress is deliberately indeterminate because action statistics do not
-  reliably equal emitted change rows.
+- Eager Arrow and data-frame reads consume the native Arrow stream directly,
+  with no background collection worker or replay stream.
 
 ### Performance evidence
 
@@ -146,12 +138,11 @@ configured Kernel source batches from the public batch size, bounded to
 | Path | Earlier median | Current evidence | Change |
 |---|---:|---:|---:|
 | Direct Arrow | 0.3645 s | 0.1425 s | 60.9% faster |
-| Progress-enabled Arrow | 0.7790 s | 0.2025 s | 74.0% faster |
 
-The current direct comparison for the progress-worker experiment was
-0.1750 seconds. The source stream changed from 8,448 approximately 1,000-row
-batches to 128 batches of 65,536 rows. Live direct/progress samples were within
-normal network variance and showed no meaningful regression.
+The retired progress-worker experiment had a 0.2025-second median versus
+0.1750 seconds for its direct comparison. The source stream changed from 8,448
+approximately 1,000-row batches to 128 batches of 65,536 rows. The public API
+now exposes only the direct path.
 
 This evidence supports the current narrow native boundary. It does not justify
 moving auth, HTTP, protocol, planning, or synthetic-log work into Rust.
@@ -162,7 +153,8 @@ moving auth, HTTP, protocol, planning, or synthetic-log work into Rust.
 
 - [x] Record ADR 004 as the governing R6 object-system decision.
 - [x] Remove active-roadmap claims that S7 is the public API.
-- [x] Record Kernel 0.26, Arrow 58.3, and the progress worker.
+- [x] Record Kernel 0.26 and Arrow 58.3.
+- [x] Remove the optional progress path and its native collection worker.
 - [x] Attribute package copyright to Zac Davies rather than Databricks.
 - [ ] Confirm the CDF native preparation error may safely include its underlying
   Kernel detail without exposing a temporary path.
@@ -170,26 +162,21 @@ moving auth, HTTP, protocol, planning, or synthetic-log work into Rust.
 Exit gate A: active documentation, package metadata, and implementation describe
 the same public surface and ownership boundary.
 
-### Phase B — progress and native lifecycle hardening
+### Phase B — direct stream lifecycle hardening
 
-- [x] Unit-test progress status while a source batch is blocked.
-- [x] Unit-test successful handoff, repeated finish, cancellation observation,
-  detached-worker library pinning, and panic containment.
+- [x] Remove background collection, polling, batch replay, and DLL pinning.
+- [x] Preserve direct-stream error and panic containment.
 - [x] Translate owner-thread R interruption to `delta_sharing_cancelled`.
-- [x] Leave lazy and `progress = FALSE` paths on the direct stream.
+- [x] Keep lazy and eager materializers on the same direct stream.
 - [ ] Interrupt a credentialed live read while it is genuinely blocked on
   object storage.
 - [x] Prove cleanup, garbage collection, package unload/reload, and reinstall
   after normal completion.
-- [x] Prove detached-worker library pinning and safe installed-package reuse in
-  local subprocess gates.
-- [ ] Run the detached blocked-worker policy under hosted sanitizer/leak
-  tooling.
-- [ ] Pass owner-thread interrupt and foreign-thread no-R-API checks on macOS,
-  Linux, and Windows.
+- [ ] Run direct stream ownership under hosted sanitizer/leak tooling.
+- [ ] Pass owner-thread interrupt checks on macOS, Linux, and Windows.
 
-Exit gate B: normal, error, interrupt, finalizer, unload, and detached-worker
-paths are leak-free and safe on every target.
+Exit gate B: normal, error, interrupt, finalizer, and unload paths are leak-free
+and safe on every target.
 
 ### Phase C — snapshot manifest performance in R
 
@@ -240,7 +227,7 @@ Production remains the concise R-owned retained path.
 - [ ] Extend the connector matrix to Arrow reader/stream and DuckDB paths where
   both connectors expose a comparable form.
 - [ ] Record control-plane time, time to first batch, peak RSS,
-  emitted batches, rows, projection, limit, and progress on/off.
+  emitted batches, rows, projection, and limit.
 - [x] Record total wall time, rows, columns, bounds, connector versions, and the
   exact same-profile commands.
 - [x] Use controlled local fixtures for regression gates; treat remote samples
@@ -257,13 +244,14 @@ evidence rather than isolated microbenchmarks.
   current evidence is 70.46%.
 - [ ] Raise current R6 line coverage to at least 90% with reviewed exclusions
   and keep the gate enforced.
-- [ ] Recalculate Rust coverage after the Kernel upgrade and progress worker and
+- [ ] Recalculate Rust coverage after the Kernel upgrade and worker removal and
   enforce at least 85% line coverage with direct lifecycle coverage.
 - [ ] Pass `R CMD check` with zero errors, warnings, and unexplained notes on
   minimum, release, and development R.
-- [x] Pass the current production implementation archive locally on macOS
-  arm64 with zero
-  errors, zero warnings, and one expected new-submission/development note.
+- [x] Pass the current direct-only production archive locally on macOS arm64
+  with zero errors, zero warnings, and two explained notes: the expected
+  new-submission/development note and local `pandoc` detection for the README.
+  Vignette build and rebuild both pass.
 - [ ] Pass source builds/tests on macOS arm64/x86_64, Linux x86_64/arm64, and
   Windows x86_64.
 - [ ] Pass Rust 1.88 MSRV, stable, locked/offline vendor, advisory, source, and
@@ -277,8 +265,8 @@ evidence rather than isolated microbenchmarks.
   libraries.
 - [ ] Recheck README, reference documentation, examples, and the handover
   against the exact candidate.
-- [ ] Rotate the exposed Desktop bearer token and remove it from branch history
-  before any push or external handoff.
+- [ ] Rotate the exposed Desktop bearer token before any push or external
+  handoff. Local integration history has already been purged.
 
 Exit gate F: all definition-of-done evidence is current for the lean R6 tree and
 the exact artifacts intended for release.
@@ -310,8 +298,8 @@ the exact artifacts intended for release.
 - FFI overhead remains below 2% for batches of at least 64K rows.
 - Direct streaming RSS is bounded by in-flight batches plus fixed engine
   overhead, not total table size.
-- Backpressure, early limit, progress polling, explicit release, R interrupt,
-  garbage collection, mid-stream error, and process unload are measured.
+- Backpressure, early limit, explicit release, R interrupt, garbage collection,
+  mid-stream error, and process unload are measured.
 - No credential, signed URL, buffer, thread, or temporary-directory leak is
   accepted.
 - Moving any client/protocol responsibility from R to Rust additionally
@@ -339,10 +327,11 @@ not the current public implementation or completion proof.
 | S7 implementation | `fe0d522`, `936f5cf`, later phase commits | Superseded | Built the first vNext implementation and much of the lifecycle/CI evidence. ADR 004 and `e56404c` removed this public surface. |
 | Portability/security scaffolding | `2494378`, `4d89ca9`, `cfdad9e`, `e61a221`, `d4347b9`, `e97adfd` | Infrastructure retained; proof must be rerun | Offline vendoring, package artifacts, hosted matrices, Windows interrupt, and sanitizer jobs remain useful, but old passes do not close current-head gates. |
 | Lean R6 rewrite | `e56404c` | Current architecture integrated | Replaced the S7 implementation with the compact R6 client/table/read surface and R-owned protocol stack; ADR 004 governs. |
-| Live helper correction | `63e79f7` | Integrated | Uses the Desktop profile explicitly for the large live progress demonstration. |
+| Live helper correction | `63e79f7` | Integrated | Uses the Desktop profile explicitly for the large credentialed read demonstration. |
 | Kernel/Arrow upgrade | `fecb4e5` | Integrated and locally proven | Delta Kernel 0.26, Arrow 58.3, larger Kernel source batches, offline vendor/license updates, and controlled performance evidence. |
-| Live eager progress | `dbb538c` | Integrated and locally/live proven | Native Arrow collection worker, continuous spinner, trustworthy snapshot percentages, indeterminate CDF progress, cancellation and unload guards, and focused R/native tests. |
-| Bounded manifests and lifecycle | `8d1ed40` | Integrated and locally/live proven | Bounded R snapshot staging, rejected CDF-spooling evidence, installed progress-worker lifecycle gates, current R/Python comparison, package check, coverage baseline, and credential-safe live helper. |
+| Live eager progress | `dbb538c` | Retired | Proved continuous indicators were possible, but added a second materialization path and substantial lifecycle surface. |
+| Bounded manifests and lifecycle | `8d1ed40` | Integrated and locally/live proven | Bounded R snapshot staging, rejected CDF-spooling evidence, current R/Python comparison, package check, coverage baseline, and credential-safe live helper. |
+| Direct materialization cleanup | current branch | Integrated and locally proven | Removed progress arguments, row-total parsing, the native collection worker, batch replay, DLL pinning, and progress-specific tests; the final source archive passes its full local package check. |
 
 Only after every open gate is evidenced on this integration branch is the
 overhaul eligible for a separately authorized release or main-line integration.

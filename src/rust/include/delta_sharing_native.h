@@ -39,33 +39,6 @@ int32_t delta_sharing_native_populate_cdf_stream(
     char *error_buffer,
     size_t error_capacity);
 
-int32_t delta_sharing_native_collect_start(
-    ArrowArrayStream *source,
-    void **job_out,
-    char *error_buffer,
-    size_t error_capacity);
-
-int32_t delta_sharing_native_collect_status(
-    void *job,
-    uint64_t *rows,
-    uint64_t *batches,
-    int32_t *done,
-    char *error_buffer,
-    size_t error_capacity);
-
-int32_t delta_sharing_native_collect_finish(
-    void *job,
-    ArrowArrayStream *destination,
-    char *error_buffer,
-    size_t error_capacity);
-
-void delta_sharing_native_collect_release(void *job);
-
-int32_t delta_sharing_native_collect_active(
-    uint64_t *active,
-    char *error_buffer,
-    size_t error_capacity);
-
 int32_t delta_sharing_native_reap_pending(
     uint64_t *pending,
     char *error_buffer,

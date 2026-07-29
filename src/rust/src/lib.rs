@@ -10,11 +10,10 @@
 //! pointer operation rather than leaning on the function-level `unsafe`.
 #![deny(unsafe_op_in_unsafe_fn)]
 
-mod collect;
 mod kernel;
 mod stream;
 
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::{c_char, c_int, CStr};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr::NonNull;
 
@@ -298,144 +297,6 @@ pub unsafe extern "C" fn delta_sharing_native_populate_cdf_stream(
                 None => Ok(stream::record_batch_stream(reader)),
             }
         })
-    })
-}
-
-/// Move an initialized Arrow C stream to a background collection worker.
-///
-/// # Safety
-///
-/// `source` must point to an initialized Arrow C stream and `job_out` must
-/// point to writable storage for one opaque job pointer.
-#[no_mangle]
-pub unsafe extern "C" fn delta_sharing_native_collect_start(
-    source: *mut FFI_ArrowArrayStream,
-    job_out: *mut *mut c_void,
-    error_buffer: *mut c_char,
-    error_capacity: usize,
-) -> c_int {
-    ffi_boundary(error_buffer, error_capacity, || {
-        let source =
-            NonNull::new(source).ok_or_else(|| "source Arrow stream is NULL".to_string())?;
-        let job_out =
-            NonNull::new(job_out).ok_or_else(|| "collection job output is NULL".to_string())?;
-
-        // SAFETY: the caller provides an initialized Arrow stream. `from_raw`
-        // moves it out and leaves an empty shell for nanoarrow to release.
-        let source = unsafe { FFI_ArrowArrayStream::from_raw(source.as_ptr()) };
-        let job = collect::CollectJob::start(source)?;
-        // SAFETY: `job_out` is writable storage for one opaque pointer.
-        unsafe {
-            job_out
-                .as_ptr()
-                .write(Box::into_raw(Box::new(job)).cast::<c_void>());
-        }
-        Ok(())
-    })
-}
-
-/// Read atomic progress counters from a background collection job.
-///
-/// # Safety
-///
-/// `job` must be a live pointer returned by
-/// `delta_sharing_native_collect_start`; every output pointer must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn delta_sharing_native_collect_status(
-    job: *mut c_void,
-    rows: *mut u64,
-    batches: *mut u64,
-    done: *mut c_int,
-    error_buffer: *mut c_char,
-    error_capacity: usize,
-) -> c_int {
-    ffi_boundary(error_buffer, error_capacity, || {
-        let job = NonNull::new(job)
-            .ok_or_else(|| "collection job is NULL".to_string())?
-            .cast::<collect::CollectJob>();
-        let rows = NonNull::new(rows).ok_or_else(|| "collection row output is NULL".to_string())?;
-        let batches =
-            NonNull::new(batches).ok_or_else(|| "collection batch output is NULL".to_string())?;
-        let done =
-            NonNull::new(done).ok_or_else(|| "collection done output is NULL".to_string())?;
-
-        // SAFETY: the C external pointer owns this live job for the call.
-        let status = unsafe { job.as_ref() }.status();
-        // SAFETY: the caller supplied writable scalar outputs.
-        unsafe {
-            rows.as_ptr().write(status.rows);
-            batches.as_ptr().write(status.batches);
-            done.as_ptr().write(c_int::from(status.done));
-        }
-        Ok(())
-    })
-}
-
-/// Export the completed collection as a new Arrow C stream.
-///
-/// # Safety
-///
-/// `job` must be live and complete. `destination` must be writable,
-/// nanoarrow-owned storage for an uninitialized Arrow C stream.
-#[no_mangle]
-pub unsafe extern "C" fn delta_sharing_native_collect_finish(
-    job: *mut c_void,
-    destination: *mut FFI_ArrowArrayStream,
-    error_buffer: *mut c_char,
-    error_capacity: usize,
-) -> c_int {
-    ffi_boundary(error_buffer, error_capacity, || {
-        let job = NonNull::new(job)
-            .ok_or_else(|| "collection job is NULL".to_string())?
-            .cast::<collect::CollectJob>();
-        let destination = NonNull::new(destination)
-            .ok_or_else(|| "nanoarrow stream pointer is NULL".to_string())?;
-
-        // SAFETY: the C external pointer owns this live job for the call.
-        stream::populate_stream(destination, || unsafe { job.as_ref() }.finish_stream())
-    })
-}
-
-/// Request cancellation and release one opaque collection-job handle.
-///
-/// The worker owns its source stream independently. If it is currently blocked
-/// in I/O it observes cancellation when that pull returns, without blocking R.
-///
-/// # Safety
-///
-/// `job` must be NULL or a pointer returned by
-/// `delta_sharing_native_collect_start`, released at most once.
-#[no_mangle]
-pub unsafe extern "C" fn delta_sharing_native_collect_release(job: *mut c_void) {
-    if job.is_null() {
-        return;
-    }
-    let _ = catch_unwind(AssertUnwindSafe(|| {
-        // SAFETY: ownership of this allocation is returned exactly once.
-        let job = unsafe { Box::from_raw(job.cast::<collect::CollectJob>()) };
-        job.cancel();
-        drop(job);
-    }));
-}
-
-/// Report background workers that have not yet released their source stream.
-///
-/// # Safety
-///
-/// `active` must point to writable storage for one `u64`.
-#[no_mangle]
-pub unsafe extern "C" fn delta_sharing_native_collect_active(
-    active: *mut u64,
-    error_buffer: *mut c_char,
-    error_capacity: usize,
-) -> c_int {
-    ffi_boundary(error_buffer, error_capacity, || {
-        let active = NonNull::new(active).ok_or_else(|| "active job output is NULL".to_string())?;
-        // SAFETY: the caller supplied writable storage for one `u64`.
-        unsafe {
-            active.as_ptr().write(collect::active_job_count());
-        }
-        Ok(())
     })
 }
 

@@ -37,7 +37,6 @@ if (
 }
 
 pkgload::load_all(".", quiet = TRUE)
-options(cli.progress_show_after = Inf)
 table <- sharing_client(profile)$table(table_name)
 
 measurements <- purrr::map(seq_len(iterations), function(iteration) {
@@ -46,12 +45,12 @@ measurements <- purrr::map(seq_len(iterations), function(iteration) {
     table$snapshot(
       limit = limit,
       response_format = "delta"
-    )$to_data_frame(progress = FALSE)
+    )$to_data_frame()
   } else {
     table$changes(
       starting_version = cdf_bounds[[1L]],
       ending_version = cdf_bounds[[2L]]
-    )$to_data_frame(progress = FALSE)
+    )$to_data_frame()
   }
   list(
     iteration = iteration,

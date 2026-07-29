@@ -13,8 +13,8 @@ query_capabilities <- function(format, for_cdf = FALSE) {
 }
 
 # Stream Query Table pages into one bounded action staging connection. Only the
-# latest protocol/metadata wrappers, progress counters, and page token remain
-# in memory; file actions are normalized and written as each chunk arrives.
+# latest protocol/metadata wrappers and page token remain in memory; file
+# actions are normalized and written as each chunk arrives.
 stream_snapshot_query <- function(
   profile,
   auth,
@@ -25,8 +25,6 @@ stream_snapshot_query <- function(
 ) {
   protocol <- NULL
   metadata <- NULL
-  total_rows <- 0
-  total_rows_known <- TRUE
   page_token <- NULL
 
   repeat {
@@ -70,16 +68,6 @@ stream_snapshot_query <- function(
         log_json_line(synthetic_file_action(file, format, "read"))
       })
       writeLines(file_lines, output, useBytes = TRUE)
-
-      rows <- purrr::map_dbl(files, snapshot_file_rows, format = format)
-      if (anyNA(rows)) {
-        total_rows_known <<- FALSE
-      } else if (total_rows_known) {
-        total_rows <<- total_rows + sum(rows)
-        if (!is.finite(total_rows) || total_rows > 2^53) {
-          total_rows_known <<- FALSE
-        }
-      }
       invisible(NULL)
     })
 
@@ -97,17 +85,9 @@ stream_snapshot_query <- function(
     )
   }
 
-  if (!is.null(spec$limit) && spec$limit == 0) {
-    total_rows <- 0
-    total_rows_known <- TRUE
-  } else if (total_rows_known && !is.null(spec$limit)) {
-    total_rows <- min(total_rows, spec$limit)
-  }
-
   list(
     protocol = protocol,
-    metadata = metadata,
-    total_rows = if (total_rows_known) total_rows else NULL
+    metadata = metadata
   )
 }
 
@@ -144,7 +124,6 @@ prepare_snapshot_query_log <- function(
     )
     write_staged_snapshot_commit(log_dir, header, staged_actions)
   })
-  log$total_rows <- query_result$total_rows
   log
 }
 
@@ -324,56 +303,6 @@ query_body <- function(spec, page_token) {
   body
 }
 
-# Return the logical row count for one snapshot file action. Delta statistics
-# are JSON strings; parquet responses expose the same field on the file wrapper.
-snapshot_file_rows <- function(file, format) {
-  add <- if (identical(format, "delta")) {
-    (file$deltaSingleAction %||% file)$add
-  } else {
-    file
-  }
-  if (is.null(add)) {
-    return(NA_real_)
-  }
-
-  stats <- add$stats
-  if (is_scalar_character(stats)) {
-    stats <- tryCatch(
-      jsonlite::fromJSON(stats, simplifyVector = FALSE),
-      error = function(...) NULL
-    )
-  }
-  rows <- stats$numRecords
-  if (!rlang::is_scalar_integerish(rows, finite = TRUE) || rows < 0) {
-    return(NA_real_)
-  }
-
-  deleted <- add$deletionVector$cardinality %||% 0
-  if (
-    !rlang::is_scalar_integerish(deleted, finite = TRUE) ||
-      deleted < 0 ||
-      deleted > rows
-  ) {
-    return(NA_real_)
-  }
-  as.numeric(rows - deleted)
-}
-
-# A snapshot percentage is exact only when every returned file supplies usable
-# row statistics. A provider limit is exact once enough logical rows exist.
-snapshot_total_rows <- function(files, format, limit = NULL) {
-  rows <- purrr::map_dbl(files, snapshot_file_rows, format = format)
-  if (anyNA(rows)) {
-    return(NULL)
-  }
-
-  total <- sum(rows)
-  if (!is.finite(total) || total > 2^53) {
-    return(NULL)
-  }
-  if (is.null(limit)) total else min(total, limit)
-}
-
 # Build a synthetic log from a parsed query and open a native snapshot stream.
 sharing_snapshot_stream <- function(
   profile,
@@ -396,7 +325,6 @@ sharing_snapshot_stream <- function(
     spec,
     format = fmt
   )
-  total_rows <- log$total_rows
 
   # If native construction fails, clean up here; on success the native stream
   # owns the temp log root and deletes it on release.
@@ -418,7 +346,6 @@ sharing_snapshot_stream <- function(
     cleanup_root = log$root
   )
   ownership_transferred <- TRUE
-  attr(stream, "delta_sharing_progress") <- list(total_rows = total_rows)
   stream
 }
 
@@ -467,10 +394,6 @@ sharing_changes_stream <- function(
     cleanup_root = log$root
   )
   ownership_transferred <- TRUE
-  attr(stream, "delta_sharing_progress") <- list(
-    total_rows = NULL,
-    versions = c(log$start_version, log$end_version)
-  )
   stream
 }
 
@@ -495,100 +418,22 @@ sharing_stream_to_arrow_reader <- function(
   arrow::RecordBatchReader$import_from_c(stream)
 }
 
-# Drain an eager read on a native worker while R polls lightweight counters.
-# Repainting is forced even when no batch has arrived, so the spinner remains
-# live while the worker is blocked on object-store I/O.
-collect_stream_with_progress <- function(stream, progress_info = NULL) {
-  total_rows <- progress_info$total_rows
-  determinate <- !is.null(total_rows)
-  format <- if (determinate) {
-    paste(
-      "{cli::pb_spin} {cli::pb_name} {cli::pb_bar} {cli::pb_percent}",
-      "| {cli::pb_current}/{cli::pb_total} rows | ETA {cli::pb_eta}"
-    )
-  } else {
-    "{cli::pb_spin} {cli::pb_name} {cli::pb_current} rows"
-  }
-  name <- if (is.null(progress_info$versions)) {
-    "Reading rows"
-  } else {
-    sprintf(
-      "Reading rows (versions %.0f-%.0f)",
-      progress_info$versions[[1]],
-      progress_info$versions[[2]]
-    )
-  }
-  progress_id <- cli::cli_progress_bar(
-    name,
-    total = total_rows %||% NA,
-    format = format
-  )
-  completed <- FALSE
-  on.exit(
-    cli::cli_progress_done(
-      progress_id,
-      result = if (completed) "done" else "failed"
-    ),
-    add = TRUE
-  )
-
-  job <- native_collect_start(stream)
-  job_active <- TRUE
-  force_update <- !identical(getOption("cli.progress_show_after"), Inf)
-  on.exit(
-    {
-      if (job_active) {
-        try(native_collect_cancel(job), silent = TRUE)
-      }
-    },
-    add = TRUE
-  )
-
+sharing_stream_to_arrow <- function(stream) {
+  require_arrow("to_arrow")
+  on.exit(release_materializer_stream(stream), add = TRUE)
+  reader <- sharing_stream_to_arrow_reader(stream, operation = "to_arrow")
   with_native_stream_conditions(
-    {
-      repeat {
-        status <- native_collect_status(job)
-        cli::cli_progress_update(
-          id = progress_id,
-          set = status$rows,
-          force = force_update
-        )
-        if (isTRUE(status$done)) {
-          break
-        }
-        Sys.sleep(0.05)
-      }
-    },
+    reader$read_table(),
     operation = "read_arrow_stream",
     stream = stream
   )
-
-  result <- native_collect_finish(job)
-  job_active <- FALSE
-  completed <- TRUE
-  result
 }
 
-sharing_stream_to_arrow <- function(stream, progress = FALSE) {
-  require_arrow("to_arrow")
+sharing_stream_to_data_frame <- function(stream) {
   on.exit(release_materializer_stream(stream), add = TRUE)
-  if (isTRUE(progress)) {
-    stream <- collect_stream_with_progress(
-      stream,
-      attr(stream, "delta_sharing_progress")
-    )
-  }
-  reader <- sharing_stream_to_arrow_reader(stream, operation = "to_arrow")
-  reader$read_table()
-}
-
-sharing_stream_to_data_frame <- function(stream, progress = FALSE) {
-  on.exit(release_materializer_stream(stream), add = TRUE)
-  if (isTRUE(progress)) {
-    stream <- collect_stream_with_progress(
-      stream,
-      attr(stream, "delta_sharing_progress")
-    )
-  }
-  as.data.frame(nanoarrow::convert_array_stream(stream))
+  with_native_stream_conditions(
+    as.data.frame(nanoarrow::convert_array_stream(stream)),
+    operation = "read_arrow_stream",
+    stream = stream
+  )
 }

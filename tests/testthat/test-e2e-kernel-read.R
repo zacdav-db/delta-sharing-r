@@ -25,22 +25,17 @@ test_that("kernel reads a local table to a data frame", {
   expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
-test_that("data-frame materialization can report read progress", {
-  withr::local_options(list(cli.progress_show_after = Inf))
-  expect_equal(native_collect_active(), 0)
+test_that("data-frame materialization exhausts its native stream", {
   stream <- native_test_stream(batches = 3L, rows_per_batch = 2L)
-  attr(stream, "delta_sharing_progress") <- list(total_rows = 6)
 
-  df <- sharing_stream_to_data_frame(stream, progress = TRUE)
+  df <- sharing_stream_to_data_frame(stream)
 
   expect_s3_class(df, "data.frame")
   expect_equal(nrow(df), 6L)
-  expect_equal(native_collect_active(), 0)
   expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
-test_that("read progress preserves typed stream failures", {
-  withr::local_options(list(cli.progress_show_after = Inf))
+test_that("data-frame materialization preserves typed stream failures", {
   stream <- native_test_stream(
     batches = 3L,
     rows_per_batch = 2L,
@@ -48,12 +43,12 @@ test_that("read progress preserves typed stream failures", {
   )
 
   expect_error(
-    sharing_stream_to_data_frame(stream, progress = TRUE),
+    sharing_stream_to_data_frame(stream),
     class = "delta_sharing_kernel_error"
   )
 })
 
-test_that("progress polling translates user interrupts", {
+test_that("the native stream boundary translates user interrupts", {
   stream <- native_test_stream()
   interrupt <- structure(
     list(message = "simulated user interrupt"),
@@ -94,19 +89,32 @@ test_that("a reader exposes the kernel stream as an Arrow reader", {
   expect_equal(nrow(reader$read_table()), 7L)
 })
 
-test_that("Arrow materialization can report read progress", {
+test_that("Arrow materialization exhausts its native stream", {
   skip_if_not_installed("arrow")
-  withr::local_options(list(cli.progress_show_after = Inf))
   stream <- native_snapshot_stream(
     fixture_table("local-table"),
     batch_size = 2L
   )
 
-  table <- sharing_stream_to_arrow(stream, progress = TRUE)
+  table <- sharing_stream_to_arrow(stream)
 
   expect_s3_class(table, "Table")
   expect_equal(nrow(table), 7L)
   expect_match(capture.output(print(stream)), "invalid pointer")
+})
+
+test_that("Arrow materialization preserves typed stream failures", {
+  skip_if_not_installed("arrow")
+  stream <- native_test_stream(
+    batches = 3L,
+    rows_per_batch = 2L,
+    error_after = 1L
+  )
+
+  expect_error(
+    sharing_stream_to_arrow(stream),
+    class = "delta_sharing_kernel_error"
+  )
 })
 
 test_that("projection selects and orders columns", {

@@ -2,7 +2,7 @@
 
 Date: 2026-07-30
 Branch: `codex/delta-kernel-s7-overhaul`
-Current recorded head: `8d1ed40` (`Bound snapshot manifests and harden read lifecycle`)
+Current implementation: direct Arrow materialization; see branch `HEAD`
 Status: the lean R6 snapshot/CDF implementation is committed and live-proven;
 the remaining work is release hardening, portability, lifecycle evidence, and
 targeted R-side performance work.
@@ -53,11 +53,9 @@ sharing_client(profile)                  # SharingClient (R6)
 
 Reads flow through **one** kernel Arrow stream; eager forms are adapters over
 the lazy `to_arrow_stream()`, while `to_arrow_reader()` transfers ownership of
-that stream to an Arrow `RecordBatchReader`. Eager reads with progress enabled
-move that already-created C stream to one native collection worker so R can
-repaint the CLI indicator while Kernel is blocked on object-store I/O. This
-worker is Arrow/lifecycle glue only: it does not implement protocol, HTTP,
-planning, or materialization policy.
+that stream to an Arrow `RecordBatchReader`. Eager reads consume the stream
+directly. There is no intermediate native collection worker, batch replay, or
+progress-specific materialization path.
 
 ## 3. Public API surface (exported)
 
@@ -88,8 +86,7 @@ Condition classes (public contract): `delta_sharing_error` + subclasses
 | `conditions.R` | `abort()` on `cli::cli_abort` with typed classes |
 | `zzz.R` | `.onUnload`, useDynLib, importFrom |
 
-Rust: `src/rust/src/{lib.rs (C ABI), collect.rs (progress worker),
-kernel/adapter.rs, stream/mod.rs}`.
+Rust: `src/rust/src/{lib.rs (C ABI), kernel/adapter.rs, stream/mod.rs}`.
 C shim: `src/native.c`. Header: `src/rust/include/delta_sharing_native.h`.
 
 ## 5. What works and is proven
@@ -106,17 +103,19 @@ arrays, timestamps, binary, unicode), `empty_snapshot` (0 rows, correct schema),
 vectors).
 
 **Offline test suite passes with 7 integration tests skipped** (six public
-integration tests plus one credentialed CDF test). Rust: 38 tests; locked,
+integration tests plus one credentialed CDF test). Rust: 35 tests; locked,
 offline tests, formatting, and strict Clippy pass with Kernel 0.26 and Arrow
 58.3. Run the R tests with
 `Rscript -e 'options(Ncpus=1); pkgload::load_all("."); devtools::test(".")'`.
 
-The 246,942-byte archive containing the current production implementation
-passes
-`R CMD check --as-cran --no-manual` on macOS arm64 with zero errors, zero
-warnings, and one expected note for a new submission/development version. A
-clean installed-package lifecycle gate passes repeated worker success, error,
-finalizer, cancellation, handoff, cleanup, unload, and reload.
+The 238,153-byte archive containing the direct-only production implementation
+passes `R CMD check --as-cran --no-manual` on macOS arm64 with zero errors,
+zero warnings, and two explained notes: the expected new-submission/development
+version note and a local check-environment note that `pandoc` was not detected
+for the top-level README check. Vignette creation, installation, loading,
+unloading, tests, and vignette rebuilding all pass. The installed lifecycle
+gate retains repeated direct-stream release, error, finalizer, cleanup, unload,
+and reload coverage.
 
 **Real bugs found via live testing and fixed** (all snapshot-path):
 - `version()` uses `HEAD` on the table path (reference server 404s `GET /version`).
@@ -195,10 +194,6 @@ DELTA_SHARING_TEST_PROFILE=~/Desktop/config.share \
 Rscript -e 'pkgload::load_all("."); testthat::test_file("tests/testthat/test-cdf-integration.R")'
 ```
 
-CDF progress is intentionally indeterminate. File-action statistics in the live
-CDF response implied 4,906 rows while Kernel correctly emitted 3,500 changes,
-so presenting those statistics as a percentage would be misleading.
-
 ### Debug-error decision still open
 `src/rust/src/kernel/adapter.rs` (~line 237): the CDF error map was changed from
 `.map_err(|_| "Delta Kernel CDF preparation failed".to_string())` to include the
@@ -223,26 +218,19 @@ The path handed to the kernel is `<root>/table`; `cleanup_root` is `<root>`.
 Snapshot expects exactly `00...0.json`; CDF's `try_new_cdf` expects the
 version-range JSONs (+ checkpoint bootstrap). Any layout drift = native failure.
 
-## 8. Progress and performance
+## 8. Performance
 
-Commits `fecb4e5` and `dbb538c`, plus the current manifest/lifecycle slice,
-contain the current performance work:
+Commit `fecb4e5`, the manifest/lifecycle slice, and the direct-materialization
+cleanup contain the current performance work:
 
 - Kernel 0.26's configurable source batches changed an 8,388,608-row local read
   from 8,448 approximately 1,000-row batches to 128 batches of 65,536 rows.
 - Direct Arrow materialization improved from a 0.3645-second median on Kernel
   0.22 to 0.1425 seconds on Kernel 0.26.
-- The current progress worker completed the same local progress-enabled read in
-  a 0.2025-second median, down from 0.7790 seconds on the old synchronous
-  R-per-batch replay path.
-- On the live 250-million-row deletion-vector table, a 250,000-row bounded read
-  displayed continuous progress while waiting for I/O and finished with the
-  exact row count. Snapshot percentages are shown only when every returned file
-  has trustworthy row statistics; deletion-vector cardinality and the exact
-  limit are included. Otherwise the spinner remains live and reports rows
-  without inventing a percentage.
-- Lazy reads and eager reads with `progress = FALSE` remain on the direct Arrow
-  C Stream path.
+- The retired native progress worker had a 0.2025-second median on the same
+  fixture versus 0.1750 seconds for the direct path. Removing it eliminates
+  polling, retained-batch handoff, and a second Arrow stream boundary.
+- Lazy and eager reads now always use the direct Arrow C Stream path.
 - Snapshot manifests no longer retain the complete nested action graph. At
   100,000 files, bounded R staging reduced maximum RSS from 398.6 MB to
   222.0 MB and transformation time from 21.950 to 20.196 seconds; the reported
@@ -266,11 +254,6 @@ planning responsibility should move to Rust. See
 - **CDF large-manifest trade-off**: production CDF still retains its response
   actions. The bounded prototype was byte-equivalent and live-correct but
   failed the performance gate, so it was deliberately not integrated.
-- **Progress lifecycle hardening**: local subprocess gates now prove typed
-  SIGINT cancellation, cleanup, garbage collection, completed-worker
-  unload/reload, detached-worker library pinning, and clean installed-package
-  reuse. A genuinely blocked credentialed interrupt and hosted sanitizer/
-  cross-platform evidence, especially Windows, remain open.
 - **Cross-platform package proof**: minimum/release/development R and macOS,
   Linux, and Windows source/binary builds still require current-head evidence.
 - **R coverage**: the first whole-tree measurement of the lean R6 rewrite is
@@ -280,8 +263,8 @@ planning responsibility should move to Rust. See
   2026-07-30 so commit `63e79f7` uses `~/Desktop/config.share` and contains no
   plaintext credential. Per maintainer instruction, the live credential has
   not been rotated; rotate it before any push or external handoff.
-- **Release performance gates**: rerun controlled direct, progress, first-batch,
-  RSS, backpressure, and cancellation benchmarks on the final candidate.
+- **Release performance gates**: rerun controlled direct, first-batch, RSS,
+  backpressure, and interruption benchmarks on the final candidate.
 - **Optional integrations**: `{duckdb}` tests require the package to be
   installed; public CDF is unavailable, so credentialed CDF remains opt-in.
 - **Provider-signed deletion vectors**: genuine signed-URL behavior still needs
@@ -306,8 +289,8 @@ Databricks copyright claim.
 ## 11. Dev helpers
 
 - `tools/spin.R` — offline spin against local fixtures.
-- `tools/spin-live.R` — progress-enabled live spin against the credentialed
-  250M-row deletion-vector and nested-data fixture.
+- `tools/spin-live.R` — direct live read against the credentialed 250M-row
+  deletion-vector and nested-data fixture.
 - `tools/compare_connector.{R,py}` — same-profile snapshot/CDF timing harnesses
   for the development package and official Python connector.
 - `tools/{snapshot,cdf}_manifest_benchmark_worker.R` — fresh-process retained

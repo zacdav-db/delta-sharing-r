@@ -39,10 +39,8 @@ orders_arrow <- snapshot$to_arrow()
 orders_stream <- snapshot$to_arrow_stream()
 ```
 
-`to_data_frame()` and `to_arrow()` show live progress in interactive sessions.
-Snapshots include a percentage when every returned file has row statistics;
-otherwise the indicator stays animated and reports rows read. Pass
-`progress = FALSE` to disable it, or `progress = TRUE` to show it from a script.
+Eager reads use the same direct Arrow stream as the lazy materializers, without
+an intermediate collection or replay step.
 
 ## Snapshots and changes
 

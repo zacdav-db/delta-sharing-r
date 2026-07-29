@@ -22,6 +22,13 @@ test_that("the staged object graph composes", {
   expect_s3_class(chg, "SharingChanges")
 })
 
+test_that("eager materializers expose only direct-read controls", {
+  snapshot <- test_client()$table("sales.default.orders")$snapshot()
+
+  expect_identical(names(formals(snapshot$to_arrow)), "batch_size")
+  expect_identical(names(formals(snapshot$to_data_frame)), "batch_size")
+})
+
 test_that("table accepts explicit share, schema, and name components", {
   tbl <- test_client()$table(
     share = "sales",

@@ -187,7 +187,6 @@ test_that("snapshot pages stream directly into one private commit", {
   lines <- readLines(commit)
 
   expect_equal(page, 2L)
-  expect_equal(log$total_rows, 15)
   expect_setequal(fs::path_file(fs::dir_ls(log_dir)), log_commit_name)
   expect_length(lines, 4L)
   expect_equal(jsonlite::fromJSON(lines[[1L]])$protocol$minReaderVersion, 3L)
@@ -199,48 +198,6 @@ test_that("snapshot pages stream directly into one private commit", {
     jsonlite::fromJSON(lines[[4L]])$add$path,
     "https://storage.example.test/two.parquet"
   )
-})
-
-test_that("snapshot progress totals handle missing stats and an exact zero limit", {
-  actions <- snapshot_delta_actions()
-  actions[[3L]]$file$deltaSingleAction$add$stats <- NULL
-  httr2::local_mocked_responses(
-    function(req) {
-      httr2::response(200, body = charToRaw(ndjson_body(actions)))
-    }
-  )
-  profile <- test_profile()
-  log <- prepare_snapshot_query_log(
-    profile,
-    sharing_auth_context(profile),
-    snapshot_identifier(),
-    list(
-      predicate = NULL,
-      limit = NULL,
-      version = NULL,
-      timestamp = NULL
-    ),
-    "delta"
-  )
-  withr::defer(log$cleanup())
-
-  expect_null(log$total_rows)
-
-  zero_log <- prepare_snapshot_query_log(
-    profile,
-    sharing_auth_context(profile),
-    snapshot_identifier(),
-    list(
-      predicate = NULL,
-      limit = 0,
-      version = NULL,
-      timestamp = NULL
-    ),
-    "delta"
-  )
-  withr::defer(zero_log$cleanup())
-
-  expect_equal(zero_log$total_rows, 0)
 })
 
 test_that("parquet snapshot pages use the same bounded preparation path", {
@@ -282,7 +239,6 @@ test_that("parquet snapshot pages use the same bounded preparation path", {
   withr::defer(log$cleanup())
 
   lines <- readLines(fs::path(log$path, "_delta_log", log_commit_name))
-  expect_equal(log$total_rows, 4)
   expect_equal(
     jsonlite::fromJSON(lines[[3L]])$add$path,
     "https://storage.example.test/events.parquet"

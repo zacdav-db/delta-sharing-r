@@ -254,37 +254,6 @@ native_cdf_stream <- function(
   interruptible_native_stream(stream)
 }
 
-native_collect_start <- function(stream) {
-  with_native_stream_conditions(
-    .Call(C_delta_sharing_collect_start, stream),
-    operation = "read_arrow_stream",
-    stream = stream
-  )
-}
-
-native_collect_status <- function(job) {
-  .Call(C_delta_sharing_collect_status, job)
-}
-
-native_collect_finish <- function(job) {
-  stream <- nanoarrow::nanoarrow_allocate_array_stream()
-  with_native_stream_conditions(
-    .Call(C_delta_sharing_collect_finish, job, stream),
-    operation = "read_arrow_stream",
-    stream = stream
-  )
-  interruptible_native_stream(stream)
-}
-
-native_collect_cancel <- function(job) {
-  .Call(C_delta_sharing_collect_cancel, job)
-  invisible(NULL)
-}
-
-native_collect_active <- function() {
-  .Call(C_delta_sharing_collect_active)
-}
-
 native_reap_pending_cleanups <- function() {
   .Call(C_delta_sharing_reap_pending_cleanups)
 }

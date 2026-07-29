@@ -23,7 +23,6 @@ sanitizer_library <- as.character(fs::path_real(sanitizer_library))
 fixture <- as.character(fs::path_real(fixture))
 .libPaths(c(sanitizer_library, .libPaths()))
 suppressPackageStartupMessages(library(delta.sharing))
-withr::local_options(list(cli.progress_show_after = Inf))
 
 installed_path <- as.character(fs::path_real(find.package("delta.sharing")))
 if (!identical(as.character(fs::path_dir(installed_path)), sanitizer_library)) {
@@ -54,35 +53,11 @@ assert_identical <- function(value, expected, message) {
 native_test_stream <- delta.sharing:::native_test_stream
 native_snapshot_stream <- delta.sharing:::native_snapshot_stream
 materialize_data_frame <- delta.sharing:::sharing_stream_to_data_frame
-native_collect_start <- delta.sharing:::native_collect_start
-native_collect_status <- delta.sharing:::native_collect_status
-native_collect_finish <- delta.sharing:::native_collect_finish
-native_collect_cancel <- delta.sharing:::native_collect_cancel
-native_collect_active <- delta.sharing:::native_collect_active
 native_reap_pending_cleanups <-
   delta.sharing:::native_reap_pending_cleanups
 
-wait_for_collection <- function(job, label) {
-  deadline <- Sys.time() + 10
-  repeat {
-    status <- native_collect_status(job)
-    if (isTRUE(status$done)) {
-      return(status)
-    }
-    if (Sys.time() >= deadline) {
-      stop(label, " did not finish within 10 seconds.", call. = FALSE)
-    }
-    Sys.sleep(0.005)
-  }
-}
-
 invisible(native_reap_pending_cleanups())
 invisible(gc())
-assert_identical(
-  native_collect_active(),
-  0,
-  "The installed sanitizer process must start without active collection jobs."
-)
 assert_identical(
   native_reap_pending_cleanups(),
   0,
@@ -93,11 +68,6 @@ assert_released <- function(label) {
   invisible(gc())
   pending <- native_reap_pending_cleanups()
   invisible(gc())
-  assert_identical(
-    native_collect_active(),
-    0,
-    paste0(label, " left a background collection job active.")
-  )
   assert_identical(
     pending,
     0,
@@ -183,66 +153,6 @@ for (index in seq_len(iterations)) {
   )
   snapshot$release()
   assert_released(paste0("Kernel exhaustion iteration ", index))
-
-  progress <- native_test_stream(batches = 4L, rows_per_batch = 8L)
-  attr(progress, "delta_sharing_progress") <- list(total_rows = 32)
-  data <- materialize_data_frame(progress, progress = TRUE)
-  assert_identical(
-    nrow(data),
-    32L,
-    "The eager progress worker returned an unexpected row count."
-  )
-  assert_released(paste0("progress success iteration ", index))
-
-  progress_failure <- native_test_stream(
-    batches = 4L,
-    rows_per_batch = 8L,
-    error_after = 1L
-  )
-  condition <- tryCatch(
-    materialize_data_frame(progress_failure, progress = TRUE),
-    error = identity
-  )
-  assert_true(
-    inherits(condition, "delta_sharing_kernel_error"),
-    "An eager worker failure did not cross the installed typed-error boundary."
-  )
-  assert_released(paste0("progress failure iteration ", index))
-
-  completed_job <- native_collect_start(
-    native_test_stream(batches = 2L, rows_per_batch = 8L)
-  )
-  invisible(wait_for_collection(
-    completed_job,
-    "Completed-job finalizer collection"
-  ))
-  rm(completed_job)
-  assert_released(paste0("completed worker finalizer iteration ", index))
-
-  cancelled_job <- native_collect_start(
-    native_test_stream(batches = 2L, rows_per_batch = 8L)
-  )
-  invisible(wait_for_collection(
-    cancelled_job,
-    "Completed-job cancellation collection"
-  ))
-  native_collect_cancel(cancelled_job)
-  assert_released(paste0("completed worker cancellation iteration ", index))
-
-  finished_job <- native_collect_start(
-    native_test_stream(batches = 2L, rows_per_batch = 8L)
-  )
-  status <- wait_for_collection(finished_job, "Successful handoff collection")
-  assert_identical(status$rows, 16, "The worker row counter was incorrect.")
-  collected <- native_collect_finish(finished_job)
-  data <- materialize_data_frame(collected)
-  assert_identical(
-    nrow(data),
-    16L,
-    "The finished worker stream returned an unexpected row count."
-  )
-  collected$release()
-  assert_released(paste0("worker handoff iteration ", index))
 }
 
 panic_stream <- native_test_stream(batches = 2L, panic_after = 0L)
@@ -261,7 +171,7 @@ cat(
   sprintf(
     paste0(
       "Installed sanitizer lifecycle gate passed: %d iterations, ",
-      "including eager worker success, error, finalizer, cancel, and handoff.\n"
+      "including explicit release, exhaustion, error, finalizer, and cleanup.\n"
     ),
     iterations
   )

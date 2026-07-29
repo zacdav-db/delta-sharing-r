@@ -46,8 +46,8 @@ payload_fields <- purrr::map_chr(payload$type$fields, "name")
 cat("top-level fields:", paste(top_level_fields, collapse = ", "), "\n")
 cat("payload fields:", paste(payload_fields, collapse = ", "), "\n")
 
-# This is large enough to display sustained progress without attempting to
-# materialize all 250 million nested rows into R memory.
+# This bounded read exercises nested fields and deletion vectors without
+# materializing all 250 million rows into R memory.
 row_limit <- 1000000
 cat(
   "\n== Kernel snapshot read (",
@@ -60,8 +60,7 @@ events <- tbl$snapshot(
   columns = c("event_id", "tenant_id", "event_date", "event_ts", "payload"),
   limit = row_limit
 )$to_data_frame(
-  batch_size = 16384L,
-  progress = TRUE
+  batch_size = 16384L
 )
 elapsed <- difftime(Sys.time(), started, units = "secs")
 
