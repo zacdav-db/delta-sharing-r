@@ -2,7 +2,7 @@
 
 Date: 2026-07-30
 Branch: `codex/delta-kernel-s7-overhaul`
-Current recorded head: `92c4068` (`Keep eager read progress live between batches`)
+Current recorded head: `edefcab` (`Bound snapshot manifests and harden read lifecycle`)
 Status: the lean R6 snapshot/CDF implementation is committed and live-proven;
 the remaining work is release hardening, portability, lifecycle evidence, and
 targeted R-side performance work.

@@ -2,7 +2,7 @@
 
 Status: active branch checklist
 Integration branch: `codex/delta-kernel-s7-overhaul`
-Current recorded head: `92c4068`
+Current recorded head: `edefcab`
 Last integration update: 2026-07-30
 
 This is the branch-local execution plan for the vNext overhaul. The integration
@@ -342,6 +342,7 @@ not the current public implementation or completion proof.
 | Live helper correction | `f047384` | Integrated | Uses the Desktop profile explicitly for the large live progress demonstration. |
 | Kernel/Arrow upgrade | `1850bcc` | Integrated and locally proven | Delta Kernel 0.26, Arrow 58.3, larger Kernel source batches, offline vendor/license updates, and controlled performance evidence. |
 | Live eager progress | `92c4068` | Integrated and locally/live proven | Native Arrow collection worker, continuous spinner, trustworthy snapshot percentages, indeterminate CDF progress, cancellation and unload guards, and focused R/native tests. |
+| Bounded manifests and lifecycle | `edefcab` | Integrated and locally/live proven | Bounded R snapshot staging, rejected CDF-spooling evidence, installed progress-worker lifecycle gates, current R/Python comparison, package check, coverage baseline, and credential-safe live helper. |
 
 Only after every open gate is evidenced on this integration branch is the
 overhaul eligible for a separately authorized release or main-line integration.
