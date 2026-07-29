@@ -10,7 +10,7 @@ if (!fs::file_exists(profile)) {
   )
 }
 
-client <- sharing_client(profile)
+client <- sharing_client("~/Desktop/config.share")
 
 cat("== Client ==\n")
 print(client)
