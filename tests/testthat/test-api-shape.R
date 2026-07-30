@@ -91,3 +91,21 @@ test_that("client printing redacts endpoint user information", {
   expect_false(grepl("user", output, fixed = TRUE))
   expect_false(grepl("secret", output, fixed = TRUE))
 })
+
+test_that("base readers require a concrete stream implementation", {
+  reader <- SharingReader$new()
+
+  expect_error(
+    reader$to_arrow_stream(),
+    "must be implemented",
+    fixed = TRUE
+  )
+})
+
+test_that("change readers print their staged identity", {
+  changes <- test_client()$
+    table("sales.default.events")$
+    changes(starting_version = 1)
+
+  expect_output(print(changes), "SharingChanges")
+})

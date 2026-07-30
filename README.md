@@ -85,6 +85,7 @@ snapshot <- orders$snapshot(
 reader <- snapshot$to_arrow_reader()
 
 con <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
+DBI::dbExecute(con, "SET threads = 1")
 duckdb::duckdb_register_arrow(con, "shared_orders", reader)
 
 revenue <- DBI::dbGetQuery(con, "
@@ -95,8 +96,8 @@ revenue <- DBI::dbGetQuery(con, "
 ")
 
 duckdb::duckdb_unregister_arrow(con, "shared_orders")
+DBI::dbDisconnect(con, shutdown = TRUE)
 reader$Close()
-DBI::dbDisconnect(con)
 ```
 
 For the eager path, replace the reader construction and registration lines

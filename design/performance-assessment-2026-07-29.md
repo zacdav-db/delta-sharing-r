@@ -691,3 +691,41 @@ custom downloader or Parquet engine would materially expand Rust and duplicate
 Kernel responsibility. The supported next directions are provider compaction
 or an upstream Kernel presigned-concurrency improvement, followed by the same
 end-to-end benchmark; no package implementation change is justified now.
+
+## Final-candidate read-path evidence (2026-07-30)
+
+Fresh R processes used the installed package and the credentialed Desktop
+profile. Each case requested exactly 250,000 rows. `/usr/bin/time -l` measured
+process peak RSS; the worker separately measured construction, first-batch,
+total materializer time, sampled RSS, and pending native cleanups.
+
+| Source | Path | First batch | Materializer total | Peak RSS |
+|---|---|---:|---:|---:|
+| `snapshot_narrow_250m` | C stream | 5.256 s | 8.322 s* | 159.4 MB |
+| `snapshot_narrow_250m` | Arrow reader | 3.789 s | 5.605 s | 217.6 MB |
+| `snapshot_narrow_250m` | Arrow table | — | 6.078 s | 219.4 MB |
+| `snapshot_narrow_250m` | data frame | — | 5.757 s | 183.9 MB |
+| `snapshot_narrow_250m` | DuckDB `count(*)` | — | 9.271 s | 254.1 MB |
+| `dv_nested_events_250m` | C stream | 2.276 s | 17.306 s* | 198.8 MB |
+| `dv_nested_events_250m` | Arrow reader | 2.221 s | 17.458 s | 251.5 MB |
+| `dv_nested_events_250m` | Arrow table | — | 10.683 s | 245.2 MB |
+| `dv_nested_events_250m` | data frame | — | 10.243 s | 329.0 MB |
+| `dv_nested_events_250m` | DuckDB `count(*)` | — | 10.250 s | 281.0 MB |
+
+`*` The stream total deliberately includes a one-second idle backpressure
+probe. Sampled RSS did not change during that idle period on the narrow source
+and increased by only 32 KB on the DV source. The no-read installed baseline
+peaked at 86.8 MB.
+
+Every path returned exactly 250,000 rows and reported zero pending prepared-log
+cleanups. The measurements are single cloud reads, so latency differences are
+directional rather than rankings. The stable conclusion is memory-related:
+the lazy direct stream remains the lowest-RSS option, while eager nested
+materialization costs more as expected. DuckDB composes through the standard
+Arrow reader and introduces no package-specific Rust path.
+
+The same DV manifest contained two signed HTTPS data URLs and one signed HTTPS
+absolute deletion-vector URL (`storageType = "p"`). All three carried provider
+expiry parameters and had about 3,599 seconds remaining when planned. A Rust
+loopback test independently proves that an expired signed request becomes one
+terminal, fixed/redacted data-scan error.

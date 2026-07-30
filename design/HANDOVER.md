@@ -3,9 +3,10 @@
 Date: 2026-07-30
 Branch: `codex/delta-kernel-s7-overhaul`
 Current implementation: direct Arrow materialization; see branch `HEAD`
-Status: the lean R6 snapshot/CDF implementation is committed and live-proven;
-the remaining work is release hardening, portability, lifecycle evidence, and
-targeted R-side performance work.
+Status: the lean R6 snapshot/CDF implementation is committed and live-proven.
+Local coverage, lifecycle, Arrow/DuckDB, signed-DV, and final-candidate
+performance gates now pass. Hosted cross-platform proof and final release
+actions remain separate work.
 
 ---
 
@@ -103,20 +104,24 @@ arrays, timestamps, binary, unicode), `empty_snapshot` (0 rows, correct schema),
 vectors).
 
 **Offline test suite passes with 7 integration tests skipped** (six public
-integration tests plus one credentialed CDF test). Rust: 35 tests; locked,
+integration tests plus one credentialed CDF test). Rust: 39 tests; locked,
 offline tests, formatting, and strict Clippy pass with Kernel 0.26 and Arrow
 58.3. Run the R tests with
 `Rscript -e 'options(Ncpus=1); pkgload::load_all("."); devtools::test(".")'`.
 
-The 240,203-byte archive containing the direct-only implementation plus the
-format cache and partition-only projection fix passes
+The reviewed R line-coverage gate is 98.73% against a 90% requirement. It
+measures the R implementation and excludes only `src/native.c` and installed
+DLL-only `.onUnload()` lines; those paths have separate FFI and installed
+lifecycle gates. Rust line coverage is 88.37% against an 85% requirement.
+
+The 246,271-byte normal source archive containing the direct-only
+implementation plus the format cache and partition-only projection fix passes
 `R CMD check --as-cran --no-manual` on macOS arm64 with zero errors, zero
-warnings, and two explained notes: the expected new-submission/development
-version note and a local check-environment note that `pandoc` was not detected
-for the top-level README check. Vignette creation, installation, loading,
-unloading, tests, and vignette rebuilding all pass. The installed lifecycle
-gate retains repeated direct-stream release, error, finalizer, cleanup, unload,
-and reload coverage.
+warnings, and one expected CRAN incoming note for the new development version.
+Vignette creation, clean source installation, loading, unloading, tests, Rust
+compilation checks, installed vignette files, and vignette rebuilding all pass.
+The installed lifecycle gate retains repeated direct-stream release, error,
+finalizer, cleanup, unload, and reload coverage.
 
 **Real bugs found via live testing and fixed** (all snapshot-path):
 - `version()` uses `HEAD` on the table path (reference server 404s `GET /version`).
@@ -200,11 +205,10 @@ DELTA_SHARING_TEST_PROFILE=~/Desktop/config.share \
 Rscript -e 'pkgload::load_all("."); testthat::test_file("tests/testthat/test-cdf-integration.R")'
 ```
 
-### Debug-error decision still open
-`src/rust/src/kernel/adapter.rs` (~line 237): the CDF error map was changed from
-`.map_err(|_| "Delta Kernel CDF preparation failed".to_string())` to include the
-real error (`format!("... {e}")`). Decide whether to retain that detail before
-release; it may expose an internal temporary path.
+CDF preparation errors now use the fixed message
+`Delta Kernel CDF preparation failed`. Rust regression coverage proves that a
+malformed prepared-log path cannot escape through this boundary. Data-scan
+errors, including signed-URL failures, remain fixed and redacted.
 
 ## 7. Critical constraint: the native cleanup-guard log contract
 
@@ -273,7 +277,46 @@ These results support the accepted boundary. No client, protocol, HTTP, or
 planning responsibility should move to Rust. See
 `design/performance-assessment-2026-07-29.md` for the measurements and caveats.
 
-## 9. Known gaps / next gates
+## 9. Current local hardening evidence
+
+The 2026-07-30 final-candidate pass adds these local results:
+
+- The installed lifecycle gate passed 16 iterations covering explicit
+  release, exhaustion, errors, abandoned-stream finalizers, Kernel early
+  release, panic containment, and prepared-log cleanup.
+- macOS `leaks` inspected the actual installed-package R process after those
+  iterations: 16,095 allocation nodes / 65,741 KB, with zero leaked blocks and
+  zero leaked bytes.
+- `{duckdb}` 1.5.5, `{arrow}` 22.0.0, and `{nanoarrow}` 0.8.0.1 pass snapshot,
+  eager Arrow, early-termination, and CDF queries. The early-termination proof
+  passed five consecutive runs. The safe order is: unregister the Arrow
+  object, shut down the isolated one-thread DuckDB connection, then close the
+  Arrow reader.
+- The credentialed 250M-row DV fixture returned two signed HTTPS data URLs and
+  one `storageType = "p"` signed HTTPS deletion-vector URL. All carried expiry
+  parameters; the minimum live validity window was about 3,599 seconds. The
+  profiler reports only counts and booleans, never URLs or query values.
+- A simulated expired signed request returns one terminal, redacted Kernel
+  error. The signature value and host do not escape.
+- Every 250,000-row live profiling path returned the exact limit and zero
+  pending cleanups. The lazy stream had the lowest peak RSS: 159 MB on
+  `snapshot_narrow_250m` and 199 MB on `dv_nested_events_250m`.
+- After a one-second idle period, stream RSS changed by zero bytes on the
+  narrow source and 32 KB on the DV source. This is consistent with the direct,
+  pull-driven boundary and no R-side prefetch queue.
+
+There is one explicit interruption limitation. The C boundary observes an R
+interrupt before or after a batch pull, but cannot pre-empt a pull already
+blocked inside Delta Kernel/object-store DNS or I/O. A credentialed SIGINT
+probe remained inside `nanoarrow_c_array_stream_get_next` and Kernel's
+`TokioBackgroundExecutor::block_on` for more than three minutes, until the
+diagnostic process was terminated. Reintroducing the removed background
+materialization worker solely to detach that call would expand lifecycle
+complexity and previously regressed the direct path. Treat mid-I/O
+pre-emption as an upstream Kernel capability/maintainer acceptance item;
+between-pull interruption and deterministic release remain covered.
+
+## 10. Known gaps / next gates
 
 - **CDF large-manifest trade-off**: production CDF still retains its response
   actions. The bounded prototype was byte-equivalent and live-correct but
@@ -284,37 +327,30 @@ planning responsibility should move to Rust. See
   fixtures; do not move this work into R.
 - **Cross-platform package proof**: minimum/release/development R and macOS,
   Linux, and Windows source/binary builds still require current-head evidence.
-- **R coverage**: the first whole-tree measurement of the lean R6 rewrite is
-  70.46%. The historical 91.83% S7 result is superseded; focused current-R6
-  tests must raise this to the 90% release gate.
 - **Credential rotation**: local integration history was rewritten on
   2026-07-30 so commit `63e79f7` uses `~/Desktop/config.share` and contains no
   plaintext credential. Per maintainer instruction, the live credential has
   not been rotated; rotate it before any push or external handoff.
-- **Release performance gates**: rerun controlled direct, first-batch, RSS,
-  backpressure, and interruption benchmarks on the final candidate.
-- **Optional integrations**: `{duckdb}` tests require the package to be
-  installed; public CDF is unavailable, so credentialed CDF remains opt-in.
-- **Provider-signed deletion vectors**: genuine signed-URL behavior still needs
-  hosted, cross-platform proof.
+- **Interruption acceptance**: decide whether between-pull cancellation is an
+  acceptable vNext contract while in-flight Kernel I/O remains non-preemptible.
+- **Hosted signed-DV proof**: local provider-signed HTTPS and expiry behavior
+  is proven; hosted cross-platform repetition remains part of the separate
+  portability gate.
 - **CDF integration environment**: the public endpoint has no CDF table, so the
   live CDF test requires the credentialed Desktop profile and remains opt-in.
-- **Debug-error decision**: `kernel/adapter.rs` currently includes the
-  underlying Kernel error in CDF preparation failures. Confirm before release
-  that this cannot expose a temporary local path.
 
 `design/adr-004-r6-object-system.md` is the governing object-system decision
 and supersedes ADR 001. ADR 002/003 continue to govern the Rust/Arrow boundary
 and R-first scope.
 
-## 10. Licensing note
+## 11. Licensing note
 
 The package is copyright **Zac Davies** (not Databricks — it is not
 Databricks-funded). LICENSE is Apache-2.0. `DESCRIPTION` lists Zac as
 `aut, cre, cph`; `zac@databricks.com` is a contact address only, not a
 Databricks copyright claim.
 
-## 11. Dev helpers
+## 12. Dev helpers
 
 - `tools/spin.R` — offline spin against local fixtures.
 - `tools/spin-live.R` — direct live read against the credentialed 250M-row
@@ -327,5 +363,10 @@ Databricks copyright claim.
   baseline, limit, predicate, and combined snapshot hints.
 - `tools/profile_cdf_io.R` — safe CDF phase and remote-pull latency profiler
   with plan-only and full-drain modes.
+- `tools/profile_live_read_path.R` — fresh-process timing, first-batch,
+  sampled-RSS, peak-RSS, exact-limit, backpressure, and cleanup evidence across
+  stream, Arrow reader/table, data-frame, and DuckDB paths.
+- `tools/profile_signed_dv.R` — redacted live manifest proof for signed data
+  and deletion-vector URLs plus their provider expiry window.
 - `tests/testthat/fixtures/delta/` — real local Delta tables (snapshot + cdf)
   for kernel tests that need no network.

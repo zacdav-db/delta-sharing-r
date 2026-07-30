@@ -172,3 +172,119 @@ test_that("metadata parsing warms automatic format negotiation", {
   expect_identical(resolved, "delta")
   expect_identical(requests, 1L)
 })
+
+test_that("capability headers distinguish snapshot, CDF, and parquet", {
+  expect_match(capability_header("auto"), "timestampntz", fixed = TRUE)
+  expect_false(grepl(
+    "timestampntz",
+    capability_header("delta", for_cdf = TRUE),
+    fixed = TRUE
+  ))
+  expect_identical(capability_header("parquet"), "responseformat=parquet")
+})
+
+test_that("format negotiation falls back to parquet and tolerates old contexts", {
+  profile <- test_profile()
+  auth <- sharing_auth_context(profile)
+  identifier <- sharing_table_identifier("sales.default.orders")
+  httr2::local_mocked_responses(function(req) {
+    delta_metadata_response(capabilities = "responseformat=parquet")
+  })
+
+  expect_identical(
+    resolve_query_format(profile, auth, identifier, "auto"),
+    "parquet"
+  )
+  old_auth <- list(authenticate = auth$authenticate)
+  expect_null(cached_response_format(old_auth, identifier))
+  expect_identical(
+    remember_response_format(old_auth, identifier, "delta"),
+    "delta"
+  )
+})
+
+test_that("metadata protocol validation rejects invalid wire responses", {
+  invalid_version <- httr2::response(
+    200,
+    headers = list(`delta-table-version` = "-1")
+  )
+  expect_error(
+    parse_version_header(invalid_version, "table_version"),
+    class = "delta_sharing_protocol_error"
+  )
+  expect_error(
+    parse_ndjson_lines("{not-json", "metadata"),
+    class = "delta_sharing_protocol_error"
+  )
+  expect_length(parse_ndjson_lines("\n \n", "metadata"), 0L)
+})
+
+test_that("parquet metadata envelopes are projected safely", {
+  body <- ndjson_body(list(
+    list(protocol = list(minReaderVersion = 1L, minWriterVersion = 2L)),
+    list(metadata = list(
+      id = "table",
+      name = "events",
+      schemaString = "{\"type\":\"struct\",\"fields\":[]}",
+      partitionColumns = list("date")
+    ))
+  ))
+  response <- httr2::response(
+    200,
+    headers = list(`content-type` = "application/x-ndjson"),
+    body = charToRaw(body)
+  )
+
+  parsed <- parse_table_actions(response, "metadata")
+
+  expect_identical(parsed$response_format, "parquet")
+  expect_identical(parsed$protocol$min_reader_version, 1L)
+  expect_identical(parsed$metadata$partition_columns, "date")
+})
+
+test_that("schema inspection rejects missing and malformed schemas", {
+  missing_schema <- function(req) {
+    body <- ndjson_body(list(
+      list(protocol = list(minReaderVersion = 1L)),
+      list(metadata = list(id = "table"))
+    ))
+    httr2::response(200, body = charToRaw(body))
+  }
+  httr2::local_mocked_responses(missing_schema)
+  expect_error(
+    test_client()$table("sales.default.events")$schema(),
+    class = "delta_sharing_protocol_error"
+  )
+
+  malformed_schema <- function(req) {
+    body <- ndjson_body(list(
+      list(protocol = list(minReaderVersion = 1L)),
+      list(metadata = list(
+        id = "table",
+        schemaString = "{\"type\":\"array\"}"
+      ))
+    ))
+    httr2::response(200, body = charToRaw(body))
+  }
+  httr2::local_mocked_responses(malformed_schema)
+  expect_error(
+    test_client()$table("sales.default.events")$schema(),
+    class = "delta_sharing_protocol_error"
+  )
+
+  invalid_json_schema <- function(req) {
+    body <- ndjson_body(list(
+      list(protocol = list(minReaderVersion = 1L)),
+      list(metadata = list(
+        id = "table",
+        schemaString = "{not-json"
+      ))
+    ))
+    httr2::response(200, body = charToRaw(body))
+  }
+  httr2::local_mocked_responses(invalid_json_schema)
+  expect_error(
+    test_client()$table("sales.default.events")$schema(),
+    class = "delta_sharing_protocol_error"
+  )
+})

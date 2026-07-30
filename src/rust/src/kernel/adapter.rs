@@ -295,7 +295,7 @@ pub(crate) fn cdf_reader(
             options.start_version,
             Some(options.end_version),
         )
-        .map_err(|e| format!("Delta Kernel CDF preparation failed: {e}"))?,
+        .map_err(|_| "Delta Kernel CDF preparation failed".to_string())?,
     );
 
     let output_logical_schema = match options.columns.as_ref() {
@@ -979,6 +979,35 @@ mod tests {
     }
 
     #[test]
+    fn malformed_cdf_preparation_never_exposes_the_table_path() {
+        let malformed = TestDirectory::new("cdf-path-secret");
+        fs::write(
+            malformed
+                .path()
+                .join("_delta_log")
+                .join("00000000000000000000.json"),
+            "not valid Delta JSON\n",
+        )
+        .unwrap();
+
+        let error = cdf_reader(
+            CdfReadOptions::try_new(
+                malformed.path().to_string_lossy().into_owned(),
+                None,
+                0,
+                0,
+                10,
+            )
+            .unwrap(),
+        )
+        .err()
+        .expect("malformed CDF table must fail");
+
+        assert_eq!(error, "Delta Kernel CDF preparation failed");
+        assert!(!error.contains("cdf-path-secret"));
+    }
+
+    #[test]
     fn loopback_presigned_action_is_read_by_the_kernel_default_engine() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
@@ -1036,6 +1065,55 @@ mod tests {
         let batches = reader.collect::<Result<Vec<_>, _>>().unwrap();
         server.join().unwrap();
         assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 3);
+    }
+
+    #[test]
+    fn expired_presigned_action_is_terminal_and_redacted() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut connection, _) = listener.accept().unwrap();
+            connection
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut request = vec![0_u8; 8192];
+            let bytes_read = connection.read(&mut request).unwrap();
+            let request = String::from_utf8_lossy(&request[..bytes_read]);
+            assert!(request.contains("X-Amz-Expires=0"));
+            assert!(request.contains("X-Amz-Signature=expired-secret"));
+            write!(
+                connection,
+                "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+            .unwrap();
+        });
+
+        let table = TestDirectory::new("presigned-expired");
+        let action = format!(
+            "http://{address}/part-00000.parquet?X-Amz-Expires=0&X-Amz-Signature=expired-secret"
+        );
+        write_commit(table.path(), Some(&action), 1);
+        let mut reader = snapshot_reader(
+            SnapshotReadOptions::try_new(
+                table.path().to_string_lossy().into_owned(),
+                None,
+                None,
+                2,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        let error = reader
+            .next()
+            .expect("expired request must return one stream error")
+            .unwrap_err()
+            .to_string();
+        server.join().unwrap();
+        assert_eq!(error, "Compute error: Delta Kernel data scan failed");
+        assert!(!error.contains("expired-secret"));
+        assert!(!error.contains(&address.to_string()));
+        assert!(reader.next().is_none());
     }
 
     #[test]

@@ -218,3 +218,23 @@ test_that("prepared CDF logs span the effective response range", {
     tolerance = 0.01
   )
 })
+
+test_that("CDF action buckets require protocol and represented versions", {
+  expect_error(
+    bucket_cdf_actions(
+      list(list(metaData = list(deltaMetadata = list(id = "table")))),
+      1,
+      2
+    ),
+    class = "delta_sharing_protocol_error"
+  )
+  expect_error(
+    bucket_cdf_actions(
+      list(list(protocol = list(deltaProtocol = list(minReaderVersion = 1)))),
+      1,
+      2
+    ),
+    class = "delta_sharing_protocol_error"
+  )
+  expect_null(find_next_page_token(list(list(protocol = list()))))
+})

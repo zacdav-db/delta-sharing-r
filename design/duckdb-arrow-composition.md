@@ -25,7 +25,8 @@ result <- local({
   on.exit(try(reader$Close(), silent = TRUE), add = TRUE)
 
   con <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
-  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  DBI::dbExecute(con, "SET threads = 1")
 
   duckdb::duckdb_register_arrow(con, "shared_rows", reader)
   on.exit(
@@ -52,7 +53,9 @@ first materialized as an R data frame or an Arrow table.
 - A read stream is single-consumer. Register one `RecordBatchReader`, execute
   one SQL statement that scans it, then unregister it.
 - DuckDB retains the registered reader until `duckdb_unregister_arrow()` or
-  connection shutdown. Always unregister explicitly and close the reader.
+  connection shutdown. Always unregister, shut down the isolated connection,
+  and only then close the reader. This order also covers queries that stop
+  before stream exhaustion.
 - Normal exhaustion, `Close()`, and finalization release the exported native
   Arrow stream.
 - If more than one SQL statement must scan the rows, use the first statement to

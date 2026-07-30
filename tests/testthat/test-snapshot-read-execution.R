@@ -299,3 +299,29 @@ test_that("a malformed later page removes incomplete snapshot staging", {
   ))
   expect_setequal(roots_after, roots_before)
 })
+
+test_that("snapshot responses require protocol and metadata", {
+  httr2::local_mocked_responses(function(req) {
+    httr2::response(
+      200,
+      body = charToRaw(ndjson_body(list(list(nextPageToken = ""))))
+    )
+  })
+  profile <- test_profile()
+
+  expect_error(
+    prepare_snapshot_query_log(
+      profile,
+      sharing_auth_context(profile),
+      snapshot_identifier(),
+      list(
+        predicate = NULL,
+        limit = NULL,
+        version = NULL,
+        timestamp = NULL
+      ),
+      "delta"
+    ),
+    class = "delta_sharing_protocol_error"
+  )
+})

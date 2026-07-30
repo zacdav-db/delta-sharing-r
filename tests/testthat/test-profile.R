@@ -135,3 +135,122 @@ test_that("parses inline JSON strings", {
   p <- sharing_profile_parse(json)
   expect_equal(p$endpoint, "https://x.test/api")
 })
+
+test_that("profile files use fs paths and preserve structural values", {
+  path <- fs::file_temp(ext = ".share")
+  withr::defer(fs::file_delete(path))
+  jsonlite::write_json(
+    list(
+      shareCredentialsVersion = 2,
+      type = "basic",
+      endpoint = "https://x.test/api/",
+      username = "user",
+      password = "password"
+    ),
+    path,
+    auto_unbox = TRUE
+  )
+
+  profile <- sharing_profile_parse(path)
+
+  expect_equal(profile$endpoint, "https://x.test/api")
+  expect_equal(profile$credentials$kind, "basic")
+  expect_equal(profile$credentials$username, "user")
+})
+
+test_that("profile sources must be readable JSON objects", {
+  missing <- fs::file_temp(ext = ".share")
+  invalid <- fs::file_temp(ext = ".share")
+  withr::defer(fs::file_delete(invalid))
+  writeLines("{not-json", invalid, useBytes = TRUE)
+
+  expect_error(
+    sharing_profile_parse(missing),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    sharing_profile_parse(invalid),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    sharing_profile_parse(42),
+    class = "delta_sharing_validation_error"
+  )
+})
+
+test_that("profile URLs accept null but reject non-scalar values", {
+  expect_null(normalize_profile_url(NULL))
+
+  purrr::walk(
+    list(NA_character_, character(), c("https://a", "https://b"), 42),
+    function(value) {
+      expect_error(
+        normalize_profile_url(value),
+        class = "delta_sharing_validation_error"
+      )
+    }
+  )
+})
+
+test_that("profile versions reject unsupported structural shapes", {
+  base <- list(
+    endpoint = "https://x.test/api",
+    bearerToken = "token"
+  )
+  purrr::walk(
+    list(NULL, "not-a-version", character(), list(1), 0, Inf),
+    function(version) {
+      profile <- c(
+        list(shareCredentialsVersion = version),
+        base
+      )
+      expect_error(
+        sharing_profile_parse(profile),
+        class = "delta_sharing_error"
+      )
+    }
+  )
+})
+
+test_that("private-key profiles require nested objects", {
+  base <- list(
+    shareCredentialsVersion = 2,
+    type = "oauth_jwt_bearer_private_key_jwt",
+    endpoint = "https://x.test/api"
+  )
+
+  expect_error(
+    sharing_profile_parse(c(base, list(auth = "not-an-object"))),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    sharing_profile_parse(c(
+      base,
+      list(auth = list(
+        tokenEndpoint = "https://x.test/token",
+        clientId = "client",
+        issuer = "issuer",
+        audience = "audience",
+        privateKey = "not-an-object"
+      ))
+    )),
+    class = "delta_sharing_validation_error"
+  )
+})
+
+test_that("version two rejects malformed or unknown authentication types", {
+  base <- list(
+    shareCredentialsVersion = 2,
+    endpoint = "https://x.test/api"
+  )
+  purrr::walk(
+    list(NULL, NA_character_, character(), 42, "unknown"),
+    function(type) {
+      profile <- c(base, list(type = type))
+      expect_error(
+        sharing_profile_parse(profile),
+        class = "delta_sharing_error"
+      )
+    }
+  )
+})

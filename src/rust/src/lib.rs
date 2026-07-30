@@ -327,7 +327,7 @@ pub unsafe extern "C" fn delta_sharing_native_reap_pending(
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::CStr;
+    use std::ffi::{CStr, CString};
 
     use arrow_array::ffi_stream::ArrowArrayStreamReader;
 
@@ -418,5 +418,98 @@ mod tests {
         assert!(error_text(&error).contains("panic contained"));
         assert!(!error_text(&error).contains("boundary panic"));
         assert!(!error_text(&error).contains("super-secret"));
+    }
+
+    #[test]
+    fn reader_ffi_rejects_invalid_pointer_shapes() {
+        let mut error = [0 as c_char; 256];
+        let mut stream = FFI_ArrowArrayStream::empty();
+        let table = CString::new("/tmp/local-table").unwrap();
+
+        let status = unsafe {
+            delta_sharing_native_populate_snapshot_stream(
+                &mut stream,
+                std::ptr::null(),
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                0,
+                0,
+                1024,
+                error.as_mut_ptr(),
+                error.len(),
+            )
+        };
+        assert_eq!(status, STATUS_ERROR);
+        assert!(error_text(&error).contains("table_location"));
+
+        let status = unsafe {
+            delta_sharing_native_populate_snapshot_stream(
+                &mut stream,
+                table.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                1,
+                0,
+                0,
+                1024,
+                error.as_mut_ptr(),
+                error.len(),
+            )
+        };
+        assert_eq!(status, STATUS_ERROR);
+        assert!(error_text(&error).contains("columns"));
+
+        let status = unsafe {
+            delta_sharing_native_populate_snapshot_stream(
+                &mut stream,
+                table.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                2,
+                0,
+                1024,
+                error.as_mut_ptr(),
+                error.len(),
+            )
+        };
+        assert_eq!(status, STATUS_ERROR);
+        assert!(error_text(&error).contains("has_limit"));
+
+        let status = unsafe {
+            delta_sharing_native_populate_cdf_stream(
+                &mut stream,
+                std::ptr::null(),
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                1,
+                2,
+                1024,
+                error.as_mut_ptr(),
+                error.len(),
+            )
+        };
+        assert_eq!(status, STATUS_ERROR);
+        assert!(error_text(&error).contains("table_location"));
+    }
+
+    #[test]
+    fn cleanup_reaper_ffi_reports_pending_count() {
+        let mut error = [0 as c_char; 128];
+        let mut pending = u64::MAX;
+        let status = unsafe {
+            delta_sharing_native_reap_pending(&mut pending, error.as_mut_ptr(), error.len())
+        };
+
+        assert_eq!(status, STATUS_OK, "{}", error_text(&error));
+        assert_eq!(pending, stream::pending_cleanup_count());
+
+        let status = unsafe {
+            delta_sharing_native_reap_pending(std::ptr::null_mut(), error.as_mut_ptr(), error.len())
+        };
+        assert_eq!(status, STATUS_ERROR);
+        assert!(error_text(&error).contains("pending cleanup output"));
     }
 }
