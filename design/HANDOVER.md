@@ -330,7 +330,10 @@ between-pull interruption and deterministic release remain covered.
 - **Credential rotation**: local integration history was rewritten on
   2026-07-30 so commit `63e79f7` uses `~/Desktop/config.share` and contains no
   plaintext credential. Per maintainer instruction, the live credential has
-  not been rotated; rotate it before any push or external handoff.
+  not been rotated. It remains external to the repository, and the complete
+  history reachable from the integration branch passed the managed credential
+  scan before the first push. Rotation remains a separate operational
+  follow-up.
 - **Interruption acceptance**: decide whether between-pull cancellation is an
   acceptable vNext contract while in-flight Kernel I/O remains non-preemptible.
 - **Hosted signed-DV proof**: local provider-signed HTTPS and expiry behavior
