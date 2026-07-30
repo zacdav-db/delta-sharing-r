@@ -1,7 +1,7 @@
 # ADR 001: R object system for vNext
 
 Status: superseded by ADR 004 (R6)
-Decision owner: package maintainer  
+Decision owner: package maintainer
 Decision date: 2026-07-28
 
 ## Context

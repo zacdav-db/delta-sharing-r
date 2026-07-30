@@ -1,7 +1,7 @@
 # ADR 002: Rust, Delta Kernel, and Arrow boundary
 
 Status: Rust/Kernel/Arrow and slim C binding accepted; platform proof pending
-Decision owner: package maintainer  
+Decision owner: package maintainer
 Decision date: 2026-07-28
 
 ## Context

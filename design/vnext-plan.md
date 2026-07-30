@@ -2,7 +2,7 @@
 
 Status: accepted architecture; execution tracked in `integration-roadmap.md`
 Branch: `codex/delta-kernel-s7-overhaul`
-Target package line: `delta.sharing` 0.2.x  
+Target package line: `delta.sharing` 0.2.x
 Date: 2026-07-28
 
 This document describes the target architecture. The phase checklist,
