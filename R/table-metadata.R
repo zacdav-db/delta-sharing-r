@@ -35,6 +35,33 @@ capability_header <- function(response_format = "auto", for_cdf = FALSE) {
 # Resolve "auto" to a single concrete format by asking the metadata endpoint
 # (which accepts both) and reading the format the server chose from its
 # response capabilities header. delta/parquet are returned unchanged.
+table_cache_key <- function(identifier) {
+  parts <- purrr::map_chr(
+    c("share", "schema", "table"),
+    function(part) identifier[[part]]
+  )
+  paste0(nchar(parts, type = "bytes"), ":", parts, collapse = "|")
+}
+
+cached_response_format <- function(auth, identifier) {
+  cache <- auth$response_format_cache
+  if (!is.environment(cache)) {
+    return(NULL)
+  }
+  cache[[table_cache_key(identifier)]]
+}
+
+remember_response_format <- function(auth, identifier, response_format) {
+  cache <- auth$response_format_cache
+  if (
+    is.environment(cache) &&
+      response_format %in% c("delta", "parquet")
+  ) {
+    cache[[table_cache_key(identifier)]] <- response_format
+  }
+  response_format
+}
+
 resolve_query_format <- function(
   profile,
   auth,
@@ -45,10 +72,19 @@ resolve_query_format <- function(
   if (!identical(requested, "auto")) {
     return(requested)
   }
+  cached <- cached_response_format(auth, identifier)
+  if (!is.null(cached)) {
+    return(cached)
+  }
   req <- metadata_request(profile, auth, identifier, operation, "auto")
   resp <- sharing_perform(req)
   caps <- httr2::resp_header(resp, "delta-sharing-capabilities") %||% ""
-  if (grepl("responseformat=delta", caps, fixed = TRUE)) "delta" else "parquet"
+  resolved <- if (grepl("responseformat=delta", caps, fixed = TRUE)) {
+    "delta"
+  } else {
+    "parquet"
+  }
+  remember_response_format(auth, identifier, resolved)
 }
 
 table_path <- function(identifier) {
@@ -229,6 +265,7 @@ sharing_table_protocol <- function(profile, auth, identifier) {
   req <- metadata_request(profile, auth, identifier, "table_protocol")
   resp <- sharing_perform(req)
   parsed <- parse_table_actions(resp, "table_protocol")
+  remember_response_format(auth, identifier, parsed$response_format)
   structure(parsed$protocol, class = c("delta_sharing_protocol", "list"))
 }
 
@@ -237,6 +274,7 @@ sharing_table_metadata <- function(profile, auth, identifier) {
   resp <- sharing_perform(req)
   version <- parse_version_header(resp, "table_metadata")
   parsed <- parse_table_actions(resp, "table_metadata")
+  remember_response_format(auth, identifier, parsed$response_format)
   structure(
     c(
       list(table_version = version, response_format = parsed$response_format),
@@ -250,6 +288,7 @@ sharing_table_schema <- function(profile, auth, identifier) {
   req <- metadata_request(profile, auth, identifier, "table_schema")
   resp <- sharing_perform(req)
   parsed <- parse_table_actions(resp, "table_schema")
+  remember_response_format(auth, identifier, parsed$response_format)
   schema_string <- parsed$metadata$schema_string
   if (!is_scalar_character(schema_string)) {
     abort(

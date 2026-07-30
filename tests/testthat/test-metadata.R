@@ -64,3 +64,111 @@ test_that("table schema parses the struct schema", {
   expect_equal(schema$type, "struct")
   expect_equal(schema$fields[[1]]$name, "id")
 })
+
+test_that("automatic response format is cached within one client", {
+  profile <- test_profile()
+  auth <- sharing_auth_context(profile)
+  identifier <- sharing_table_identifier("sales.default.orders")
+  requests <- 0L
+  httr2::local_mocked_responses(function(req) {
+    requests <<- requests + 1L
+    delta_metadata_response()
+  })
+
+  first <- resolve_query_format(profile, auth, identifier, "auto")
+  second <- resolve_query_format(profile, auth, identifier, "auto")
+
+  expect_identical(first, "delta")
+  expect_identical(second, "delta")
+  expect_identical(requests, 1L)
+})
+
+test_that("response format cache is isolated by table and client", {
+  profile <- test_profile()
+  first_auth <- sharing_auth_context(profile)
+  second_auth <- sharing_auth_context(profile)
+  orders <- sharing_table_identifier("sales.default.orders")
+  events <- sharing_table_identifier("sales.default.events")
+  requests <- 0L
+  httr2::local_mocked_responses(function(req) {
+    requests <<- requests + 1L
+    delta_metadata_response()
+  })
+
+  expect_identical(
+    resolve_query_format(profile, first_auth, orders, "auto"),
+    "delta"
+  )
+  expect_identical(
+    resolve_query_format(profile, first_auth, events, "auto"),
+    "delta"
+  )
+  expect_identical(
+    resolve_query_format(profile, second_auth, orders, "auto"),
+    "delta"
+  )
+  expect_identical(requests, 3L)
+})
+
+test_that("explicit response formats bypass the negotiation cache", {
+  profile <- test_profile()
+  auth <- sharing_auth_context(profile)
+  identifier <- sharing_table_identifier("sales.default.orders")
+  httr2::local_mocked_responses(function(req) {
+    stop("explicit response formats must not perform metadata I/O")
+  })
+
+  expect_identical(
+    resolve_query_format(profile, auth, identifier, "delta"),
+    "delta"
+  )
+  expect_identical(
+    resolve_query_format(profile, auth, identifier, "parquet"),
+    "parquet"
+  )
+})
+
+test_that("failed format negotiation is not cached", {
+  profile <- test_profile()
+  auth <- sharing_auth_context(profile)
+  identifier <- sharing_table_identifier("sales.default.orders")
+  requests <- 0L
+  httr2::local_mocked_responses(function(req) {
+    requests <<- requests + 1L
+    if (requests == 1L) {
+      return(httr2::response(
+        400,
+        headers = list(`content-type` = "application/json"),
+        body = charToRaw('{"message":"invalid request"}')
+      ))
+    }
+    delta_metadata_response()
+  })
+
+  expect_error(
+    resolve_query_format(profile, auth, identifier, "auto"),
+    class = "delta_sharing_http_error"
+  )
+  expect_identical(
+    resolve_query_format(profile, auth, identifier, "auto"),
+    "delta"
+  )
+  expect_identical(requests, 2L)
+})
+
+test_that("metadata parsing warms automatic format negotiation", {
+  profile <- test_profile()
+  auth <- sharing_auth_context(profile)
+  identifier <- sharing_table_identifier("sales.default.orders")
+  requests <- 0L
+  httr2::local_mocked_responses(function(req) {
+    requests <<- requests + 1L
+    delta_metadata_response()
+  })
+
+  sharing_table_metadata(profile, auth, identifier)
+  resolved <- resolve_query_format(profile, auth, identifier, "auto")
+
+  expect_identical(resolved, "delta")
+  expect_identical(requests, 1L)
+})

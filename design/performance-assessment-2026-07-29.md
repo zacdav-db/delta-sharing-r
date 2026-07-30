@@ -632,3 +632,62 @@ or a better-compacted provider fixture, not more R protocol complexity.
 Reproduce individual entries with `tools/compare_connector.R` and
 `tools/compare_connector.py`. Their third argument is `none`, a snapshot row
 limit, or `cdf:START:END`.
+
+## Implemented experiment: format negotiation and snapshot pruning
+
+Automatic response-format negotiation is now cached by table for the lifetime
+of one client. The cache stores only the stable selected `delta`/`parquet`
+capability: explicit formats bypass it, failed requests are not cached, and
+version-dependent protocol, metadata, and schema values continue to be fetched
+fresh. On the credentialed `partitioned_orders` table, the first automatic
+resolution took 1.504 seconds and the second resolution was a zero-I/O cache
+hit.
+
+`tools/profile_snapshot_pruning.R` measures the control-plane manifest without
+downloading Parquet. On the six-file `partitioned_orders` table:
+
+| Hint shape | Selected files | Synthetic log bytes |
+|---|---:|---:|
+| None | 6 | 14,793 |
+| `limit = 1000` | 1 | 3,331 |
+| `region == "us-west-2"` | 1 | 3,331 |
+| Region predicate plus limit | 1 | 3,331 |
+| `order_id == 105469` | 6 | 14,793 |
+| Order predicate plus limit | 6 | 14,793 |
+
+The package was already transmitting both structured predicates and limit
+hints correctly. These measurements show why the hints must remain documented
+as best effort: partition pruning was decisive, while the non-partition value
+did not eliminate a file and prevented the server from safely applying the
+one-file limit shortcut.
+
+The partition-column probe also found a Delta Kernel 0.26 panic when the
+requested logical projection has no physical Parquet columns. The native
+adapter now detects that exact scan shape, adds one hidden physical data column,
+and projects it away before exposing Arrow output. Ordinary projections are
+unchanged.
+
+## CDF presigned-I/O diagnosis
+
+`tools/profile_cdf_io.R` separates the Sharing query, synthetic-log
+preparation, native construction, and every Arrow batch pull without reporting
+credentials or signed URLs.
+
+| Source | R query + log | Native construction | Rows | Batches | Data pulls | Pull p50 | Pulls >1 s |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `cdf_dv_interop`, versions 1–4 | 6.583 s | 0.007 s | 3,500 | 258 | 314.766 s | 1.198 s | 258 |
+| `cdf_no_dv`, versions 1–4 | 3.821 s | 0.008 s | 3,500,000 | 322 | 429.344 s | 1.240 s | 297 |
+
+The DV response contained 257 add actions, one CDC action, one remove, and two
+metadata actions. The non-DV response contained 256 adds, 41 CDC actions, and
+two metadata actions. The batch/file-action relationship and pull distribution
+localize the cost to remote object access rather than R parsing, log writing,
+native setup, or Arrow conversion.
+
+Kernel 0.26 exposes a general file-buffer setting, but its own default-engine
+implementation explicitly bypasses that setting for presigned HTTPS URLs.
+Those URLs use an ordered `FileStream` with one-file lookahead. A package-level
+custom downloader or Parquet engine would materially expand Rust and duplicate
+Kernel responsibility. The supported next directions are provider compaction
+or an upstream Kernel presigned-concurrency improvement, followed by the same
+end-to-end benchmark; no package implementation change is justified now.

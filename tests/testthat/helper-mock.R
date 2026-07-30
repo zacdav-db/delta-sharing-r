@@ -29,7 +29,10 @@ ndjson_body <- function(actions) {
   paste(lines, collapse = "\n")
 }
 
-delta_metadata_response <- function(version = "42") {
+delta_metadata_response <- function(
+  version = "42",
+  capabilities = "responseformat=delta"
+) {
   body <- ndjson_body(list(
     list(
       protocol = list(
@@ -58,6 +61,7 @@ delta_metadata_response <- function(version = "42") {
     200,
     headers = list(
       `delta-table-version` = version,
+      `delta-sharing-capabilities` = capabilities,
       `content-type` = "application/x-ndjson"
     ),
     body = charToRaw(body)

@@ -109,6 +109,11 @@ orders$snapshot(timestamp = "2024-01-01T00:00:00Z")$to_data_frame()
 `limit` is enforced exactly by the Kernel scan. A `predicate` is a best-effort
 server hint, not an exact row filter.
 
+The default `response_format = "auto"` is negotiated once per table within a
+client and reused by later reads. Explicit `"delta"` or `"parquet"` values
+bypass negotiation. Table metadata and schema methods continue to fetch their
+current values.
+
 Predicates use ordinary nested R lists. The package serializes the list to the
 JSON-string wire field required by Delta Sharing:
 

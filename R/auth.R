@@ -113,7 +113,12 @@ sharing_auth_context <- function(profile) {
   structure(
     list(
       kind = kind,
-      authenticate = authenticate
+      authenticate = authenticate,
+      # Response-format negotiation is stable for a table within one client
+      # session. Keep this cache beside the shared auth context so every table
+      # handle and reader created by the client sees the same result without
+      # introducing package-global state.
+      response_format_cache = new.env(parent = emptyenv())
     ),
     class = "delta_sharing_auth"
   )

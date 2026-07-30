@@ -42,6 +42,10 @@ orders_stream <- snapshot$to_arrow_stream()
 Eager reads use the same direct Arrow stream as the lazy materializers, without
 an intermediate collection or replay step.
 
+The default `response_format = "auto"` negotiation is reused for subsequent
+reads of the same table through one client. Metadata and schema inspection
+remain fresh requests.
+
 ## Snapshots and changes
 
 Read a table at a specific version or timestamp:

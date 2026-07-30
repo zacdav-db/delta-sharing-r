@@ -108,9 +108,10 @@ offline tests, formatting, and strict Clippy pass with Kernel 0.26 and Arrow
 58.3. Run the R tests with
 `Rscript -e 'options(Ncpus=1); pkgload::load_all("."); devtools::test(".")'`.
 
-The 238,153-byte archive containing the direct-only production implementation
-passes `R CMD check --as-cran --no-manual` on macOS arm64 with zero errors,
-zero warnings, and two explained notes: the expected new-submission/development
+The 240,203-byte archive containing the direct-only implementation plus the
+format cache and partition-only projection fix passes
+`R CMD check --as-cran --no-manual` on macOS arm64 with zero errors, zero
+warnings, and two explained notes: the expected new-submission/development
 version note and a local check-environment note that `pandoc` was not detected
 for the top-level README check. Vignette creation, installation, loading,
 unloading, tests, and vignette rebuilding all pass. The installed lifecycle
@@ -122,6 +123,8 @@ and reload coverage.
 - Empty query body must serialize as `{}` not `[]` (the no-options snapshot case).
 - Format resolution: `queryTable` rejects `responseformat=delta,parquet`; must
   resolve one format first via `/metadata` (`resolve_query_format`), then send it.
+  The resolved format is now cached per table for the lifetime of one client;
+  version-dependent metadata and schema values are still fetched fresh.
 - Reader features are delta-only; omitted for parquet (`capability_header`).
 - Synthetic-log layout must match the Rust cleanup guard's ownership contract
   (see Section 7).
@@ -135,6 +138,9 @@ and reload coverage.
   staged directly into the private synthetic log. A 100,000-file benchmark
   reduced maximum RSS by 44.3% and transformation time by 8.0% while producing
   a byte-identical commit.
+- Kernel 0.26 panics when a projection contains only partition columns because
+  the physical Parquet schema is empty. The adapter now adds one hidden physical
+  column only for that shape and projects it away before Arrow output.
 
 Profile parsing now follows Python's structural level: it extracts the fields
 required by the selected profile shape and defers credential content checks to
@@ -244,6 +250,24 @@ cleanup contain the current performance work:
   5–13% faster on the other non-empty snapshot sources tested. The empty
   control was 11% slower. One CDF 1–4 run took 318 seconds in R versus
   356 seconds in Python; both are dominated by hundreds of tiny remote files.
+- Repeated automatic format resolution on one live table changed from a
+  1.504-second metadata request to a zero-I/O cache hit. The cache is scoped to
+  one client and table, explicit formats bypass it, and failures are not cached.
+- On `partitioned_orders`, a 1,000-row limit hint and a partition predicate
+  each reduced the signed manifest from six files to one. A non-partition
+  `order_id` hint selected all six files, and combining it with the limit also
+  selected all six because the hint could not prove that one file contained
+  enough matching rows.
+- Phase profiling localized CDF latency to presigned file pulls. For
+  `cdf_dv_interop` versions 1–4, R query/log preparation took 6.583 seconds,
+  native construction took 0.007 seconds, and 258 data pulls took 314.766
+  seconds; every pull exceeded one second. `cdf_no_dv` showed the same shape:
+  3.821 seconds of R preparation, 0.008 seconds of native construction, and
+  429.344 seconds across 322 data pulls.
+- Kernel 0.26's configurable file buffer explicitly does not apply to
+  presigned HTTPS files. That path preserves order with one-file lookahead, so
+  the next improvement belongs in Delta Kernel or provider compaction. The
+  package should not add a custom downloader/Parquet engine for this result.
 
 These results support the accepted boundary. No client, protocol, HTTP, or
 planning responsibility should move to Rust. See
@@ -254,6 +278,10 @@ planning responsibility should move to Rust. See
 - **CDF large-manifest trade-off**: production CDF still retains its response
   actions. The bounded prototype was byte-equivalent and live-correct but
   failed the performance gate, so it was deliberately not integrated.
+- **CDF presigned-file concurrency**: both live CDF fixtures spend nearly all
+  wall time in one-second-class remote pulls. Track an upstream Kernel
+  presigned-read concurrency improvement or use better-compacted provider
+  fixtures; do not move this work into R.
 - **Cross-platform package proof**: minimum/release/development R and macOS,
   Linux, and Windows source/binary builds still require current-head evidence.
 - **R coverage**: the first whole-tree measurement of the lean R6 rewrite is
@@ -295,5 +323,9 @@ Databricks copyright claim.
   for the development package and official Python connector.
 - `tools/{snapshot,cdf}_manifest_benchmark_worker.R` — fresh-process retained
   versus bounded-staging memory/time evidence.
+- `tools/profile_snapshot_pruning.R` — safe manifest-count comparison for
+  baseline, limit, predicate, and combined snapshot hints.
+- `tools/profile_cdf_io.R` — safe CDF phase and remote-pull latency profiler
+  with plan-only and full-drain modes.
 - `tests/testthat/fixtures/delta/` — real local Delta tables (snapshot + cdf)
   for kernel tests that need no network.

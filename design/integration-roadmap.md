@@ -233,7 +233,9 @@ Production remains the concise R-owned retained path.
 - [x] Use controlled local fixtures for regression gates; treat remote samples
   as directional because server, cache, network, and object-store variance are
   material.
-- [ ] Reassess format/metadata caching only after the manifest work.
+- [x] Reassess format/metadata caching after the manifest work. Cache only the
+  stable negotiated response format per client/table; keep version-dependent
+  metadata and schema fresh.
 
 Exit gate E: performance decisions are based on reproducible end-to-end
 evidence rather than isolated microbenchmarks.
@@ -332,6 +334,7 @@ not the current public implementation or completion proof.
 | Live eager progress | `dbb538c` | Retired | Proved continuous indicators were possible, but added a second materialization path and substantial lifecycle surface. |
 | Bounded manifests and lifecycle | `8d1ed40` | Integrated and locally/live proven | Bounded R snapshot staging, rejected CDF-spooling evidence, current R/Python comparison, package check, coverage baseline, and credential-safe live helper. |
 | Direct materialization cleanup | current branch | Integrated and locally proven | Removed progress arguments, row-total parsing, the native collection worker, batch replay, DLL pinning, and progress-specific tests; the final source archive passes its full local package check. |
+| Cache, pruning, and CDF I/O investigation | current branch | Implemented and locally/live proven | Cached per-client/table format negotiation, proved limit and partition-hint manifest pruning, fixed partition-only projection, localized CDF latency to Kernel's sequential presigned-file path, and passed the final source-package check. |
 
 Only after every open gate is evidenced on this integration branch is the
 overhaul eligible for a separately authorized release or main-line integration.

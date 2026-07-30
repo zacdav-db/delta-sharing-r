@@ -177,7 +177,7 @@ pub(crate) fn snapshot_reader(
         .build(engine.as_ref())
         .map_err(|_| "Delta Kernel snapshot preparation failed".to_string())?;
 
-    let logical_schema = match options.columns.as_ref() {
+    let output_logical_schema = match options.columns.as_ref() {
         Some(columns) => snapshot
             .schema()
             .project(columns)
@@ -185,14 +185,59 @@ pub(crate) fn snapshot_reader(
         None => snapshot.schema(),
     };
 
-    let scan = snapshot
+    let mut scan = snapshot
         .clone()
         .scan_builder()
-        .with_schema(logical_schema)
+        .with_schema(output_logical_schema.clone())
         .build()
         .map_err(|_| "Delta Kernel scan planning failed".to_string())?;
-    let arrow_schema: Schema = scan
+    let mut output_projection = None;
+
+    // Delta Kernel 0.26's default Parquet engine cannot currently decode a
+    // zero-field physical schema. A projection containing only partition
+    // columns produces exactly that shape because those values come from the
+    // Delta log rather than Parquet. Add one hidden data column only in this
+    // case, then project it away after Kernel reconstructs the logical batch.
+    if scan.physical_schema().num_fields() == 0 {
+        let columns = options.columns.as_ref().ok_or_else(|| {
+            "Delta Kernel cannot scan a table with no physical data columns".to_string()
+        })?;
+        let selected: HashSet<String> =
+            columns.iter().map(|column| column.to_lowercase()).collect();
+        let mut replacement = None;
+        for field in snapshot.schema().fields() {
+            if selected.contains(&field.name().to_lowercase()) {
+                continue;
+            }
+            let mut physical_columns = columns.clone();
+            physical_columns.push(field.name().to_string());
+            let physical_logical_schema = snapshot
+                .schema()
+                .project(&physical_columns)
+                .map_err(|_| "Delta Kernel projection validation failed".to_string())?;
+            let candidate = snapshot
+                .clone()
+                .scan_builder()
+                .with_schema(physical_logical_schema)
+                .build()
+                .map_err(|_| "Delta Kernel scan planning failed".to_string())?;
+            if candidate.physical_schema().num_fields() > 0 {
+                replacement = Some(candidate);
+                break;
+            }
+        }
+        scan = replacement.ok_or_else(|| {
+            "Delta Kernel partition-only projection requires one physical data column".to_string()
+        })?;
+        output_projection = Some((0..columns.len()).collect::<Vec<_>>());
+    }
+
+    let physical_arrow_schema: Schema = scan
         .logical_schema()
+        .as_ref()
+        .try_into_arrow()
+        .map_err(|_| "Delta Kernel logical schema conversion failed".to_string())?;
+    let output_arrow_schema: Schema = output_logical_schema
         .as_ref()
         .try_into_arrow()
         .map_err(|_| "Delta Kernel logical schema conversion failed".to_string())?;
@@ -202,9 +247,11 @@ pub(crate) fn snapshot_reader(
     let source: KernelDataIterator = Box::new(source);
 
     Ok(Box::new(KernelRecordBatchReader {
-        schema: Arc::new(arrow_schema),
-        physical_schema: None,
-        output_projection: None,
+        schema: Arc::new(output_arrow_schema),
+        physical_schema: output_projection
+            .as_ref()
+            .map(|_| Arc::new(physical_arrow_schema)),
+        output_projection,
         source,
         // These fields intentionally retain the engine and snapshot until the
         // Arrow stream is exhausted or released early.
@@ -396,7 +443,7 @@ impl KernelRecordBatchReader {
                     },
                     Err(_) => {
                         return Some(Err(ArrowError::SchemaError(
-                            "Delta Kernel CDF output projection failed".to_string(),
+                            "Delta Kernel output projection failed".to_string(),
                         )));
                     }
                 },

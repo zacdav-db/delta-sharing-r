@@ -187,6 +187,9 @@ test_that("snapshot pages stream directly into one private commit", {
   lines <- readLines(commit)
 
   expect_equal(page, 2L)
+  expect_identical(log$page_count, 2L)
+  expect_identical(log$file_count, 2L)
+  expect_identical(log$response_format, "delta")
   expect_setequal(fs::path_file(fs::dir_ls(log_dir)), log_commit_name)
   expect_length(lines, 4L)
   expect_equal(jsonlite::fromJSON(lines[[1L]])$protocol$minReaderVersion, 3L)
@@ -239,6 +242,9 @@ test_that("parquet snapshot pages use the same bounded preparation path", {
   withr::defer(log$cleanup())
 
   lines <- readLines(fs::path(log$path, "_delta_log", log_commit_name))
+  expect_identical(log$page_count, 1L)
+  expect_identical(log$file_count, 1L)
+  expect_identical(log$response_format, "parquet")
   expect_equal(
     jsonlite::fromJSON(lines[[3L]])$add$path,
     "https://storage.example.test/events.parquet"

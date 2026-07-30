@@ -126,6 +126,18 @@ test_that("projection selects and orders columns", {
   expect_equal(names(df), c("active", "id"))
 })
 
+test_that("partition-only projection does not require a visible data column", {
+  stream <- native_snapshot_stream(
+    fixture_table("timestamp-ntz"),
+    columns = "region"
+  )
+  df <- sharing_stream_to_data_frame(stream)
+
+  expect_identical(names(df), "region")
+  expect_gt(nrow(df), 0L)
+  expect_true(all(df$region == "emea"))
+})
+
 test_that("limit is enforced exactly by the kernel scan", {
   stream <- native_snapshot_stream(fixture_table("local-table"), limit = 4)
   df <- sharing_stream_to_data_frame(stream)

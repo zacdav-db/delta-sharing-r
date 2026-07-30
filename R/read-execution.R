@@ -26,8 +26,11 @@ stream_snapshot_query <- function(
   protocol <- NULL
   metadata <- NULL
   page_token <- NULL
+  page_count <- 0L
+  file_count <- 0L
 
   repeat {
+    page_count <- page_count + 1L
     req <- sharing_request(
       profile,
       auth,
@@ -64,6 +67,7 @@ stream_snapshot_query <- function(
         return(invisible(NULL))
       }
 
+      file_count <<- file_count + length(files)
       file_lines <- purrr::map_chr(files, function(file) {
         log_json_line(synthetic_file_action(file, format, "read"))
       })
@@ -87,7 +91,9 @@ stream_snapshot_query <- function(
 
   list(
     protocol = protocol,
-    metadata = metadata
+    metadata = metadata,
+    page_count = page_count,
+    file_count = file_count
   )
 }
 
@@ -124,7 +130,14 @@ prepare_snapshot_query_log <- function(
     )
     write_staged_snapshot_commit(log_dir, header, staged_actions)
   })
-  log
+  c(
+    log,
+    list(
+      response_format = format,
+      page_count = query_result$page_count,
+      file_count = query_result$file_count
+    )
+  )
 }
 
 changes_query <- function(spec, page_token) {
