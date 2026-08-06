@@ -1,7 +1,13 @@
 # delta.sharing <img src="https://user-images.githubusercontent.com/1446829/144671151-b095e1b9-2d24-4d3b-b3c6-a7041e491077.png" align="right" width="180" alt="Delta Sharing logo" />
 
+[![R CMD check](https://github.com/zacdav-db/delta-sharing-r/actions/workflows/package-check.yaml/badge.svg)](https://github.com/zacdav-db/delta-sharing-r/actions/workflows/package-check.yaml)
+[![Codecov](https://codecov.io/gh/zacdav-db/delta-sharing-r/branch/main/graph/badge.svg)](https://app.codecov.io/gh/zacdav-db/delta-sharing-r)
+
 An R client for [Delta Sharing](https://delta.io/sharing/), backed by
 [Delta Kernel](https://docs.delta.io/kernel/rust/introduction.html) and Arrow.
+
+See the [package website](https://zacdav-db.github.io/delta-sharing-r/) for the
+complete reference and introductory guide.
 
 ## Installation
 
