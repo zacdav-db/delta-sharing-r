@@ -1,0 +1,51 @@
+TARGET_DIR = ./rust/target/r-package
+LIBDIR = $(TARGET_DIR)/release
+STATLIB = $(LIBDIR)/libdelta_sharing_native.a
+
+PKG_CPPFLAGS = -DSTRICT_R_HEADERS -DR_NO_REMAP
+PKG_LIBS = -L$(LIBDIR) -ldelta_sharing_native
+
+all: $(SHLIB) rust-clean
+
+$(SHLIB): $(STATLIB)
+
+.PHONY: $(STATLIB)
+
+$(STATLIB):
+	@set -e; \
+		deployment_target="$(MACOSX_DEPLOYMENT_TARGET)"; \
+		if test "`uname -s`" = Darwin; then \
+			if test -z "$$deployment_target"; then \
+				deployment_target="`rustc --print=deployment-target 2>/dev/null | sed 's/^[^=]*=//'`"; \
+			fi; \
+			test -n "$$deployment_target"; \
+			MACOSX_DEPLOYMENT_TARGET="$$deployment_target"; \
+			export MACOSX_DEPLOYMENT_TARGET; \
+		fi; \
+		cargo_flags="--locked"; \
+		if test -f rust/vendor.tar.xz || test -f rust/vendor-config.toml; then \
+			test -f rust/vendor.tar.xz; \
+			test -f rust/vendor-config.toml; \
+			rm -Rf vendor .cargo; \
+			tar xf rust/vendor.tar.xz; \
+			mkdir -p .cargo; \
+			cp rust/vendor-config.toml .cargo/config.toml; \
+			export CARGO_HOME="$(CURDIR)/.cargo"; \
+			cargo_flags="--frozen"; \
+		fi; \
+		cargo build $$cargo_flags -j 2 --release \
+			--manifest-path=rust/Cargo.toml \
+			--target-dir=$(TARGET_DIR); \
+		if test -n "$$CARGO_BUILD_TARGET"; then \
+			mkdir -p "$(LIBDIR)"; \
+			cp "$(TARGET_DIR)/$$CARGO_BUILD_TARGET/release/libdelta_sharing_native.a" \
+				"$(STATLIB)"; \
+		fi
+
+.PHONY: rust-clean
+
+rust-clean: $(SHLIB)
+	rm -Rf $(TARGET_DIR) .cargo vendor
+
+clean:
+	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS) $(TARGET_DIR) .cargo vendor

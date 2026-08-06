@@ -2,19 +2,29 @@
 % Please edit documentation in R/client.R
 \name{sharing_client}
 \alias{sharing_client}
-\title{Create Delta Sharing Client}
+\title{Create a Delta Sharing client}
 \usage{
-sharing_client(credentials)
+sharing_client(profile)
 }
 \arguments{
-\item{credentials}{Path to delta share credentials}
+\item{profile}{A profile file path, a parsed profile \code{list}, or a JSON
+string. Profile versions 1 (bearer) and 2 (bearer, basic, OAuth
+client-credentials, and private-key JWT) are supported.}
 }
 \value{
-SharingClient
+A \link{SharingClient}.
 }
 \description{
-Create Delta Sharing Client
+Constructs a \link{SharingClient} from a Delta Sharing profile. The profile may be
+a path to a \code{.share} file, a parsed profile list, or an inline JSON string.
+Construction parses and validates the profile but performs no network request
+or token exchange.
 }
 \examples{
-sharing_client("config.share")
+client <- sharing_client(list(
+  shareCredentialsVersion = 2,
+  type = "bearer_token",
+  endpoint = "https://sharing.example.test/api",
+  bearerToken = "example-only-not-a-secret"
+))
 }

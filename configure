@@ -1,0 +1,14 @@
+#!/bin/sh
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "error: Cargo is required to build delta.sharing from source." >&2
+  exit 1
+fi
+
+if ! command -v rustc >/dev/null 2>&1; then
+  echo "error: rustc 1.88 or newer is required to build delta.sharing." >&2
+  exit 1
+fi
+
+cargo --version
+rustc --version

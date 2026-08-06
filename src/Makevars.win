@@ -1,0 +1,40 @@
+TARGET = $(subst 64,x86_64,$(WIN))-pc-windows-gnu
+TARGET_DIR = ./rust/target/r-package
+LIBDIR = $(TARGET_DIR)/$(TARGET)/release
+STATLIB = $(LIBDIR)/libdelta_sharing_native.a
+
+PKG_CPPFLAGS = -DSTRICT_R_HEADERS -DR_NO_REMAP
+PKG_LIBS = -L$(LIBDIR) -ldelta_sharing_native \
+	-lws2_32 -ladvapi32 -lbcrypt -lcrypt32 -lsecur32 -luserenv -lntdll
+
+all: $(SHLIB) rust-clean
+
+$(SHLIB): $(STATLIB)
+
+.PHONY: $(STATLIB)
+
+$(STATLIB):
+	@set -e; \
+	cargo_flags="--locked"; \
+	if test -f rust/vendor.tar.xz || test -f rust/vendor-config.toml; then \
+		test -f rust/vendor.tar.xz; \
+		test -f rust/vendor-config.toml; \
+		rm -Rf vendor .cargo; \
+		tar xf rust/vendor.tar.xz; \
+		mkdir -p .cargo; \
+		cp rust/vendor-config.toml .cargo/config.toml; \
+		export CARGO_HOME="$(CURDIR)/.cargo"; \
+		cargo_flags="--frozen"; \
+	fi; \
+	cargo build $$cargo_flags -j 2 --release \
+		--target=$(TARGET) \
+		--manifest-path=rust/Cargo.toml \
+		--target-dir=$(TARGET_DIR)
+
+.PHONY: rust-clean
+
+rust-clean: $(SHLIB)
+	rm -Rf $(TARGET_DIR) .cargo vendor
+
+clean:
+	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS) $(TARGET_DIR) .cargo vendor

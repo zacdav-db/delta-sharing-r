@@ -1,0 +1,22 @@
+delta.sharing
+Copyright 2022-2026 Databricks, Inc.
+
+This product is licensed under the Apache License, Version 2.0.
+
+The package binary statically links Rust dependencies. A complete inventory of
+the locked Rust package name, version, source checksum, declared license, and
+legal-file provenance is installed at
+`dependency-licenses/dependency-inventory.json`. Verbatim dependency license,
+notice, attribution, and patent files are installed in the content-addressed
+`dependency-licenses/rust-license-texts.tar.xz` bundle. The inventory maps each
+upstream file to its SHA-256 bundle member.
+
+Direct R dependencies are separately distributed packages rather than bundled
+code. Their exact DESCRIPTION roles and version requirements are recorded in
+the same inventory; each installed dependency's DESCRIPTION and license files
+remain authoritative for its license.
+
+The bundled `extdata/cdf-empty-checkpoint.parquet` asset is copied from
+`delta-io/delta-sharing` commit
+`4b790695e45bc66a7531f0ddd264725718ee2fcc` (`fake_checkpoint.py`), licensed
+under the Apache License, Version 2.0.
