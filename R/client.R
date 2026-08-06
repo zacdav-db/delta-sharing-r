@@ -1,144 +1,112 @@
-#' Create Delta Sharing Client
-#'
-#' @param credentials Path to delta share credentials
-#'
-#' @return SharingClient
-#' @export
-#'
-#' @examples
-#' sharing_client("config.share")
-sharing_client <- function(credentials) {
-  delta.sharing::SharingClient$new(credentials)
+redact_url_userinfo <- function(url) {
+  if (!is.character(url) || length(url) != 1L || is.na(url)) {
+    return("<invalid endpoint>")
+  }
+  sub("^([^:/?#]+://)[^/@]*@", "\\1", url)
 }
 
-#' Sharing Client
+#' Create a Delta Sharing client
 #'
-#' @description
-#' Sharing Client Description: TODO
+#' Constructs a [SharingClient] from a Delta Sharing profile. The profile may be
+#' a path to a `.share` file, a parsed profile list, or an inline JSON string.
+#' Construction parses and validates the profile but performs no network request
+#' or token exchange.
 #'
-#' @details TODO
+#' @param profile A profile file path, a parsed profile `list`, or a JSON
+#'   string. Profile versions 1 (bearer) and 2 (bearer, basic, OAuth
+#'   client-credentials, and private-key JWT) are supported.
+#' @return A [SharingClient].
+#' @examples
+#' client <- sharing_client(list(
+#'   shareCredentialsVersion = 2,
+#'   type = "bearer_token",
+#'   endpoint = "https://sharing.example.test/api",
+#'   bearerToken = "example-only-not-a-secret"
+#' ))
+#' @export
+sharing_client <- function(profile) {
+  SharingClient$new(profile)
+}
+
+#' Delta Sharing client
+#'
+#' A reusable client that owns a parsed profile and its authentication context.
+#' Discovery and table handles are created from the client. Query configuration
+#' lives on snapshot/changes reader objects, not on the client or table.
+#'
+#' Most users call [sharing_client()] rather than `SharingClient$new()`.
+#'
 #' @export
 SharingClient <- R6::R6Class(
   classname = "SharingClient",
+  cloneable = FALSE,
   public = list(
-
-    #' @field creds Delta sharing credentials.
-    creds = NULL,
-
-    #' @description Create a new `DeltaShareCredentials` object
-    #' @param credentials Path to delta share credentials or a
-    #' `DeltaShareCredentials` object (see `sharing_creds_from_env`).
-    #' @return A new `DeltaShareCredentials` object
-    initialize = function(credentials) {
-      if (!is.DeltaShareCredentials(credentials)) {
-        credentials <- jsonlite::read_json(credentials)
-        credentials <- process_credentials(credentials)
-      }
-      self$creds <- credentials
+    #' @description Create a client from a profile.
+    #' @param profile Profile path, parsed list, or JSON string.
+    initialize = function(profile) {
+      private$profile <- sharing_profile_parse(profile)
+      private$auth <- sharing_auth_context(private$profile)
+      invisible(self)
     },
 
-    #' @description Lists available shares
-    #' @return tibble of the available shares associated with current delta
-    #' sharing credentials
+    #' @description The configured profile endpoint.
+    #' @return The endpoint URL string.
+    endpoint = function() {
+      private$profile$endpoint
+    },
+
+    #' @description List available shares.
+    #' @return A tibble with `name` and identifier columns.
     list_shares = function() {
-
-      params <- list(maxResults = 50)
-      req <- req_share(creds = self$creds, method = "GET", endpoint = "shares", params = params)
-
-      shares <- make_req(req)
-      dplyr::bind_rows(shares$items)
-
+      sharing_list_shares(private$profile, private$auth)
     },
 
-    #' @description List schemas within share
-    #' @param share Name of the share to list schemas
-    #' @return tibble of the available schemas associated with given share
-    list_schemas = function(share) {
-
-      endpoint <- paste("shares", share, "schemas", sep = "/")
-
-      params <- list(maxResults = 50)
-      req <- req_share(creds = self$creds, method = "GET", endpoint = endpoint, params = params)
-
-      tables <- make_req(req)
-
-      dplyr::bind_rows(tables$items) %>%
-        dplyr::select(share, schema = name)
-
+    #' @description List schemas. With no `share`, lists schemas in every
+    #'   accessible share.
+    #' @param share Optional share name.
+    #' @return A tibble with `share` and `name` columns.
+    list_schemas = function(share = NULL) {
+      sharing_list_schemas(private$profile, private$auth, share = share)
     },
 
-    #' @description List all schemas for all shares
-    #' @return tibble of the available schemas associated with current delta
-    #' sharing credentials
-    list_all_schemas = function() {
-
-      share_names <- unique(self$list_shares()$name)
-      purrr::map_dfr(share_names, self$list_schemas)
-
-    },
-
-    #' @description List tables within schema
-    #' @param schema Name of the scehma to list tables within
-    #' @return tibble of the available tables within given schema
-    list_tables = function(share, schema) {
-
-      endpoint <- paste("shares", share, "schemas", schema, "tables", sep = "/")
-
-      params <- list(maxResults = 50)
-      req <- req_share(creds = self$creds, method = "GET", endpoint = endpoint, params = params)
-
-      tables <- make_req(req)
-
-      dplyr::bind_rows(tables$items) %>%
-        dplyr::select(share, schema, name)
-
-    },
-
-    #' @description List tables within share
-    #' @param share Name of the share to list tables within
-    #' @return tibble of the available tables within given share
-    list_tables_in_share = function(share) {
-
-      endpoint <- paste("shares", share, "all-tables", sep = "/")
-
-      params <- list(maxResults = 50)
-      req <- req_share(creds = self$creds, method = "GET", endpoint = endpoint, params = params)
-
-      tables <- make_req(req)
-
-      dplyr::bind_rows(tables$items) %>%
-        dplyr::select(share, schema, name)
-
-    },
-
-    #' @description Create reference to delta sharing table
-    #' @param share Share the schema/table resides within
-    #' @param schema Schema the table resides within
-    #' @param table Table to query
-    #' @return R6 class of `SharingTableReader` for specified table
-    table = function(share, schema, table) {
-      SharingTableReader$new(
+    #' @description List tables. With no arguments, lists every accessible
+    #'   table; with `share` only, lists all tables in that share.
+    #' @param share Optional share name.
+    #' @param schema Optional schema name (requires `share`).
+    #' @return A tibble with `share`, `schema`, and `name` columns.
+    list_tables = function(share = NULL, schema = NULL) {
+      sharing_list_tables(
+        private$profile,
+        private$auth,
         share = share,
-        schema = schema,
-        table = table,
-        creds = self$creds
+        schema = schema
       )
+    },
+
+    #' @description Create a reusable table handle.
+    #' @param name Table name, or a `"share.schema.name"` string when `share`
+    #'   and `schema` are omitted.
+    #' @param schema Schema name when using explicit components.
+    #' @param share Share name when using explicit components.
+    #' @return A [SharingTable].
+    table = function(name, schema = NULL, share = NULL) {
+      identifier <- sharing_table_identifier(name, schema, share)
+      SharingTable$new(private$profile, private$auth, identifier)
+    },
+
+    #' @description Print the client.
+    #' @param ... Ignored.
+    print = function(...) {
+      cat(sprintf(
+        "<SharingClient> %s [%s]\n",
+        redact_url_userinfo(private$profile$endpoint),
+        private$profile$auth_type
+      ))
+      invisible(self)
     }
-
-    #TODO: update docs
-    ##' @description Create reference to delta sharing table changes
-    ##' @param share Share the schema/table resides within
-    ##' @param schema Schema the table resides within
-    ##' @param table Table to query changes of
-    ##' @return R6 class of `SharingTableReader` for specified table
-    # table_changes = function(share, schema, table) {
-    #   SharingTableChangesReader$new(
-    #     share = share,
-    #     schema = schema,
-    #     table = table,
-    #     creds = self$creds
-    #   )
-    # }
-
+  ),
+  private = list(
+    profile = NULL,
+    auth = NULL
   )
 )

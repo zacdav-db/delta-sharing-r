@@ -1,0 +1,147 @@
+name: Package check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  R_KEEP_PKG_SOURCE: yes
+
+jobs:
+  rust:
+    name: Rust
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src/rust -> target
+          key: public-rust
+
+      - name: Check formatting
+        run: cargo fmt --manifest-path src/rust/Cargo.toml --all -- --check
+
+      - name: Run Clippy
+        run: >-
+          cargo clippy
+          --manifest-path src/rust/Cargo.toml
+          --workspace
+          --lib
+          --all-features
+          --locked
+          --
+          -D warnings
+
+      - name: Build the Rust library
+        run: >-
+          cargo check
+          --manifest-path src/rust/Cargo.toml
+          --workspace
+          --lib
+          --all-features
+          --locked
+
+  r:
+    name: ${{ matrix.config.label }}
+    runs-on: ${{ matrix.config.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - os: ubuntu-24.04
+            r: devel
+            label: Linux (R devel)
+            http-user-agent: release
+          - os: ubuntu-24.04
+            r: release
+            label: Linux (R release)
+          - os: ubuntu-22.04
+            r: "4.3"
+            label: Linux (R minimum)
+          - os: macos-15
+            r: release
+            label: macOS arm64 (R release)
+          - os: macos-15-intel
+            r: release
+            label: macOS x86_64 (R release)
+          - os: windows-2025
+            r: release
+            label: Windows x86_64 (R release)
+            rust-target: x86_64-pc-windows-gnu
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          targets: ${{ matrix.config.rust-target }}
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src/rust -> target
+          key: public-r-${{ matrix.config.os }}-${{ matrix.config.r }}
+
+      - name: Install R
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: ${{ matrix.config.r }}
+          http-user-agent: ${{ matrix.config.http-user-agent }}
+          use-public-rspm: true
+
+      - name: Install Pandoc
+        uses: r-lib/actions/setup-pandoc@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+
+      - name: Install package dependencies
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+          cache-version: 1
+
+      - name: Run R CMD check
+        uses: r-lib/actions/check-r-package@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          args: 'c("--no-manual", "--as-cran")'
+          build_args: '"--no-manual"'
+          error-on: '"warning"'
+          upload-results: never
+          upload-snapshots: false
+
+      - name: Retain check logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: r-check-${{ runner.os }}-${{ runner.arch }}-${{ matrix.config.r }}
+          path: check
+          if-no-files-found: ignore
+          retention-days: 7

@@ -2,3 +2,14 @@
 .Rhistory
 .RData
 .Ruserdata
+.DS_Store
+/*.tar.gz
+/*.Rcheck
+/check
+/coverage
+/target
+/src/.cargo
+/src/vendor
+/src/rust/target
+/src/*.o
+/src/*.so

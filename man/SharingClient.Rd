@@ -2,179 +2,156 @@
 % Please edit documentation in R/client.R
 \name{SharingClient}
 \alias{SharingClient}
-\title{Sharing Client}
+\title{Delta Sharing client}
 \description{
-Sharing Client Description: TODO
+Delta Sharing client
+
+Delta Sharing client
 }
 \details{
-TODO
-}
-\section{Public fields}{
-\if{html}{\out{<div class="r6-fields">}}
-\describe{
-\item{\code{creds}}{Delta sharing credentials.}
-}
-\if{html}{\out{</div>}}
+A reusable client that owns a parsed profile and its authentication context.
+Discovery and table handles are created from the client. Query configuration
+lives on snapshot/changes reader objects, not on the client or table.
+
+Most users call \code{\link[=sharing_client]{sharing_client()}} rather than \code{SharingClient$new()}.
 }
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
 \item \href{#method-SharingClient-new}{\code{SharingClient$new()}}
+\item \href{#method-SharingClient-endpoint}{\code{SharingClient$endpoint()}}
 \item \href{#method-SharingClient-list_shares}{\code{SharingClient$list_shares()}}
 \item \href{#method-SharingClient-list_schemas}{\code{SharingClient$list_schemas()}}
-\item \href{#method-SharingClient-list_all_schemas}{\code{SharingClient$list_all_schemas()}}
 \item \href{#method-SharingClient-list_tables}{\code{SharingClient$list_tables()}}
-\item \href{#method-SharingClient-list_tables_in_share}{\code{SharingClient$list_tables_in_share()}}
 \item \href{#method-SharingClient-table}{\code{SharingClient$table()}}
-\item \href{#method-SharingClient-clone}{\code{SharingClient$clone()}}
+\item \href{#method-SharingClient-print}{\code{SharingClient$print()}}
 }
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SharingClient-new"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingClient-new}{}}}
 \subsection{Method \code{new()}}{
-Create a new `DeltaShareCredentials` object
+Create a client from a profile.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$new(credentials)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingClient$new(profile)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{credentials}}{Path to delta share credentials or a
-`DeltaShareCredentials` object (see `sharing_creds_from_env`).}
+\item{\code{profile}}{Profile path, parsed list, or JSON string.}
 }
 \if{html}{\out{</div>}}
 }
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-SharingClient-endpoint"></a>}}
+\if{latex}{\out{\hypertarget{method-SharingClient-endpoint}{}}}
+\subsection{Method \code{endpoint()}}{
+The configured profile endpoint.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SharingClient$endpoint()}\if{html}{\out{</div>}}
+}
+
 \subsection{Returns}{
-A new `DeltaShareCredentials` object
+The endpoint URL string.
 }
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SharingClient-list_shares"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingClient-list_shares}{}}}
 \subsection{Method \code{list_shares()}}{
-Lists available shares
+List available shares.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_shares()}\if{html}{\out{</div>}}
 }
 
 \subsection{Returns}{
-tibble of the available shares associated with current delta
-sharing credentials
+A tibble with \code{name} and identifier columns.
 }
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SharingClient-list_schemas"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingClient-list_schemas}{}}}
 \subsection{Method \code{list_schemas()}}{
-List schemas within share
+List schemas. With no \code{share}, lists schemas in every
+accessible share.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_schemas(share)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_schemas(share = NULL)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{share}}{Name of the share to list schemas}
+\item{\code{share}}{Optional share name.}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-tibble of the available schemas associated with given share
-}
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SharingClient-list_all_schemas"></a>}}
-\if{latex}{\out{\hypertarget{method-SharingClient-list_all_schemas}{}}}
-\subsection{Method \code{list_all_schemas()}}{
-List all schemas for all shares
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_all_schemas()}\if{html}{\out{</div>}}
-}
-
-\subsection{Returns}{
-tibble of the available schemas associated with current delta
-sharing credentials
+A tibble with \code{share} and \code{name} columns.
 }
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SharingClient-list_tables"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingClient-list_tables}{}}}
 \subsection{Method \code{list_tables()}}{
-List tables within schema
+List tables. With no arguments, lists every accessible
+table; with \code{share} only, lists all tables in that share.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_tables(share, schema)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_tables(share = NULL, schema = NULL)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{schema}}{Name of the scehma to list tables within}
-}
-\if{html}{\out{</div>}}
-}
-\subsection{Returns}{
-tibble of the available tables within given schema
-}
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SharingClient-list_tables_in_share"></a>}}
-\if{latex}{\out{\hypertarget{method-SharingClient-list_tables_in_share}{}}}
-\subsection{Method \code{list_tables_in_share()}}{
-List tables within share
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_tables_in_share(share)}\if{html}{\out{</div>}}
-}
+\item{\code{share}}{Optional share name.}
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{share}}{Name of the share to list tables within}
+\item{\code{schema}}{Optional schema name (requires \code{share}).}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-tibble of the available tables within given share
+A tibble with \code{share}, \code{schema}, and \code{name} columns.
 }
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SharingClient-table"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingClient-table}{}}}
 \subsection{Method \code{table()}}{
-Create reference to delta sharing table
+Create a reusable table handle.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$table(share, schema, table)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingClient$table(name, schema = NULL, share = NULL)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{share}}{Share the schema/table resides within}
+\item{\code{name}}{Table name, or a \code{"share.schema.name"} string when \code{share}
+and \code{schema} are omitted.}
 
-\item{\code{schema}}{Schema the table resides within}
+\item{\code{schema}}{Schema name when using explicit components.}
 
-\item{\code{table}}{Table to query}
+\item{\code{share}}{Share name when using explicit components.}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-R6 class of `SharingTableReader` for specified table
+A \link{SharingTable}.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SharingClient-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-SharingClient-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
+\if{html}{\out{<a id="method-SharingClient-print"></a>}}
+\if{latex}{\out{\hypertarget{method-SharingClient-print}{}}}
+\subsection{Method \code{print()}}{
+Print the client.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingClient$print(...)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{deep}}{Whether to make a deep clone.}
+\item{\code{...}}{Ignored.}
 }
 \if{html}{\out{</div>}}
 }
