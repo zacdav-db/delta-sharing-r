@@ -3,6 +3,9 @@
 An R client for [Delta Sharing](https://delta.io/sharing/), backed by
 [Delta Kernel](https://docs.delta.io/kernel/rust/introduction.html) and Arrow.
 
+See the [package website](https://zacdav-db.github.io/delta-sharing-r/) for the
+complete reference and introductory guide.
+
 ## Installation
 
 ```r

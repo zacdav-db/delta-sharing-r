@@ -11,7 +11,8 @@ Authors@R:
 Description: Connects R to Delta Sharing servers for share discovery, table
   metadata, snapshot reads, and change data feed reads.
 License: Apache License (>= 2) | file LICENSE
-URL: https://github.com/zacdav-db/delta-sharing-r
+URL: https://zacdav-db.github.io/delta-sharing-r/,
+  https://github.com/zacdav-db/delta-sharing-r
 BugReports: https://github.com/zacdav-db/delta-sharing-r/issues
 Depends:
   R (>= 4.3.0)
