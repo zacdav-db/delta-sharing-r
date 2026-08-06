@@ -22,7 +22,7 @@ reference:
       - SharingChanges
 
 articles:
-  - title: Get started
+  - title: Getting started
     navbar: ~
     contents:
       - delta-sharing

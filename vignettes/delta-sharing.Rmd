@@ -1,8 +1,8 @@
 ---
-title: "Delta Sharing"
+title: "Getting started"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Delta Sharing}
+  %\VignetteIndexEntry{Getting started}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -16,18 +16,49 @@ knitr::opts_chunk$set(
 ```
 
 `delta.sharing` is an R6 client for [Delta Sharing](https://delta.io/sharing/).
-R manages profiles, authentication, the control plane, and query planning;
-snapshot and change data feed row scans are read by Delta Kernel and returned
-through an Arrow C Stream.
+R manages profiles, authentication, discovery, and query planning. Delta Kernel
+reads snapshot and change data feed rows and exposes them through an Arrow C
+Stream.
 
-The user-facing model is deliberately small and follows a staged shape:
+Most workflows have four steps:
 
 1. create a client from a standard Delta Sharing profile;
 2. get a reusable table handle;
 3. configure a snapshot or change data feed read; and
 4. materialize it as an Arrow stream, an Arrow table, or a data frame.
 
-## Create a client
+## Connect to a share
+
+### Try the open dataset server
+
+The Delta Sharing project hosts an open server with example tables. Its
+[public profile](https://github.com/delta-io/delta-sharing/blob/main/examples/open-datasets.share)
+can be used without registering or creating a private credential:
+
+```{r, eval = FALSE}
+library(delta.sharing)
+
+profile_url <- paste0(
+  "https://raw.githubusercontent.com/",
+  "delta-io/delta-sharing/main/examples/open-datasets.share"
+)
+
+open_profile <- httr2::request(profile_url) |>
+  httr2::req_perform() |>
+  httr2::resp_body_string()
+
+client <- sharing_client(open_profile)
+client$list_tables()
+```
+
+Read a few rows from one of the public tables:
+
+```{r, eval = FALSE}
+housing <- client$table("delta_sharing.default.boston-housing")
+housing$snapshot(limit = 5)$to_data_frame()
+```
+
+### Use your own profile
 
 ```{r, eval = FALSE}
 library(delta.sharing)
@@ -35,12 +66,18 @@ library(delta.sharing)
 client <- sharing_client("~/config.share")
 ```
 
-The profile may be a path to a `.share` file, a parsed list, or an inline JSON
-string. Profile versions 1 and 2 are supported, including bearer tokens, basic
-auth, OAuth client credentials, and private-key JWT client assertions.
-Construction is offline: it parses configuration but makes no request and
-exchanges no token. Token exchange, caching, and refresh are handled by `httr2`
-on the first authenticated request.
+`sharing_client()` accepts:
+
+- a path to a `.share` file;
+- an inline JSON string; or
+- a parsed list.
+
+Profile versions 1 and 2 support bearer tokens, basic auth, OAuth client
+credentials, and private-key JWT client assertions.
+
+Creating the client is offline: it parses the profile without making a request
+or exchanging a token. When authentication is first needed, `httr2` handles
+token exchange, caching, and refresh.
 
 ## Discover data
 
@@ -140,7 +177,12 @@ orders$changes(
 
 ## How reads work
 
-For both Delta- and Parquet-format responses, R fetches the Query Table
-response and writes a private local Delta log that Delta Kernel reads; Kernel
-then fetches data directly from the pre-signed URLs. There is no second
-downloader, and both formats flow through the same Kernel Arrow stream.
+A read follows one path:
+
+1. R sends the query to the Delta Sharing server.
+2. R writes the response to a private, temporary Delta log.
+3. Delta Kernel reads that log, fetches the data files directly from their
+   presigned URLs, and exposes the rows as an Arrow stream.
+
+Delta and Parquet responses both use this path. R does not download the data
+files separately.
