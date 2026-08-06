@@ -1,7 +1,6 @@
-name: pkgdown
+name: pkgdown deploy
 
 on:
-  pull_request:
   push:
     branches:
       - main
@@ -11,8 +10,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: pkgdown-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: pkgdown-deploy
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -40,7 +39,7 @@ jobs:
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: src/rust -> target
-          key: pkgdown
+          key: pkgdown-deploy
 
       - name: Install R
         uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
@@ -62,14 +61,12 @@ jobs:
         shell: Rscript {0}
 
       - name: Upload site artifact
-        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: docs
 
   deploy:
     name: Deploy site
-    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
