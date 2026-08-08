@@ -3,6 +3,10 @@ test_that("DuckDB queries lazy snapshot readers", {
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
 
+  # DuckDB wraps lazy readers in an Arrow scanner. Arrow C streams are not
+  # assumed to support concurrent pulls, so keep this scanner serialized.
+  withr::local_options(arrow.use_threads = FALSE)
+
   stream <- native_snapshot_stream(
     fixture_table("local-table"),
     batch_size = 2L
@@ -11,7 +15,6 @@ test_that("DuckDB queries lazy snapshot readers", {
   withr::defer(reader$Close())
   connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
   withr::defer(DBI::dbDisconnect(connection, shutdown = TRUE))
-  DBI::dbExecute(connection, "SET threads = 1")
   duckdb::duckdb_register_arrow(connection, "shared_orders", reader)
   withr::defer(
     duckdb::duckdb_unregister_arrow(connection, "shared_orders")
@@ -42,7 +45,6 @@ test_that("DuckDB queries eager Arrow tables", {
   )
   connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
   withr::defer(DBI::dbDisconnect(connection, shutdown = TRUE))
-  DBI::dbExecute(connection, "SET threads = 1")
   duckdb::duckdb_register_arrow(connection, "shared_orders", table)
   withr::defer(
     duckdb::duckdb_unregister_arrow(connection, "shared_orders")
@@ -62,6 +64,8 @@ test_that("DuckDB early completion releases the prepared snapshot root", {
   skip_if_not_installed("arrow")
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
+
+  withr::local_options(arrow.use_threads = FALSE)
 
   httr2::local_mocked_responses(function(req) {
     httr2::response(
@@ -84,34 +88,35 @@ test_that("DuckDB early completion releases the prepared snapshot root", {
     "delta"
   )
   root <- log$root
-  stream <- native_snapshot_stream(
-    table_location = log$path,
-    batch_size = 2L,
-    cleanup_root = root
-  )
-  reader <- sharing_stream_to_arrow_reader(stream)
-  withr::defer(try(reader$Close(), silent = TRUE))
-  connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
-  withr::defer(
-    if (DBI::dbIsValid(connection)) {
-      DBI::dbDisconnect(connection, shutdown = TRUE)
-    }
-  )
-  DBI::dbExecute(connection, "SET threads = 1")
-  duckdb::duckdb_register_arrow(connection, "shared_orders", reader)
-  withr::defer(
-    if (DBI::dbIsValid(connection)) {
-      duckdb::duckdb_unregister_arrow(connection, "shared_orders")
-    }
-  )
+  result <- local({
+    stream <- native_snapshot_stream(
+      table_location = log$path,
+      batch_size = 2L,
+      cleanup_root = root
+    )
+    reader <- sharing_stream_to_arrow_reader(stream)
+    withr::defer(reader$Close())
+    connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
+    withr::defer(
+      if (DBI::dbIsValid(connection)) {
+        DBI::dbDisconnect(connection, shutdown = TRUE)
+      }
+    )
+    duckdb::duckdb_register_arrow(connection, "shared_orders", reader)
+    withr::defer(
+      if (DBI::dbIsValid(connection)) {
+        duckdb::duckdb_unregister_arrow(connection, "shared_orders")
+      }
+    )
 
-  result <- DBI::dbGetQuery(
-    connection,
-    "SELECT * FROM shared_orders LIMIT 1"
-  )
-  duckdb::duckdb_unregister_arrow(connection, "shared_orders")
-  DBI::dbDisconnect(connection, shutdown = TRUE)
-  reader$Close()
+    result <- DBI::dbGetQuery(
+      connection,
+      "SELECT * FROM shared_orders LIMIT 1"
+    )
+    duckdb::duckdb_unregister_arrow(connection, "shared_orders")
+    DBI::dbDisconnect(connection, shutdown = TRUE)
+    result
+  })
 
   expect_identical(nrow(result), 1L)
   expect_false(fs::dir_exists(root))
@@ -123,6 +128,8 @@ test_that("DuckDB queries CDF metadata columns", {
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
 
+  withr::local_options(arrow.use_threads = FALSE)
+
   stream <- native_cdf_stream(
     fixture_table("cdf"),
     start_version = 1,
@@ -132,7 +139,6 @@ test_that("DuckDB queries CDF metadata columns", {
   withr::defer(reader$Close())
   connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
   withr::defer(DBI::dbDisconnect(connection, shutdown = TRUE))
-  DBI::dbExecute(connection, "SET threads = 1")
   duckdb::duckdb_register_arrow(connection, "shared_changes", reader)
   withr::defer(
     duckdb::duckdb_unregister_arrow(connection, "shared_changes")

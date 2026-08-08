@@ -203,6 +203,13 @@ jobs:
           toolchain: stable
           targets: ${{ matrix.config.rust-target }}
 
+      - name: Restore Rust dependency cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src/rust -> ../../.cargo-target
+          shared-key: r-package-release
+          save-if: ${{ matrix.config.r == 'release' }}
+
       - name: Install R
         uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:

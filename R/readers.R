@@ -25,7 +25,8 @@ SharingReader <- R6::R6Class(
 
     #' @description Expose a lazy Arrow record batch reader (requires
     #'   `{arrow}`). The reader owns the underlying stream; consume it or call
-    #'   its `Close()` method.
+    #'   its `Close()` method. Downstream consumers must serialize pulls from
+    #'   this single-consumer stream.
     #' @param batch_size Rows per batch.
     #' @return An `arrow::RecordBatchReader`.
     to_arrow_reader = function(batch_size = DEFAULT_BATCH_SIZE) {
