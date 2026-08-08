@@ -1,4 +1,4 @@
-# delta.sharing <img src="https://user-images.githubusercontent.com/1446829/144671151-b095e1b9-2d24-4d3b-b3c6-a7041e491077.png" align="right" width="180" alt="Delta Sharing logo" />
+# delta.sharing <img src="https://user-images.githubusercontent.com/1446829/144671151-b095e1b9-2d24-4d3b-b3c6-a7041e491077.png" align="right" width="140" alt="Delta Sharing logo" />
 
 [![R CMD check](https://github.com/zacdav-db/delta-sharing-r/actions/workflows/package-check.yaml/badge.svg)](https://github.com/zacdav-db/delta-sharing-r/actions/workflows/package-check.yaml)
 [![Codecov](https://codecov.io/gh/zacdav-db/delta-sharing-r/branch/main/graph/badge.svg)](https://app.codecov.io/gh/zacdav-db/delta-sharing-r)
@@ -117,3 +117,17 @@ duckdb::duckdb_register_arrow(con, "shared_orders", arrow_table)
 An Arrow reader is single-consumer. Use an Arrow table, or create a temporary
 DuckDB table during the first query, when the result needs to be scanned
 several times.
+
+## Performance
+
+Directional end-to-end snapshot results, reported as medians of three reads
+after one warm-up.
+
+*Apple M2 Pro MacBook Pro, 32 GB RAM, R 4.5.1; VPN connection: 93 Mbps
+down, 115 ms base round-trip latency.*
+
+| Rows | Materialized R size | Elapsed, median (range) | Median rows/s |
+|---:|---:|---:|---:|
+| 10,000 | 0.38 MiB | 5.83 s (5.82–7.77) | 1,700 |
+| 1,000,000 | 38.15 MiB | 11.91 s (11.33–25.66) | 84,000 |
+| 10,000,000 | 381.47 MiB | 71.49 s (66.36–71.79) | 140,000 |
