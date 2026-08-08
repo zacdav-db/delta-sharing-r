@@ -121,14 +121,14 @@ several times.
 ## Performance
 
 The following are directional end-to-end snapshot measurements on consumer
-hardware, not isolated in-memory benchmarks. They were recorded on 7 August
-2026 using a 12-core Apple M2 Pro MacBook Pro with 32 GB RAM and R 4.5.1. The
-active VPN-routed internet connection measured 93 Mbps down with 115 ms base
-round-trip latency immediately before the run.
+hardware, not isolated in-memory benchmarks.
 
 Each case read six columns from the same remote Delta table with
 `snapshot(limit = ..., response_format = "delta")$to_data_frame()`. Results are
 medians of three sequential reads after one warm-up read.
+
+*Apple M2 Pro MacBook Pro, 32 GB RAM, R 4.5.1; VPN connection: 93 Mbps
+down, 115 ms base round-trip latency.*
 
 | Rows | Materialized R size | Elapsed, median (range) | Median rows/s |
 |---:|---:|---:|---:|
@@ -146,17 +146,12 @@ frame in memory.
 
 ### Change data feed
 
-A separate CDF read on 8 August 2026 used the same laptop and materialized a
-four-version, non-deletion-vector change range with `changes()` and
-`to_data_frame()`. The connection measured 101 Mbps down with 200 ms idle
-latency immediately before the run.
+A four-version CDF read materialized 3.5 million rows from hundreds of small
+remote change files.
+
+*Apple M2 Pro MacBook Pro, 32 GB RAM, R 4.5.1; VPN connection: 101 Mbps
+down, 200 ms idle latency.*
 
 | Scope | Result shape | Materialized R size | Elapsed | Rows/s |
 |---|---:|---:|---:|---:|
 | Versions 1–4 | 3,500,000 × 7 | 173.57 MiB | 428.03 s | 8,200 |
-
-This is one end-to-end observation rather than a median because the read took
-more than seven minutes. The fixture contains hundreds of small remote change
-files, so signed-file request latency dominates its wall time. It illustrates a
-many-file CDF workload and should not be compared directly with the compact
-snapshot rows-per-second figures above.
