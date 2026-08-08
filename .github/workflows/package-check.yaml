@@ -50,11 +50,19 @@ jobs:
           cargo clippy
           --manifest-path src/rust/Cargo.toml
           --workspace
-          --lib
+          --all-targets
           --all-features
           --locked
           --
           -D warnings
+
+      - name: Run Rust tests
+        run: >-
+          cargo test
+          --manifest-path src/rust/Cargo.toml
+          --workspace
+          --all-features
+          --locked
 
       - name: Install minimum supported Rust
         run: rustup toolchain install 1.88.0 --profile minimal
