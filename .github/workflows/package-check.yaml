@@ -84,6 +84,15 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Restore generated Rust source archive
+        id: rust-vendor-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            src/rust/vendor.tar.xz
+            src/rust/vendor-config.toml
+          key: rust-vendor-v1-${{ runner.os }}-${{ hashFiles('src/rust/Cargo.lock', 'src/rust/Cargo.toml', 'tools/rust_vendor.py') }}
+
       - name: Install R
         uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
@@ -104,6 +113,12 @@ jobs:
           python3 tools/test_configure.py
           python3 tools/test_rust_vendor.py
           python3 tools/test_dependency_licenses.py
+
+      - name: Generate locked Rust sources
+        if: steps.rust-vendor-cache.outputs.cache-hit != 'true'
+        run: |
+          cargo fetch --manifest-path src/rust/Cargo.toml --locked
+          python3 tools/rust_vendor.py generate
 
       - name: Verify locked Rust sources
         run: |
