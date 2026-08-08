@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  CARGO_TARGET_DIR: ${{ github.workspace }}/.cargo-target
   CARGO_TERM_COLOR: always
   R_KEEP_PKG_SOURCE: yes
 
@@ -41,7 +42,7 @@ jobs:
       - name: Restore Rust build cache
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          workspaces: src/rust -> target
+          workspaces: src/rust -> ../../.cargo-target
           key: r-coverage
 
       - name: Install R

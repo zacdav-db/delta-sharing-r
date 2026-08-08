@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  CARGO_TARGET_DIR: ${{ github.workspace }}/.cargo-target
   CARGO_TERM_COLOR: always
   R_KEEP_PKG_SOURCE: yes
 
@@ -38,7 +39,7 @@ jobs:
       - name: Restore Rust build cache
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          workspaces: src/rust -> target
+          workspaces: src/rust -> ../../.cargo-target
           key: public-rust
 
       - name: Check formatting
@@ -55,17 +56,112 @@ jobs:
           --
           -D warnings
 
-      - name: Build the Rust library
+      - name: Install minimum supported Rust
+        run: rustup toolchain install 1.88.0 --profile minimal
+
+      - name: Check the minimum supported Rust version
         run: >-
-          cargo check
+          cargo +1.88.0 check
           --manifest-path src/rust/Cargo.toml
           --workspace
           --lib
           --all-features
           --locked
 
+  source:
+    name: Source package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src/rust -> ../../.cargo-target
+          cache-targets: false
+          key: package-source-vendor
+
+      - name: Install R
+        uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - name: Install Pandoc
+        uses: r-lib/actions/setup-pandoc@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+
+      - name: Install package dependencies
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+        with:
+          needs: check
+          cache-version: 1
+
+      - name: Test release tooling
+        run: |
+          python3 tools/test_configure.py
+          python3 tools/test_rust_vendor.py
+
+      - name: Generate locked Rust sources
+        run: |
+          cargo fetch --manifest-path src/rust/Cargo.toml --locked
+          python3 tools/rust_vendor.py generate
+          python3 tools/rust_vendor.py check
+
+      - name: Build exact source package offline
+        env:
+          CARGO_NET_OFFLINE: "true"
+        shell: bash
+        run: |
+          R CMD build .
+
+          shopt -s nullglob
+          archives=(delta.sharing_*.tar.gz)
+          if [[ "${#archives[@]}" -ne 1 ]]; then
+            echo "Expected exactly one source package." >&2
+            exit 1
+          fi
+
+          contents="$(tar -tzf "${archives[0]}")"
+          for required in \
+            src/rust/vendor.tar.xz \
+            src/rust/vendor-config.toml \
+            inst/dependency-licenses/dependency-inventory.json \
+            inst/dependency-licenses/rust-license-texts.tar.xz
+          do
+            if ! grep -Eq "/${required}$" <<<"$contents"; then
+              echo "Source package is missing ${required}." >&2
+              exit 1
+            fi
+          done
+          if grep -Eq '/(\.cargo-target|src/(vendor|\.cargo|rust/target))/' <<<"$contents"; then
+            echo "Source package contains an unpacked Rust build tree." >&2
+            exit 1
+          fi
+
+          mkdir -p artifacts/source
+          mv "${archives[0]}" artifacts/source/
+
+      - name: Retain exact source package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-source
+          path: artifacts/source
+          if-no-files-found: error
+          retention-days: 7
+
   r:
     name: ${{ matrix.config.label }}
+    needs: source
     runs-on: ${{ matrix.config.os }}
     timeout-minutes: 90
     strategy:
@@ -105,12 +201,6 @@ jobs:
           toolchain: stable
           targets: ${{ matrix.config.rust-target }}
 
-      - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          workspaces: src/rust -> target
-          key: public-r-${{ matrix.config.os }}-${{ matrix.config.r }}
-
       - name: Install R
         uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
@@ -128,14 +218,34 @@ jobs:
           needs: check
           cache-version: 1
 
-      - name: Run R CMD check
-        uses: r-lib/actions/check-r-package@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
+      - name: Download exact source package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          args: 'c("--no-manual", "--as-cran")'
-          build_args: '"--no-manual"'
-          error-on: '"warning"'
-          upload-results: never
-          upload-snapshots: false
+          name: package-source
+          path: artifacts/source
+
+      - name: Run R CMD check
+        env:
+          CARGO_NET_OFFLINE: "true"
+          _R_CHECK_CRAN_INCOMING_: "false"
+          _R_CHECK_FORCE_SUGGESTS_: "false"
+        shell: Rscript {0}
+        run: |
+          archive <- Sys.glob("artifacts/source/delta.sharing_*.tar.gz")
+          if (length(archive) != 1L) {
+            stop("Expected exactly one source package.")
+          }
+          rcmdcheck::rcmdcheck(
+            archive,
+            args = c("--no-manual", "--as-cran"),
+            error_on = "warning",
+            check_dir = "check"
+          )
+
+      - name: Show test output
+        if: always()
+        shell: bash
+        run: find check -name 'testthat.Rout*' -exec cat '{}' \; || true
 
       - name: Retain check logs
         if: always()

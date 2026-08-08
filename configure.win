@@ -1,5 +1,10 @@
 #!/bin/sh
 
+if [ -n "${HOME:-}" ] && [ -d "$HOME/.cargo/bin" ]; then
+  PATH="$HOME/.cargo/bin:$PATH"
+  export PATH
+fi
+
 if ! command -v cargo >/dev/null 2>&1; then
   echo "error: Cargo is required to build delta.sharing from source." >&2
   exit 1
@@ -10,5 +15,24 @@ if ! command -v rustc >/dev/null 2>&1; then
   exit 1
 fi
 
-cargo --version
-rustc --version
+cargo --version || exit 1
+rustc_output=$(rustc --version) || exit 1
+echo "$rustc_output"
+
+rustc_version=$(echo "$rustc_output" | awk '{ print $2 }')
+rustc_major=${rustc_version%%.*}
+rustc_remainder=${rustc_version#*.}
+rustc_minor=${rustc_remainder%%.*}
+
+case "$rustc_major.$rustc_minor" in
+  *[!0-9.]* | .* | *.)
+    echo "error: unable to determine the rustc version." >&2
+    exit 1
+    ;;
+esac
+
+if [ "$rustc_major" -lt 1 ] || \
+   { [ "$rustc_major" -eq 1 ] && [ "$rustc_minor" -lt 88 ]; }; then
+  echo "error: rustc 1.88 or newer is required; found $rustc_version." >&2
+  exit 1
+fi
