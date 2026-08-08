@@ -16,7 +16,7 @@ complete reference and introductory guide.
 pak::pak("zacdav-db/delta-sharing-r")
 ```
 
-Building from source requires Cargo, `rustc >= 1.88`, and CMake.
+Building from source requires Cargo and `rustc >= 1.88`.
 
 ## Quick start
 

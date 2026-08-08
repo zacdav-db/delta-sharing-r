@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import lzma
 import os
 from pathlib import Path, PurePosixPath
@@ -14,6 +15,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +42,11 @@ def sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest of a file."""
+    return sha256(path)
 
 
 def archive_paths(vendor_root: Path) -> list[Path]:
@@ -82,6 +89,90 @@ def write_archive(vendor_root: Path, destination: Path) -> None:
                         archive.addfile(info)
 
 
+def write_deterministic_archive(vendor_root: Path, destination: Path) -> None:
+    """Write an archive with stable ordering and metadata."""
+    write_archive(vendor_root, destination)
+
+
+def normalize_vendor_config(config_text: str) -> str:
+    """Accept only the relative Cargo source replacement shipped by the package."""
+    normalized = "\n".join(
+        line.rstrip() for line in config_text.replace("\r\n", "\n").splitlines()
+    ).strip() + "\n"
+    if normalized != CONFIG:
+        raise VendorError("vendor-config.toml is not the expected relative source map")
+    return normalized
+
+
+def locked_registry_packages(lock_path: Path) -> dict[str, str]:
+    """Return versioned vendor directories and checksums from Cargo.lock."""
+    with lock_path.open("rb") as stream:
+        lock = tomllib.load(stream)
+
+    expected: dict[str, str] = {}
+    for package in lock.get("package", []):
+        source = package.get("source")
+        if source is None:
+            continue
+        if not source.startswith("registry+"):
+            raise VendorError(
+                "the locked graph contains an unsupported non-registry dependency"
+            )
+        checksum = package.get("checksum")
+        if not isinstance(checksum, str):
+            raise VendorError(
+                f"locked registry package {package['name']} "
+                f"{package['version']} has no checksum"
+            )
+        directory = f"{package['name']}-{package['version']}"
+        if directory in expected:
+            raise VendorError(f"duplicate versioned vendor directory: {directory}")
+        expected[directory] = checksum
+    return expected
+
+
+def verify_vendored_checksums(vendor_root: Path, lock_path: Path) -> int:
+    """Match every vendored crate and file to Cargo.lock checksum metadata."""
+    expected = locked_registry_packages(lock_path)
+    actual = {
+        path.name
+        for path in vendor_root.iterdir()
+        if path.is_dir() and not path.is_symlink()
+    }
+    if actual != set(expected):
+        missing = sorted(set(expected) - actual)
+        extra = sorted(actual - set(expected))
+        raise VendorError(
+            "vendor directories do not match Cargo.lock; "
+            f"missing={missing}, extra={extra}"
+        )
+
+    for directory, package_checksum in sorted(expected.items()):
+        package_root = vendor_root / directory
+        checksum_path = package_root / ".cargo-checksum.json"
+        try:
+            checksum = json.loads(checksum_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise VendorError(f"invalid checksum metadata for {directory}") from error
+        if checksum.get("package") != package_checksum:
+            raise VendorError(f"package checksum differs from Cargo.lock: {directory}")
+
+        files = checksum.get("files")
+        if not isinstance(files, dict):
+            raise VendorError(f"vendored file checksums are missing: {directory}")
+        actual_files = {
+            path.relative_to(package_root).as_posix()
+            for path in package_root.rglob("*")
+            if path.is_file() and path.name != ".cargo-checksum.json"
+        }
+        if actual_files != set(files):
+            raise VendorError(f"vendored file list differs for {directory}")
+        for relative, expected_digest in files.items():
+            if sha256_file(package_root / relative) != expected_digest:
+                raise VendorError(f"vendored file checksum failed: {directory}/{relative}")
+    return len(expected)
+
+
 def extract_archive(archive_path: Path, destination: Path) -> Path:
     """Validate archive paths before extracting the vendor tree."""
     with tarfile.open(archive_path, "r:xz") as archive:
@@ -98,6 +189,11 @@ def extract_archive(archive_path: Path, destination: Path) -> Path:
                 raise VendorError(f"unsupported vendor archive entry: {member.name}")
         archive.extractall(destination, members=members)
     return destination / "vendor"
+
+
+def extract_verified_archive(archive_path: Path, destination: Path) -> Path:
+    """Extract an archive after validating its paths and entry types."""
+    return extract_archive(archive_path, destination)
 
 
 def copied_rust_tree(destination: Path) -> Path:
@@ -117,17 +213,17 @@ def copied_rust_tree(destination: Path) -> Path:
 
 def verify_archive(archive_path: Path, config_path: Path) -> int:
     """Resolve the copied crate using only the archived dependencies."""
-    if config_path.read_text(encoding="utf-8") != CONFIG:
-        raise VendorError("vendor-config.toml is not the expected relative source map")
+    config = normalize_vendor_config(config_path.read_text(encoding="utf-8"))
 
     with tempfile.TemporaryDirectory(prefix="delta-sharing-r-vendor-check-") as temporary:
         root = Path(temporary)
         rust_root = copied_rust_tree(root / "source")
         source_root = rust_root.parent
-        extract_archive(archive_path, source_root)
+        vendor_root = extract_verified_archive(archive_path, source_root)
+        package_count = verify_vendored_checksums(vendor_root, rust_root / "Cargo.lock")
         cargo_config = source_root / ".cargo" / "config.toml"
         cargo_config.parent.mkdir()
-        cargo_config.write_text(CONFIG, encoding="utf-8")
+        cargo_config.write_text(config, encoding="utf-8")
 
         cargo_home = root / "cargo-home"
         cargo_home.mkdir()
@@ -158,7 +254,7 @@ def verify_archive(archive_path: Path, config_path: Path) -> int:
         if result.returncode:
             raise VendorError("Cargo could not resolve the vendor archive offline")
 
-        return sum(path.is_dir() for path in (source_root / "vendor").iterdir())
+        return package_count
 
 
 def generate() -> None:

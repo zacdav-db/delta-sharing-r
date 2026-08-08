@@ -12,7 +12,7 @@ source archive produced by CI is used by every platform check.
 
 ## Bundled Rust sources
 
-The source package is approximately 30 MB because it includes the complete
+The source package is approximately 24 MB because it includes the complete
 locked Rust dependency graph as `src/rust/vendor.tar.xz`. This follows CRAN's
 Rust guidance and allows Cargo to build with `--frozen` and without network
 access. We request the corresponding increase from the preferred 10 MB source

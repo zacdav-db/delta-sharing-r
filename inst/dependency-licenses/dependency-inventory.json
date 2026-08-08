@@ -105,6 +105,13 @@
     {
       "distribution": "external R package; code is not bundled",
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
+      "name": "httpuv",
+      "relationship": "Suggests",
+      "requirement": null
+    },
+    {
+      "distribution": "external R package; code is not bundled",
+      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
       "name": "knitr",
       "relationship": "Suggests",
       "requirement": null
@@ -160,14 +167,14 @@
     }
   ],
   "rust": {
-    "cargo_lock_sha256": "374ffddb89d755ac79fc0afa3e15326375c9bb26ac923adbc6542c2dc5f4970b",
+    "cargo_lock_sha256": "9becd5caaacb8e192434a3a0836a9365fe5285dab7f832e40509c56957ea39e4",
     "license_bundle": {
-      "bytes": 45480,
+      "bytes": 43032,
       "path": "rust-license-texts.tar.xz",
-      "sha256": "84bcf6597b2f65b32708ba4e9d9086718dea5347062e317544456cc7819eee26"
+      "sha256": "aea20e124c13d7cdb80a4b69b122b8ca472f4b9fc1478ca41aee06518c1e8edd"
     },
-    "locked_sibling_override_package_count": 2,
-    "package_count_requiring_override": 15,
+    "locked_sibling_override_package_count": 1,
+    "package_count_requiring_override": 11,
     "packages": [
       {
         "authors": [
@@ -899,60 +906,6 @@
       },
       {
         "authors": [
-          "AWS-LibCrypto"
-        ],
-        "checksum": "0ec6fb3fe69024a75fa7e1bfb48aa6cf59706a101658ea01bfd33b2b248a038f",
-        "declared_license": "ISC AND (Apache-2.0 OR ISC)",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/b50b376e7d24a0598488b730c3034ffcd0b58dd36c0913a24b9903a3cfd04bf7",
-            "path": "LICENSE",
-            "sha256": "b50b376e7d24a0598488b730c3034ffcd0b58dd36c0913a24b9903a3cfd04bf7",
-            "source": "vendored-crate"
-          }
-        ],
-        "license_file": null,
-        "name": "aws-lc-rs",
-        "repository": "https://github.com/aws/aws-lc-rs",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "f75bae5248fac42d42dfc931721ef366aa164b3c",
-        "version": "1.16.3"
-      },
-      {
-        "authors": [
-          "AWS-LC"
-        ],
-        "checksum": "f50037ee5e1e41e7b8f9d161680a725bd1626cb6f8c7e901f91f942850852fe7",
-        "declared_license": "ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0)",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/728536b4160e051f86d7c9c388f704866b3d512cd7df97ac3516c65279523c4e",
-            "path": "LICENSE",
-            "sha256": "728536b4160e051f86d7c9c388f704866b3d512cd7df97ac3516c65279523c4e",
-            "source": "vendored-crate"
-          },
-          {
-            "bundle_member": "rust-license-texts/977c541bd25ffe36975dde25c028c0cd15ddf3d08243983b58e8a6a3d9447523",
-            "path": "aws-lc/LICENSE",
-            "sha256": "977c541bd25ffe36975dde25c028c0cd15ddf3d08243983b58e8a6a3d9447523",
-            "source": "vendored-crate"
-          },
-          {
-            "bundle_member": "rust-license-texts/43e358d7b6eb109d0f51f7b3a090fd82607965767c25fadee39e922475de2061",
-            "path": "aws-lc/third_party/fiat/LICENSE",
-            "sha256": "43e358d7b6eb109d0f51f7b3a090fd82607965767c25fadee39e922475de2061",
-            "source": "vendored-crate"
-          }
-        ],
-        "license_file": null,
-        "name": "aws-lc-sys",
-        "repository": "https://github.com/aws/aws-lc-rs",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "f75bae5248fac42d42dfc931721ef366aa164b3c",
-        "version": "0.40.0"
-      },
-      {
-        "authors": [
           "Marshall Pierce <marshall@mpierce.org>"
         ],
         "checksum": "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6",
@@ -1336,54 +1289,6 @@
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": "c14b4599d07ef36ffa1f8a531fb0bc7eb3b42464",
         "version": "0.4.44"
-      },
-      {
-        "authors": [
-          "Alex Crichton <alex@alexcrichton.com>"
-        ],
-        "checksum": "c0f78a02292a74a88ac736019ab962ece0bc380e3f977bf72e376c5d78ff0678",
-        "declared_license": "MIT OR Apache-2.0",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-            "path": "LICENSE-APACHE",
-            "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-            "source": "vendored-crate"
-          },
-          {
-            "bundle_member": "rust-license-texts/378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
-            "path": "LICENSE-MIT",
-            "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
-            "source": "vendored-crate"
-          }
-        ],
-        "license_file": null,
-        "name": "cmake",
-        "repository": "https://github.com/rust-lang/cmake-rs",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "63190697197b34e5e5cd3cabf17da4fcab348bef",
-        "version": "0.1.58"
-      },
-      {
-        "authors": [
-          "Markus Westerlind <marwes91@gmail.com>"
-        ],
-        "checksum": "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd",
-        "declared_license": "MIT",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/9bbc1b3dc4674a9ebb12c2a62f54fe3c08672539717f8d05828f684b6cc419a3",
-            "path": "LICENSE",
-            "sha256": "9bbc1b3dc4674a9ebb12c2a62f54fe3c08672539717f8d05828f684b6cc419a3",
-            "source": "vendored-crate"
-          }
-        ],
-        "license_file": null,
-        "name": "combine",
-        "repository": "https://github.com/Marwes/combine",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "f726b8f943f44d258686911907c0324771a2d09f",
-        "version": "4.6.7"
       },
       {
         "authors": [
@@ -1867,27 +1772,6 @@
         "version": "0.2.5"
       },
       {
-        "authors": [
-          "Kornel <kornel@geekhood.net>"
-        ],
-        "checksum": "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813",
-        "declared_license": "CC0-1.0 OR MIT-0 OR Apache-2.0",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
-            "path": "LICENSE",
-            "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
-            "source": "vendored-crate"
-          }
-        ],
-        "license_file": null,
-        "name": "dunce",
-        "repository": "https://gitlab.com/kornelski/dunce",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "1ee29a83526c9f4c3618e1335f0454c878a54dcf",
-        "version": "1.0.5"
-      },
-      {
         "authors": [],
         "checksum": "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e",
         "declared_license": "MIT OR Apache-2.0",
@@ -2128,27 +2012,6 @@
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": "91377f48bf35011d042aa5abef9e7f2a0a625aaa",
         "version": "1.2.2"
-      },
-      {
-        "authors": [
-          "Denis Kurilenko <webdesus@gmail.com>"
-        ],
-        "checksum": "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c",
-        "declared_license": "MIT",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/251ea8ccb1205ce5fa847d6e264d6b6753af62de2cecf2fd9abc0eb02c7c83fc",
-            "path": "LICENSE",
-            "sha256": "251ea8ccb1205ce5fa847d6e264d6b6753af62de2cecf2fd9abc0eb02c7c83fc",
-            "source": "vendored-crate"
-          }
-        ],
-        "license_file": null,
-        "name": "fs_extra",
-        "repository": "https://github.com/webdesus/fs_extra",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "1754296075e7cc4a25feaa876a3f4b9daccc0b98",
-        "version": "1.3.0"
       },
       {
         "authors": [],
@@ -3242,131 +3105,6 @@
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": "af77385d0daf4d0e949e81f2588be2e44f69f086",
         "version": "1.0.18"
-      },
-      {
-        "authors": [],
-        "checksum": "a00109accc170f0bdb141fed3e393c565b6f5e072365c3bd58f5b062591560a3",
-        "declared_license": "MIT OR Apache-2.0",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-            "override_reason": "The published workspace member omits both repository-root dual-license files.",
-            "path": "LICENSE-APACHE",
-            "revision": "33045a124105c939d1e2cbdcb5a39e5d868ffa03",
-            "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-            "source": "pinned-vcs-override",
-            "source_url": "https://raw.githubusercontent.com/jni-rs/jni-rs/33045a124105c939d1e2cbdcb5a39e5d868ffa03/LICENSE-APACHE"
-          },
-          {
-            "bundle_member": "rust-license-texts/fea1d5bf3dd71605ce5d7d2ff695c1837e914c77195e523a86b5391716477960",
-            "override_reason": "The published workspace member omits both repository-root dual-license files.",
-            "path": "LICENSE-MIT",
-            "revision": "33045a124105c939d1e2cbdcb5a39e5d868ffa03",
-            "sha256": "fea1d5bf3dd71605ce5d7d2ff695c1837e914c77195e523a86b5391716477960",
-            "source": "pinned-vcs-override",
-            "source_url": "https://raw.githubusercontent.com/jni-rs/jni-rs/33045a124105c939d1e2cbdcb5a39e5d868ffa03/LICENSE-MIT"
-          }
-        ],
-        "license_file": null,
-        "name": "jni-macros",
-        "repository": "https://github.com/jni-rs/jni-rs",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "33045a124105c939d1e2cbdcb5a39e5d868ffa03",
-        "version": "0.22.4"
-      },
-      {
-        "authors": [
-          "Robert Bragg <robert@sixbynine.org>"
-        ],
-        "checksum": "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264",
-        "declared_license": "MIT OR Apache-2.0",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
-            "override_reason": "The published workspace member omits both repository-root dual-license files.",
-            "path": "LICENSE-APACHE",
-            "revision": "64d77b7a5f119d7b55b4e2c169a4668067ff59e6",
-            "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
-            "source": "pinned-vcs-override",
-            "source_url": "https://raw.githubusercontent.com/jni-rs/jni-sys/64d77b7a5f119d7b55b4e2c169a4668067ff59e6/LICENSE-APACHE"
-          },
-          {
-            "bundle_member": "rust-license-texts/1d85bd754b04ceec93e98e890edd1fa3c6a22e81bcb32135806beeccefa51cd1",
-            "override_reason": "The published workspace member omits both repository-root dual-license files.",
-            "path": "LICENSE-MIT",
-            "revision": "64d77b7a5f119d7b55b4e2c169a4668067ff59e6",
-            "sha256": "1d85bd754b04ceec93e98e890edd1fa3c6a22e81bcb32135806beeccefa51cd1",
-            "source": "pinned-vcs-override",
-            "source_url": "https://raw.githubusercontent.com/jni-rs/jni-sys/64d77b7a5f119d7b55b4e2c169a4668067ff59e6/LICENSE-MIT"
-          }
-        ],
-        "license_file": null,
-        "name": "jni-sys-macros",
-        "repository": "https://github.com/jni-rs/jni-sys",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "64d77b7a5f119d7b55b4e2c169a4668067ff59e6",
-        "version": "0.4.1"
-      },
-      {
-        "authors": [
-          "Steven Fackler <sfackler@gmail.com>",
-          "Robert Bragg <robert@sixbynine.org>"
-        ],
-        "checksum": "c6377a88cb3910bee9b0fa88d4f42e1d2da8e79915598f65fb0c7ee14c878af2",
-        "declared_license": "MIT OR Apache-2.0",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
-            "path": "LICENSE-APACHE",
-            "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
-            "source": "vendored-crate"
-          },
-          {
-            "bundle_member": "rust-license-texts/1d85bd754b04ceec93e98e890edd1fa3c6a22e81bcb32135806beeccefa51cd1",
-            "path": "LICENSE-MIT",
-            "sha256": "1d85bd754b04ceec93e98e890edd1fa3c6a22e81bcb32135806beeccefa51cd1",
-            "source": "vendored-crate"
-          }
-        ],
-        "license_file": null,
-        "name": "jni-sys",
-        "repository": "https://github.com/jni-rs/jni-sys",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "65ea279041232aec345dbd9483b3956c788862aa",
-        "version": "0.4.1"
-      },
-      {
-        "authors": [
-          "jni team"
-        ],
-        "checksum": "5efd9a482cf3a427f00d6b35f14332adc7902ce91efb778580e180ff90fa3498",
-        "declared_license": "MIT OR Apache-2.0",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-            "override_reason": "The published workspace member omits both repository-root dual-license files.",
-            "path": "LICENSE-APACHE",
-            "revision": "5ae9458a4ec44c5318f37ddc7569c1d4ae8a69e7",
-            "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-            "source": "pinned-vcs-override",
-            "source_url": "https://raw.githubusercontent.com/jni-rs/jni-rs/5ae9458a4ec44c5318f37ddc7569c1d4ae8a69e7/LICENSE-APACHE"
-          },
-          {
-            "bundle_member": "rust-license-texts/fea1d5bf3dd71605ce5d7d2ff695c1837e914c77195e523a86b5391716477960",
-            "override_reason": "The published workspace member omits both repository-root dual-license files.",
-            "path": "LICENSE-MIT",
-            "revision": "5ae9458a4ec44c5318f37ddc7569c1d4ae8a69e7",
-            "sha256": "fea1d5bf3dd71605ce5d7d2ff695c1837e914c77195e523a86b5391716477960",
-            "source": "pinned-vcs-override",
-            "source_url": "https://raw.githubusercontent.com/jni-rs/jni-rs/5ae9458a4ec44c5318f37ddc7569c1d4ae8a69e7/LICENSE-MIT"
-          }
-        ],
-        "license_file": null,
-        "name": "jni",
-        "repository": "https://github.com/jni-rs/jni-rs",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "5ae9458a4ec44c5318f37ddc7569c1d4ae8a69e7",
-        "version": "0.22.4"
       },
       {
         "authors": [
@@ -5254,58 +4992,6 @@
       },
       {
         "authors": [],
-        "checksum": "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f",
-        "declared_license": "MIT OR Apache-2.0",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-            "override_reason": "The internal Android workspace member omits the files shipped by its exact locked parent crate.",
-            "path": "LICENSE-APACHE",
-            "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-            "source": "locked-registry-sibling:rustls-platform-verifier@0.7.0"
-          },
-          {
-            "bundle_member": "rust-license-texts/1c7cf76689c837a68ed8d704994e52a0f2940c087958f860d17f3186afbdcc0c",
-            "override_reason": "The internal Android workspace member omits the files shipped by its exact locked parent crate.",
-            "path": "LICENSE-MIT",
-            "sha256": "1c7cf76689c837a68ed8d704994e52a0f2940c087958f860d17f3186afbdcc0c",
-            "source": "locked-registry-sibling:rustls-platform-verifier@0.7.0"
-          }
-        ],
-        "license_file": null,
-        "name": "rustls-platform-verifier-android",
-        "repository": "https://github.com/rustls/rustls-platform-verifier",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": null,
-        "version": "0.1.1"
-      },
-      {
-        "authors": [],
-        "checksum": "26d1e2536ce4f35f4846aa13bff16bd0ff40157cdb14cc056c7b14ba41233ba0",
-        "declared_license": "MIT OR Apache-2.0",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-            "path": "LICENSE-APACHE",
-            "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-            "source": "vendored-crate"
-          },
-          {
-            "bundle_member": "rust-license-texts/1c7cf76689c837a68ed8d704994e52a0f2940c087958f860d17f3186afbdcc0c",
-            "path": "LICENSE-MIT",
-            "sha256": "1c7cf76689c837a68ed8d704994e52a0f2940c087958f860d17f3186afbdcc0c",
-            "source": "vendored-crate"
-          }
-        ],
-        "license_file": null,
-        "name": "rustls-platform-verifier",
-        "repository": "https://github.com/rustls/rustls-platform-verifier",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "996b1c903491641b17b3c9afb65d1352f6fc6b76",
-        "version": "0.7.0"
-      },
-      {
-        "authors": [],
         "checksum": "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e",
         "declared_license": "ISC",
         "legal_files": [
@@ -5818,33 +5504,6 @@
         "source": "registry+https://github.com/rust-lang/crates.io-index",
         "vcs_revision": "0b94f6a278f5662f24d311c9c1f16bcf272b7f43",
         "version": "0.3.9"
-      },
-      {
-        "authors": [
-          "Sean C. Roach <me@seancroach.dev>"
-        ],
-        "checksum": "94f90157bb87cddf702797c5dadfa0be7d266cdf49e22da2fcaa32eff75b2c33",
-        "declared_license": "Apache-2.0 OR MIT",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-            "path": "LICENSE-APACHE",
-            "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-            "source": "vendored-crate"
-          },
-          {
-            "bundle_member": "rust-license-texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-            "path": "LICENSE-MIT",
-            "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
-            "source": "vendored-crate"
-          }
-        ],
-        "license_file": null,
-        "name": "simd_cesu8",
-        "repository": "https://github.com/seancroach/simd_cesu8",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "bdae0db4c82d19a4ac47e7a35ebcbc8652a3f784",
-        "version": "1.1.1"
       },
       {
         "authors": [
@@ -7503,25 +7162,6 @@
         "version": "1.1.0"
       },
       {
-        "authors": [],
-        "checksum": "f31141ce3fc3e300ae89b78c0dd67f9708061d1d2eda54b8209346fd6be9a92c",
-        "declared_license": "CDLA-Permissive-2.0",
-        "legal_files": [
-          {
-            "bundle_member": "rust-license-texts/e271993808fec50ab29350b39539cdec611a9103f827e0aa26d61da70e2d33f8",
-            "path": "LICENSE",
-            "sha256": "e271993808fec50ab29350b39539cdec611a9103f827e0aa26d61da70e2d33f8",
-            "source": "vendored-crate"
-          }
-        ],
-        "license_file": null,
-        "name": "webpki-root-certs",
-        "repository": "https://github.com/rustls/webpki-roots",
-        "source": "registry+https://github.com/rust-lang/crates.io-index",
-        "vcs_revision": "be948464fd5907af6227213a066743a161221688",
-        "version": "1.0.7"
-      },
-      {
         "authors": [
           "Andrew Gallant <jamslam@gmail.com>"
         ],
@@ -8928,10 +8568,10 @@
         "version": "0.13.3"
       }
     ],
-    "pinned_vcs_override_package_count": 13,
-    "registry_package_count": 328,
-    "resolved_package_count": 329,
-    "unique_legal_text_count": 215
+    "pinned_vcs_override_package_count": 10,
+    "registry_package_count": 314,
+    "resolved_package_count": 315,
+    "unique_legal_text_count": 205
   },
   "schema_version": 1
 }

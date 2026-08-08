@@ -110,12 +110,14 @@ jobs:
         run: |
           python3 tools/test_configure.py
           python3 tools/test_rust_vendor.py
+          python3 tools/test_dependency_licenses.py
 
       - name: Generate locked Rust sources
         run: |
           cargo fetch --manifest-path src/rust/Cargo.toml --locked
           python3 tools/rust_vendor.py generate
           python3 tools/rust_vendor.py check
+          python3 tools/dependency_licenses.py check
 
       - name: Build exact source package offline
         env:
