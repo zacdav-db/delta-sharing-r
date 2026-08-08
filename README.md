@@ -120,12 +120,8 @@ several times.
 
 ## Performance
 
-The following are directional end-to-end snapshot measurements on consumer
-hardware, not isolated in-memory benchmarks.
-
-Each case read six columns from the same remote Delta table with
-`snapshot(limit = ..., response_format = "delta")$to_data_frame()`. Results are
-medians of three sequential reads after one warm-up read.
+Directional end-to-end snapshot results, reported as medians of three reads
+after one warm-up.
 
 *Apple M2 Pro MacBook Pro, 32 GB RAM, R 4.5.1; VPN connection: 93 Mbps
 down, 115 ms base round-trip latency.*
@@ -135,23 +131,3 @@ down, 115 ms base round-trip latency.*
 | 10,000 | 0.38 MiB | 5.83 s (5.82–7.77) | 1,700 |
 | 1,000,000 | 38.15 MiB | 11.91 s (11.33–25.66) | 84,000 |
 | 10,000,000 | 381.47 MiB | 71.49 s (66.36–71.79) | 140,000 |
-
-Elapsed time includes the Sharing query, signed-file access, Delta Kernel scan,
-Arrow streaming, and conversion to a data frame. The reported size is the
-materialized R object size, not bytes transferred over the network. Remote
-storage, file layout, server-side pruning, and network conditions can all
-change these results. For large reads, `to_arrow_stream()` or
-`to_arrow_reader()` keeps the result lazy instead of holding the complete data
-frame in memory.
-
-### Change data feed
-
-A four-version CDF read materialized 3.5 million rows from hundreds of small
-remote change files.
-
-*Apple M2 Pro MacBook Pro, 32 GB RAM, R 4.5.1; VPN connection: 101 Mbps
-down, 200 ms idle latency.*
-
-| Scope | Result shape | Materialized R size | Elapsed | Rows/s |
-|---|---:|---:|---:|---:|
-| Versions 1–4 | 3,500,000 × 7 | 173.57 MiB | 428.03 s | 8,200 |
