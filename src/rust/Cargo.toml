@@ -16,9 +16,9 @@ arrow-schema = "=58.3.0"
 delta_kernel = { version = "=0.26.0", default-features = false, features = [
   "arrow-58",
 ] }
+# R owns HTTP; the native engine reads only prepared local Delta logs.
 delta_kernel_default_engine = { version = "=0.26.0", default-features = false, features = [
   "arrow-58",
-  "rustls",
 ] }
 same-file = "=1.0.6"
 url = "=2.5.8"

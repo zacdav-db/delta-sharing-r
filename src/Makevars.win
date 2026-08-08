@@ -1,6 +1,7 @@
 TARGET = $(subst 64,x86_64,$(WIN))-pc-windows-gnu
-TARGET_DIR = ./rust/target/r-package
-LIBDIR = $(TARGET_DIR)/$(TARGET)/release
+BUILD_ROOT = ./rust/target
+LOCAL_TARGET_DIR = $(BUILD_ROOT)/cargo
+LIBDIR = $(BUILD_ROOT)/r-package/$(TARGET)/release
 STATLIB = $(LIBDIR)/libdelta_sharing_native.a
 
 PKG_CPPFLAGS = -DSTRICT_R_HEADERS -DR_NO_REMAP
@@ -15,6 +16,10 @@ $(SHLIB): $(STATLIB)
 
 $(STATLIB):
 	@set -e; \
+	if test -n "$$HOME" && test -d "$$HOME/.cargo/bin"; then \
+		PATH="$$HOME/.cargo/bin:$$PATH"; \
+		export PATH; \
+	fi; \
 	cargo_flags="--locked"; \
 	if test -f rust/vendor.tar.xz || test -f rust/vendor-config.toml; then \
 		test -f rust/vendor.tar.xz; \
@@ -26,15 +31,22 @@ $(STATLIB):
 		export CARGO_HOME="$(CURDIR)/.cargo"; \
 		cargo_flags="--frozen"; \
 	fi; \
+	target_dir="$${CARGO_TARGET_DIR:-$(LOCAL_TARGET_DIR)}"; \
+	if test -n "$$CARGO_TARGET_DIR" && command -v cygpath >/dev/null 2>&1; then \
+		target_dir="`cygpath -u "$$target_dir"`"; \
+	fi; \
 	cargo build $$cargo_flags -j 2 --release \
 		--target=$(TARGET) \
 		--manifest-path=rust/Cargo.toml \
-		--target-dir=$(TARGET_DIR)
+		--target-dir="$$target_dir"; \
+	built_library="$$target_dir/$(TARGET)/release/libdelta_sharing_native.a"; \
+	mkdir -p "$(LIBDIR)"; \
+	cp "$$built_library" "$(STATLIB)"
 
 .PHONY: rust-clean
 
 rust-clean: $(SHLIB)
-	rm -Rf $(TARGET_DIR) .cargo vendor
+	rm -Rf $(BUILD_ROOT) .cargo vendor
 
 clean:
-	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS) $(TARGET_DIR) .cargo vendor
+	rm -Rf $(SHLIB) $(OBJECTS) $(BUILD_ROOT) .cargo vendor

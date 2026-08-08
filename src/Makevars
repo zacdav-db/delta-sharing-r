@@ -1,5 +1,6 @@
-TARGET_DIR = ./rust/target/r-package
-LIBDIR = $(TARGET_DIR)/release
+BUILD_ROOT = ./rust/target
+LOCAL_TARGET_DIR = $(BUILD_ROOT)/cargo
+LIBDIR = $(BUILD_ROOT)/r-package/release
 STATLIB = $(LIBDIR)/libdelta_sharing_native.a
 
 PKG_CPPFLAGS = -DSTRICT_R_HEADERS -DR_NO_REMAP
@@ -13,6 +14,10 @@ $(SHLIB): $(STATLIB)
 
 $(STATLIB):
 	@set -e; \
+		if test -n "$$HOME" && test -d "$$HOME/.cargo/bin"; then \
+			PATH="$$HOME/.cargo/bin:$$PATH"; \
+			export PATH; \
+		fi; \
 		deployment_target="$(MACOSX_DEPLOYMENT_TARGET)"; \
 		if test "`uname -s`" = Darwin; then \
 			if test -z "$$deployment_target"; then \
@@ -33,19 +38,21 @@ $(STATLIB):
 			export CARGO_HOME="$(CURDIR)/.cargo"; \
 			cargo_flags="--frozen"; \
 		fi; \
+		target_dir="$${CARGO_TARGET_DIR:-$(LOCAL_TARGET_DIR)}"; \
 		cargo build $$cargo_flags -j 2 --release \
 			--manifest-path=rust/Cargo.toml \
-			--target-dir=$(TARGET_DIR); \
+			--target-dir="$$target_dir"; \
+		built_library="$$target_dir/release/libdelta_sharing_native.a"; \
 		if test -n "$$CARGO_BUILD_TARGET"; then \
-			mkdir -p "$(LIBDIR)"; \
-			cp "$(TARGET_DIR)/$$CARGO_BUILD_TARGET/release/libdelta_sharing_native.a" \
-				"$(STATLIB)"; \
-		fi
+			built_library="$$target_dir/$$CARGO_BUILD_TARGET/release/libdelta_sharing_native.a"; \
+		fi; \
+		mkdir -p "$(LIBDIR)"; \
+		cp "$$built_library" "$(STATLIB)"
 
 .PHONY: rust-clean
 
 rust-clean: $(SHLIB)
-	rm -Rf $(TARGET_DIR) .cargo vendor
+	rm -Rf $(BUILD_ROOT) .cargo vendor
 
 clean:
-	rm -Rf $(SHLIB) $(STATLIB) $(OBJECTS) $(TARGET_DIR) .cargo vendor
+	rm -Rf $(SHLIB) $(OBJECTS) $(BUILD_ROOT) .cargo vendor

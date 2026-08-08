@@ -1,0 +1,243 @@
+{
+  "overrides": [
+    {
+      "files": [
+        {
+          "local": "alloc-stdlib/LICENSE",
+          "sha256": "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae",
+          "source_url": "https://raw.githubusercontent.com/dropbox/rust-alloc-no-stdlib/6032b6a9b20e03737135c55a0270ccffcc1438ef/LICENSE",
+          "upstream_path": "LICENSE"
+        }
+      ],
+      "kind": "pinned-vcs",
+      "reason": "The published crate omits the workspace-root BSD-3-Clause license.",
+      "repository": "https://github.com/dropbox/rust-alloc-no-stdlib",
+      "revision": "6032b6a9b20e03737135c55a0270ccffcc1438ef",
+      "target": "alloc-stdlib@0.2.2"
+    },
+    {
+      "files": [
+        "LICENSE",
+        "NOTICE"
+      ],
+      "kind": "registry-sibling",
+      "reason": "The split default-engine workspace member omits the Apache license and NOTICE shipped by the exact locked Kernel crate.",
+      "source_package": "delta_kernel@0.26.0",
+      "target": "delta_kernel_default_engine@0.26.0"
+    },
+    {
+      "files": [
+        {
+          "local": "flatbuffers/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source_url": "https://raw.githubusercontent.com/google/flatbuffers/7e163021e59cca4f8e1e35a7c828b5c6b7915953/LICENSE",
+          "upstream_path": "LICENSE"
+        }
+      ],
+      "kind": "pinned-vcs",
+      "reason": "The published Rust subcrate omits the repository-root Apache-2.0 license.",
+      "repository": "https://github.com/google/flatbuffers",
+      "revision": "7e163021e59cca4f8e1e35a7c828b5c6b7915953",
+      "target": "flatbuffers@25.12.19"
+    },
+    {
+      "files": [
+        {
+          "local": "thrift/LICENSE",
+          "sha256": "d315e6cdedc07c478de6992027bfb66f220886c6216fd7e9885ced30c3703646",
+          "source_url": "https://raw.githubusercontent.com/apache/thrift/60655d2de79e973b89fab52af82f9628d4843b0f/LICENSE",
+          "upstream_path": "LICENSE"
+        },
+        {
+          "local": "thrift/NOTICE",
+          "sha256": "c2534e065069887565f871f0648b013a7e5f4a422809faf4ae3c590b7c0bf561",
+          "source_url": "https://raw.githubusercontent.com/apache/thrift/60655d2de79e973b89fab52af82f9628d4843b0f/NOTICE",
+          "upstream_path": "NOTICE"
+        }
+      ],
+      "kind": "pinned-vcs",
+      "reason": "The published language subcrate omits the repository-root Apache license and NOTICE.",
+      "repository": "https://github.com/apache/thrift",
+      "revision": "60655d2de79e973b89fab52af82f9628d4843b0f",
+      "target": "thrift@0.17.0"
+    },
+    {
+      "files": [
+        {
+          "local": "valuable/LICENSE",
+          "sha256": "ed60d479b8fd1f64e9cbc3de449a16a53ac1b3d1b6aeb9bf9d190a8e93061b44",
+          "source_url": "https://raw.githubusercontent.com/tokio-rs/valuable/9efc29b6e58cef28f6566a47aa7e142a55fead77/LICENSE",
+          "upstream_path": "LICENSE"
+        }
+      ],
+      "kind": "pinned-vcs",
+      "reason": "The published crate README links to a repository license that the crate archive omits.",
+      "repository": "https://github.com/tokio-rs/valuable",
+      "revision": "9efc29b6e58cef28f6566a47aa7e142a55fead77",
+      "target": "valuable@0.1.1"
+    },
+    {
+      "files": [
+        {
+          "local": "wasi-rs/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasi-rs/06ce201370fcde0d1b0d47cac8ecb1b0b312c9f9/LICENSE-APACHE",
+          "upstream_path": "LICENSE-APACHE"
+        },
+        {
+          "local": "wasi-rs/LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasi-rs/06ce201370fcde0d1b0d47cac8ecb1b0b312c9f9/LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "upstream_path": "LICENSE-Apache-2.0_WITH_LLVM-exception"
+        },
+        {
+          "local": "wasi-rs/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasi-rs/06ce201370fcde0d1b0d47cac8ecb1b0b312c9f9/LICENSE-MIT",
+          "upstream_path": "LICENSE-MIT"
+        }
+      ],
+      "kind": "pinned-vcs",
+      "reason": "The published workspace member omits all three repository-root license alternatives.",
+      "repository": "https://github.com/bytecodealliance/wasi-rs",
+      "revision": "06ce201370fcde0d1b0d47cac8ecb1b0b312c9f9",
+      "target": "wasip2@1.0.2+wasi-0.2.9"
+    },
+    {
+      "files": [
+        {
+          "local": "wasi-rs/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasi-rs/06ce201370fcde0d1b0d47cac8ecb1b0b312c9f9/LICENSE-APACHE",
+          "upstream_path": "LICENSE-APACHE"
+        },
+        {
+          "local": "wasi-rs/LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasi-rs/06ce201370fcde0d1b0d47cac8ecb1b0b312c9f9/LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "upstream_path": "LICENSE-Apache-2.0_WITH_LLVM-exception"
+        },
+        {
+          "local": "wasi-rs/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasi-rs/06ce201370fcde0d1b0d47cac8ecb1b0b312c9f9/LICENSE-MIT",
+          "upstream_path": "LICENSE-MIT"
+        }
+      ],
+      "kind": "pinned-vcs",
+      "reason": "The published workspace member omits all three repository-root license alternatives.",
+      "repository": "https://github.com/bytecodealliance/wasi-rs",
+      "revision": "06ce201370fcde0d1b0d47cac8ecb1b0b312c9f9",
+      "target": "wasip3@0.4.0+wasi-0.3.0-rc-2026-01-06"
+    },
+    {
+      "files": [
+        {
+          "local": "wasm-tools/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasm-tools/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-APACHE",
+          "upstream_path": "LICENSE-APACHE"
+        },
+        {
+          "local": "wasm-tools/LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasm-tools/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "upstream_path": "LICENSE-Apache-2.0_WITH_LLVM-exception"
+        },
+        {
+          "local": "wasm-tools/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasm-tools/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-MIT",
+          "upstream_path": "LICENSE-MIT"
+        }
+      ],
+      "kind": "pinned-vcs",
+      "reason": "The published workspace member omits all three repository-root license alternatives.",
+      "repository": "https://github.com/bytecodealliance/wasm-tools",
+      "revision": "d4e317f22c3bace76cb3205003bcc34b4929037d",
+      "target": "wasm-encoder@0.244.0"
+    },
+    {
+      "files": [
+        {
+          "local": "wasm-tools/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasm-tools/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-APACHE",
+          "upstream_path": "LICENSE-APACHE"
+        },
+        {
+          "local": "wasm-tools/LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasm-tools/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "upstream_path": "LICENSE-Apache-2.0_WITH_LLVM-exception"
+        },
+        {
+          "local": "wasm-tools/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasm-tools/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-MIT",
+          "upstream_path": "LICENSE-MIT"
+        }
+      ],
+      "kind": "pinned-vcs",
+      "reason": "The published workspace member omits all three repository-root license alternatives.",
+      "repository": "https://github.com/bytecodealliance/wasm-tools",
+      "revision": "d4e317f22c3bace76cb3205003bcc34b4929037d",
+      "target": "wasmparser@0.244.0"
+    },
+    {
+      "files": [
+        {
+          "local": "wasm-tools/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasm-tools/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-APACHE",
+          "upstream_path": "LICENSE-APACHE"
+        },
+        {
+          "local": "wasm-tools/LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasm-tools/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "upstream_path": "LICENSE-Apache-2.0_WITH_LLVM-exception"
+        },
+        {
+          "local": "wasm-tools/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasm-tools/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-MIT",
+          "upstream_path": "LICENSE-MIT"
+        }
+      ],
+      "kind": "pinned-vcs",
+      "reason": "The published workspace member omits all three repository-root license alternatives.",
+      "repository": "https://github.com/bytecodealliance/wasm-tools",
+      "revision": "d4e317f22c3bace76cb3205003bcc34b4929037d",
+      "target": "wit-component@0.244.0"
+    },
+    {
+      "files": [
+        {
+          "local": "wasm-tools/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasm-tools/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-APACHE",
+          "upstream_path": "LICENSE-APACHE"
+        },
+        {
+          "local": "wasm-tools/LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasm-tools/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "upstream_path": "LICENSE-Apache-2.0_WITH_LLVM-exception"
+        },
+        {
+          "local": "wasm-tools/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source_url": "https://raw.githubusercontent.com/bytecodealliance/wasm-tools/d4e317f22c3bace76cb3205003bcc34b4929037d/LICENSE-MIT",
+          "upstream_path": "LICENSE-MIT"
+        }
+      ],
+      "kind": "pinned-vcs",
+      "reason": "The published workspace member omits all three repository-root license alternatives.",
+      "repository": "https://github.com/bytecodealliance/wasm-tools",
+      "revision": "d4e317f22c3bace76cb3205003bcc34b4929037d",
+      "target": "wit-parser@0.244.0"
+    }
+  ],
+  "schema_version": 1
+}

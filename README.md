@@ -16,7 +16,7 @@ complete reference and introductory guide.
 pak::pak("zacdav-db/delta-sharing-r")
 ```
 
-Building from source requires Cargo, `rustc >= 1.88`, and CMake.
+Building from source requires Cargo and `rustc >= 1.88`.
 
 ## Quick start
 
@@ -81,7 +81,7 @@ DuckDB accepts both Arrow materializers:
   should scan the same result more than once.
 
 Both avoid an intermediate R data frame. This requires the optional `arrow`,
-`DBI`, and `duckdb` packages.
+`DBI`, `duckdb`, and `withr` packages.
 
 ```r
 snapshot <- orders$snapshot(
@@ -91,20 +91,25 @@ snapshot <- orders$snapshot(
 reader <- snapshot$to_arrow_reader()
 
 con <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
-DBI::dbExecute(con, "SET threads = 1")
 duckdb::duckdb_register_arrow(con, "shared_orders", reader)
 
-revenue <- DBI::dbGetQuery(con, "
-  SELECT status, count(*) AS orders, sum(amount) AS revenue
-  FROM shared_orders
-  GROUP BY status
-  ORDER BY revenue DESC
-")
+revenue <- withr::with_options(
+  list(arrow.use_threads = FALSE),
+  DBI::dbGetQuery(con, "
+    SELECT status, count(*) AS orders, sum(amount) AS revenue
+    FROM shared_orders
+    GROUP BY status
+    ORDER BY revenue DESC
+  ")
+)
 
 duckdb::duckdb_unregister_arrow(con, "shared_orders")
 DBI::dbDisconnect(con, shutdown = TRUE)
 reader$Close()
 ```
+
+The scoped Arrow option keeps pulls from the one-pass reader serial. It does
+not limit DuckDB's query threads.
 
 For the eager path, replace the reader construction and registration lines
 above with:
@@ -113,6 +118,8 @@ above with:
 arrow_table <- snapshot$to_arrow()
 duckdb::duckdb_register_arrow(con, "shared_orders", arrow_table)
 ```
+
+An eager Arrow table does not need the scoped Arrow option.
 
 An Arrow reader is single-consumer. Use an Arrow table, or create a temporary
 DuckDB table during the first query, when the result needs to be scanned

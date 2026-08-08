@@ -1,5 +1,6 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^\.cargo-target$
 ^\.covrignore$
 ^\.claude$
 ^\.isaac$
@@ -8,6 +9,7 @@
 ^\.gitattributes$
 ^\.gitignore$
 ^codecov\.yml$
+^cran-comments\.md$
 ^coverage$
 ^bench$
 ^design$
@@ -22,3 +24,4 @@
 ^docs$
 ^pkgdown$
 ^air\.toml$
+^artifacts$
