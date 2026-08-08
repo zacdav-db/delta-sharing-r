@@ -509,3 +509,102 @@ impl RecordBatchReader for KernelRecordBatchReader {
         self.schema.clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use arrow_array::Int64Array;
+
+    use super::*;
+
+    fn fixture_table(name: &str) -> String {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/testthat/fixtures/delta")
+            .join(name);
+        std::fs::canonicalize(path)
+            .expect("committed Delta fixture must exist")
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    #[test]
+    fn pinned_kernel_default_engine_constructs() {
+        let store = Arc::new(delta_kernel::object_store::memory::InMemory::new());
+        let _engine = DefaultEngineBuilder::new(store).build();
+        let _snapshot_builder = Snapshot::builder_for("memory:///delta-sharing-r-smoke");
+    }
+
+    #[test]
+    fn read_options_reject_non_local_or_ambiguous_inputs() {
+        for location in ["", "relative/table", "https://example.com/table"] {
+            assert!(SnapshotReadOptions::try_new(location.to_string(), None, None, 1_024).is_err());
+        }
+        assert!(SnapshotReadOptions::try_new(
+            "/tmp/table".to_string(),
+            Some(vec!["id".to_string(), "ID".to_string()]),
+            None,
+            1_024,
+        )
+        .is_err());
+        assert!(CdfReadOptions::try_new("/tmp/table".to_string(), None, 2, 1, 1_024,).is_err());
+    }
+
+    #[test]
+    fn snapshot_reader_preserves_projection_limit_and_batch_size() {
+        let options = SnapshotReadOptions::try_new(
+            fixture_table("local-table"),
+            Some(vec!["group".to_string(), "id".to_string()]),
+            Some(5),
+            2,
+        )
+        .unwrap();
+        let reader = snapshot_reader(options).unwrap();
+        assert_eq!(reader.schema().field(0).name(), "group");
+        assert_eq!(reader.schema().field(1).name(), "id");
+
+        let batches = reader.collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 5);
+        assert!(batches.iter().all(|batch| batch.num_rows() <= 2));
+    }
+
+    #[test]
+    fn cdf_reader_uses_inclusive_version_bounds() {
+        let options = CdfReadOptions::try_new(
+            fixture_table("cdf"),
+            Some(vec![
+                "id".to_string(),
+                "_change_type".to_string(),
+                "_commit_version".to_string(),
+            ]),
+            1,
+            2,
+            2,
+        )
+        .unwrap();
+        let reader = cdf_reader(options).unwrap();
+        let names = reader
+            .schema()
+            .fields()
+            .iter()
+            .map(|field| field.name().to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["id", "_change_type", "_commit_version"]);
+
+        let batches = reader.collect::<Result<Vec<_>, _>>().unwrap();
+        assert!(batches.iter().all(|batch| batch.num_rows() <= 2));
+        let versions = batches
+            .iter()
+            .flat_map(|batch| {
+                batch
+                    .column(2)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .unwrap()
+                    .values()
+                    .to_vec()
+            })
+            .collect::<Vec<_>>();
+        assert!(versions.contains(&1));
+        assert!(versions.contains(&2));
+        assert!(versions.iter().all(|version| (1..=2).contains(version)));
+    }
+}

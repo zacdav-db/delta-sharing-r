@@ -2,14 +2,13 @@
 //!
 //! nanoarrow owns the outer `FFI_ArrowArrayStream` allocation. Rust moves an
 //! initialized stream into that allocation. The release callback drops the
-//! reader, cancellation state, and all resources tied to the active stream.
+//! reader and all resources tied to the active stream.
 
 use std::any::Any;
 use std::hash::{Hash, Hasher};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use arrow_array::builder::{Int32Builder, ListBuilder};
@@ -21,98 +20,27 @@ use arrow_array::{
 use arrow_schema::{ArrowError, DataType, Field, Schema, SchemaRef, TimeUnit};
 use same_file::Handle;
 
-static GLOBAL_METRICS: LazyLock<Arc<StreamMetrics>> =
-    LazyLock::new(|| Arc::new(StreamMetrics::default()));
 static PENDING_CLEANUPS: LazyLock<Mutex<Vec<PendingCleanup>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
-#[derive(Debug, Default)]
-struct StreamMetrics {
-    active_streams: AtomicU64,
-    cancelled_streams: AtomicU64,
-    emitted_batches: AtomicU64,
-}
-
-#[cfg(test)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct StreamMetricsSnapshot {
-    pub(crate) active_streams: u64,
-    pub(crate) cancelled_streams: u64,
-    pub(crate) emitted_batches: u64,
-}
-
-impl StreamMetrics {
-    #[cfg(test)]
-    fn snapshot(&self) -> StreamMetricsSnapshot {
-        StreamMetricsSnapshot {
-            active_streams: self.active_streams.load(Ordering::Acquire),
-            cancelled_streams: self.cancelled_streams.load(Ordering::Acquire),
-            emitted_batches: self.emitted_batches.load(Ordering::Acquire),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub(crate) struct CancellationToken {
-    cancelled: Arc<AtomicBool>,
-}
-
-impl CancellationToken {
-    fn cancel(&self) {
-        self.cancelled.store(true, Ordering::Release);
-    }
-
-    fn is_cancelled(&self) -> bool {
-        self.cancelled.load(Ordering::Acquire)
-    }
-}
-
 /// Resources whose lifetime must exactly match the stream lifetime.
 pub(crate) struct StreamOwner {
-    cancellation: CancellationToken,
-    metrics: Arc<StreamMetrics>,
-    _resources: Vec<Box<dyn Any + Send>>,
-    released: bool,
+    resources: Vec<Box<dyn Any + Send>>,
 }
 
 impl StreamOwner {
-    fn new(metrics: Arc<StreamMetrics>) -> Self {
-        metrics.active_streams.fetch_add(1, Ordering::AcqRel);
+    fn new() -> Self {
         Self {
-            cancellation: CancellationToken::default(),
-            metrics,
-            _resources: Vec::new(),
-            released: false,
+            resources: Vec::new(),
         }
     }
 
     fn keep_alive<T: Any + Send>(&mut self, resource: T) {
-        self._resources.push(Box::new(resource));
-    }
-
-    fn release(&mut self) {
-        if self.released {
-            return;
-        }
-
-        self.cancellation.cancel();
-        self.metrics
-            .cancelled_streams
-            .fetch_add(1, Ordering::AcqRel);
-        self.metrics.active_streams.fetch_sub(1, Ordering::AcqRel);
-        self.released = true;
+        self.resources.push(Box::new(resource));
     }
 
     fn finish(&mut self) {
-        self.release();
-        self._resources.clear();
-    }
-}
-
-impl Drop for StreamOwner {
-    fn drop(&mut self) {
-        // Cancellation happens before retained resources are dropped.
-        self.release();
+        self.resources.clear();
     }
 }
 
@@ -152,23 +80,10 @@ impl Iterator for PanicBoundaryReader {
             return None;
         }
 
-        if self.owner.cancellation.is_cancelled() {
-            self.terminal = true;
-            return Some(Err(ArrowError::ComputeError(
-                "delta-sharing stream cancelled".to_string(),
-            )));
-        }
-
         match catch_unwind(AssertUnwindSafe(|| {
             self.inner.as_mut().and_then(|reader| reader.next())
         })) {
-            Ok(Some(Ok(batch))) => {
-                self.owner
-                    .metrics
-                    .emitted_batches
-                    .fetch_add(1, Ordering::AcqRel);
-                Some(Ok(batch))
-            }
+            Ok(Some(Ok(batch))) => Some(Ok(batch)),
             Ok(Some(Err(error))) => {
                 self.finish();
                 let message = error.to_string();
@@ -201,7 +116,7 @@ impl RecordBatchReader for PanicBoundaryReader {
 impl Drop for PanicBoundaryReader {
     fn drop(&mut self) {
         drop(self.inner.take());
-        self.owner.release();
+        self.owner.finish();
     }
 }
 
@@ -215,14 +130,14 @@ fn export_reader(
 pub(crate) fn record_batch_stream(
     reader: Box<dyn RecordBatchReader + Send>,
 ) -> FFI_ArrowArrayStream {
-    export_reader(reader, StreamOwner::new(GLOBAL_METRICS.clone()))
+    export_reader(reader, StreamOwner::new())
 }
 
 pub(crate) fn record_batch_stream_with_resource<T: Any + Send>(
     reader: Box<dyn RecordBatchReader + Send>,
     resource: T,
 ) -> FFI_ArrowArrayStream {
-    let mut owner = StreamOwner::new(GLOBAL_METRICS.clone());
+    let mut owner = StreamOwner::new();
     owner.keep_alive(resource);
     export_reader(reader, owner)
 }
@@ -870,4 +785,244 @@ fn make_fixture_batch(
             Arc::new(values) as ArrayRef,
         ],
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use arrow_array::ffi_stream::ArrowArrayStreamReader;
+
+    use super::*;
+
+    fn config(batches: i32, error_after: i32, panic_after: i32) -> FixtureStreamConfig {
+        FixtureStreamConfig::try_from_raw(batches, 3, error_after, panic_after).unwrap()
+    }
+
+    fn prepared_root(label: &str) -> (PathBuf, PathBuf) {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            ".delta-sharing-snapshot-{label}-{}-{nanos}",
+            std::process::id()
+        ));
+        populate_prepared_root(&root);
+        let root = fs::canonicalize(root).unwrap();
+        let table = root.join("table");
+        (root, table)
+    }
+
+    fn populate_prepared_root(root: &Path) {
+        let log = root.join("table/_delta_log");
+        fs::create_dir_all(&log).unwrap();
+        fs::write(
+            root.join(".delta-sharing-r-prepared-log"),
+            "delta-sharing-r:vnext\n",
+        )
+        .unwrap();
+        fs::write(log.join("00000000000000000000.json"), "{}\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(root, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+    }
+
+    fn prepared_cdf_root(label: &str, end_version: u64) -> (PathBuf, PathBuf) {
+        let (root, table) = prepared_root(label);
+        let log = table.join("_delta_log");
+        fs::remove_file(log.join("00000000000000000000.json")).unwrap();
+        for version in 0..=end_version {
+            fs::write(log.join(format!("{version:020}.json")), "{}\n").unwrap();
+        }
+        (root, table)
+    }
+
+    #[test]
+    fn empty_one_and_many_batches_round_trip() {
+        for expected_batches in [0, 1, 4] {
+            let stream = fixture_stream(config(expected_batches, -1, -1)).unwrap();
+            let reader = ArrowArrayStreamReader::try_new(stream).unwrap();
+            let batches = reader.collect::<Result<Vec<_>, _>>().unwrap();
+
+            assert_eq!(batches.len(), expected_batches as usize);
+            assert!(batches.iter().all(|batch| batch.num_rows() == 3));
+        }
+    }
+
+    #[test]
+    fn reader_errors_and_panics_are_terminal_and_sanitized() {
+        let stream = fixture_stream(config(3, 1, -1)).unwrap();
+        let mut reader = ArrowArrayStreamReader::try_new(stream).unwrap();
+        assert_eq!(reader.next().unwrap().unwrap().num_rows(), 3);
+        let error = reader.next().unwrap().unwrap_err().to_string();
+        assert!(error.contains("synthetic reader error after 1 batches"));
+        assert!(reader.next().is_none());
+
+        let stream = fixture_stream(config(3, -1, 0)).unwrap();
+        let mut reader = ArrowArrayStreamReader::try_new(stream).unwrap();
+        let error = reader.next().unwrap().unwrap_err().to_string();
+        assert!(error.contains("panic contained at Arrow stream boundary"));
+        assert!(!error.contains("synthetic reader panic"));
+        assert!(reader.next().is_none());
+    }
+
+    #[test]
+    fn early_release_drops_owned_resources_once() {
+        struct DropProbe(Arc<AtomicUsize>);
+        impl Drop for DropProbe {
+            fn drop(&mut self) {
+                self.0.fetch_add(1, Ordering::AcqRel);
+            }
+        }
+
+        let drops = Arc::new(AtomicUsize::new(0));
+        let stream = record_batch_stream_with_resource(
+            Box::new(FixtureReader::new(config(4, -1, -1))),
+            DropProbe(drops.clone()),
+        );
+        let mut reader = ArrowArrayStreamReader::try_new(stream).unwrap();
+        assert_eq!(reader.next().unwrap().unwrap().num_rows(), 3);
+        drop(reader);
+        assert_eq!(drops.load(Ordering::Acquire), 1);
+    }
+
+    #[test]
+    fn emitted_array_buffers_outlive_stream_release() {
+        let mut stream = fixture_stream(config(2, -1, -1)).unwrap();
+        let mut array = arrow_array::ffi::FFI_ArrowArray::empty();
+        let get_next = stream.get_next.unwrap();
+        assert_eq!(unsafe { get_next(&mut stream, &mut array) }, 0);
+
+        let release = stream.release.unwrap();
+        unsafe { release(&mut stream) };
+
+        let data_type = DataType::Struct(fixture_schema().fields().clone());
+        let data = unsafe { arrow_array::ffi::from_ffi_and_data_type(array, data_type) }.unwrap();
+        assert_eq!(data.len(), 3);
+    }
+
+    #[test]
+    fn populate_stream_rejects_reuse_and_contains_panics() {
+        let mut initialized = fixture_stream(config(1, -1, -1)).unwrap();
+        let destination = NonNull::from(&mut initialized);
+        assert!(populate_stream(destination, || unreachable!())
+            .unwrap_err()
+            .contains("already initialized"));
+
+        let mut empty = FFI_ArrowArrayStream::empty();
+        let destination = NonNull::from(&mut empty);
+        let error = populate_stream(destination, || panic!("constructor panic must-not-escape"))
+            .unwrap_err();
+        assert!(error.contains("panic contained while creating Arrow stream"));
+        assert!(!error.contains("must-not-escape"));
+        assert!(empty.release.is_none());
+    }
+
+    #[test]
+    fn prepared_log_cleanup_requires_exact_shape_and_revalidates_it() {
+        let (root, table) = prepared_root("valid");
+        let cleanup =
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), table.to_str().unwrap()).unwrap();
+        drop(cleanup);
+        assert!(!root.exists());
+
+        let (root, table) = prepared_root("mutated");
+        let cleanup =
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), table.to_str().unwrap()).unwrap();
+        let unexpected = root.join("unexpected-user-content");
+        fs::write(&unexpected, "must survive fail-closed cleanup").unwrap();
+        drop(cleanup);
+        assert!(unexpected.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn prepared_cdf_cleanup_enumerates_the_full_log_once() {
+        const END_VERSION: u64 = 127;
+
+        let (root, table) = prepared_cdf_root("cdf-linear", END_VERSION);
+        let cleanup = PreparedLogCleanup::try_new_cdf(
+            root.to_str().unwrap(),
+            table.to_str().unwrap(),
+            0,
+            END_VERSION,
+        )
+        .unwrap();
+        let full_log_shape_checks = cleanup.full_log_shape_checks_controller();
+        drop(cleanup);
+
+        assert!(!root.exists());
+        assert_eq!(full_log_shape_checks.load(Ordering::Acquire), 1);
+    }
+
+    #[test]
+    fn pending_cleanup_reaper_recovers_after_transient_failures() {
+        let (root, table) = prepared_root("retry");
+        let cleanup =
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), table.to_str().unwrap()).unwrap();
+        let failures = cleanup.injected_failure_controller();
+        cleanup.inject_removal_failures(1_000);
+
+        drop(cleanup);
+        assert!(root.exists());
+        assert!(pending_cleanup_count() > 0);
+
+        failures.store(0, Ordering::Release);
+        reap_pending_cleanups();
+        assert!(!root.exists());
+        assert_eq!(pending_cleanup_count(), 0);
+    }
+
+    #[test]
+    fn terminalization_drops_reader_before_owned_resources() {
+        struct ReaderDropProbe(Arc<AtomicBool>);
+        impl Iterator for ReaderDropProbe {
+            type Item = Result<RecordBatch, ArrowError>;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                None
+            }
+        }
+        impl RecordBatchReader for ReaderDropProbe {
+            fn schema(&self) -> SchemaRef {
+                fixture_schema()
+            }
+        }
+        impl Drop for ReaderDropProbe {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+
+        struct CleanupOrderProbe {
+            reader_dropped: Arc<AtomicBool>,
+            cleanup_dropped: Arc<AtomicBool>,
+        }
+        impl Drop for CleanupOrderProbe {
+            fn drop(&mut self) {
+                assert!(self.reader_dropped.load(Ordering::Acquire));
+                self.cleanup_dropped.store(true, Ordering::Release);
+            }
+        }
+
+        let reader_dropped = Arc::new(AtomicBool::new(false));
+        let cleanup_dropped = Arc::new(AtomicBool::new(false));
+        let stream = record_batch_stream_with_resource(
+            Box::new(ReaderDropProbe(reader_dropped.clone())),
+            CleanupOrderProbe {
+                reader_dropped: reader_dropped.clone(),
+                cleanup_dropped: cleanup_dropped.clone(),
+            },
+        );
+        let mut reader = ArrowArrayStreamReader::try_new(stream).unwrap();
+        assert!(reader.next().is_none());
+        assert!(reader_dropped.load(Ordering::Acquire));
+        assert!(cleanup_dropped.load(Ordering::Acquire));
+    }
 }

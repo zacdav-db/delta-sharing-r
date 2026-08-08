@@ -1,8 +1,8 @@
 coverage_dir <- fs::path("coverage")
 fs::dir_create(coverage_dir)
 
-# Native lifecycle behavior is covered by the package check and Rust jobs.
-# This report measures the R implementation exercised by the public test suite.
+# This report measures R line coverage only. Native behavior is exercised by
+# package checks and focused Rust tests, but is outside covr's report.
 reviewed_exclusions <- list(
   "src/native.c" = seq_along(readLines("src/native.c")),
   "R/zzz.R" = seq_along(readLines("R/zzz.R"))
