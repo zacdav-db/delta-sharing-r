@@ -1,6 +1,6 @@
 Package: delta.sharing
 Title: Client for the Delta Sharing Protocol
-Version: 0.2.0.9000
+Version: 0.2.0
 Authors@R:
   c(
     person(given = "Zac",
@@ -46,4 +46,4 @@ Config/testthat/edition: 3
 Config/testthat/parallel: false
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
-SystemRequirements: Cargo (Rust's package manager), rustc (>= 1.88)
+SystemRequirements: Cargo (Rust's package manager), rustc (>= 1.88), CMake
