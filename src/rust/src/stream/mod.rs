@@ -300,6 +300,8 @@ fn validate_prepared_root(
             return Err("prepared-log cleanup root is not private".to_string());
         }
     }
+    #[cfg(not(unix))]
+    let _ = root_metadata;
 
     let canonical_root = std::fs::canonicalize(root_path)
         .map_err(|_| "prepared-log cleanup root is unavailable".to_string())?;

@@ -38,10 +38,7 @@ can be used without registering or creating a private credential:
 ```{r, eval = FALSE}
 library(delta.sharing)
 
-profile_url <- paste0(
-  "https://raw.githubusercontent.com/",
-  "delta-io/delta-sharing/main/examples/open-datasets.share"
-)
+profile_url <- "https://raw.githubusercontent.com/delta-io/delta-sharing/main/examples/open-datasets.share"
 
 open_profile <- httr2::request(profile_url) |>
   httr2::req_perform() |>
@@ -186,3 +183,8 @@ A read follows one path:
 
 Delta and Parquet responses both use this path. R does not download the data
 files separately.
+
+R checks for user interrupts between Arrow batches. If a batch pull is already
+waiting inside Delta Kernel's network I/O, that pull must return or fail before
+R can handle the interrupt. Releasing a stream between pulls still releases the
+Kernel reader and its temporary log immediately.

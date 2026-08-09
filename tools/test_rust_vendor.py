@@ -4,12 +4,21 @@ import json
 from pathlib import Path
 import tarfile
 import tempfile
+import tomllib
 import unittest
 
 import rust_vendor
 
 
 class RustVendorTests(unittest.TestCase):
+    def test_kernel_engine_keeps_https_transport(self):
+        with (rust_vendor.RUST_ROOT / "Cargo.toml").open("rb") as stream:
+            manifest = tomllib.load(stream)
+
+        engine = manifest["dependencies"]["delta_kernel_default_engine"]
+        self.assertFalse(engine["default-features"])
+        self.assertIn("rustls", engine["features"])
+
     def test_archive_is_reproducible(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
