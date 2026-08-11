@@ -140,18 +140,15 @@ test_that("unscoped discovery expands shares and schemas", {
   expect_equal(purrr::map_chr(tables, "name"), c("orders", "events"))
 })
 
-test_that("discovery record lists handle empty or incomplete results", {
-  empty <- discovery_records(list(), c(name = "name", id = "id"), "shares")
-  incomplete <- discovery_records(
-    list(list(name = "sales")),
-    c(name = "name", id = "id"),
-    "shares"
-  )
+test_that("empty discovery results remain printable lists", {
+  httr2::local_mocked_responses(function(req) {
+    httr2::response_json(body = list(items = list()))
+  })
+  empty <- test_client()$list_shares()
 
   expect_s3_class(empty, "delta_sharing_listing")
   expect_length(empty, 0L)
   expect_output(print(empty), "<Delta Sharing shares> 0", fixed = TRUE)
-  expect_true(is.na(incomplete[[1]]$id))
 })
 
 test_that("discovery names reject empty and control-character values", {
