@@ -188,7 +188,6 @@ native_snapshot_stream <- function(
   cleanup_root = NULL
 ) {
   table_location <- validate_native_location(table_location)
-  limit <- normalize_limit(limit)
   batch_size <- validate_native_batch_size(batch_size)
 
   stream <- nanoarrow::nanoarrow_allocate_array_stream()

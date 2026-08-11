@@ -95,6 +95,7 @@ sharing_auth_context <- function(profile) {
           scope = credentials$scope,
           resource = credentials$audience
         ),
+        signature = jose::jwt_encode_sig,
         signature_params = list(
           size = as.integer(
             substr(credentials$algorithm %||% "RS256", 3, 5)
