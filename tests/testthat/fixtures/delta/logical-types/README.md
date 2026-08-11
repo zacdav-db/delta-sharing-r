@@ -18,10 +18,7 @@ and refreshes `SHA256SUMS`. Re-running it with Arrow R 22.0.0 must leave both
 generated hashes unchanged. The generator itself is retained so the physical
 Arrow schema, logical Delta schema, and test values remain reviewable.
 
-Delta Kernel 0.22.0 deliberately rejects Delta interval logical types during
-schema parsing. No interval column is included in the Parquet fixture. The
-companion test mutates a copy of the Sharing metadata to
-`interval day to second` and asserts the public typed, redacted native failure
-and lifecycle cleanup instead of claiming unsupported materialization.
+Interval logical types are not included; this fixture is limited to logical
+types that the pinned Delta Kernel can materialize successfully.
 
 The fixture is package test data under the repository's Apache-2.0 license.

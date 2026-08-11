@@ -30,17 +30,21 @@ test_that("data-frame materialization exhausts its native stream", {
   expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
-test_that("data-frame materialization preserves typed stream failures", {
+test_that("data-frame materialization preserves native stream failures", {
   stream <- native_test_stream(
     batches = 3L,
     rows_per_batch = 2L,
     error_after = 1L
   )
 
-  expect_error(
+  condition <- expect_error(
     sharing_stream_to_data_frame(stream),
-    class = "delta_sharing_kernel_error"
+    "synthetic reader error",
+    fixed = TRUE
   )
+  expect_s3_class(condition, "simpleError")
+  expect_false(inherits(condition, "delta_sharing_kernel_error"))
+  expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
 test_that("the native stream boundary translates user interrupts", {
@@ -98,7 +102,7 @@ test_that("Arrow materialization exhausts its native stream", {
   expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
-test_that("Arrow materialization preserves typed stream failures", {
+test_that("Arrow materialization preserves native stream failures", {
   skip_if_not_installed("arrow")
   stream <- native_test_stream(
     batches = 3L,
@@ -106,10 +110,14 @@ test_that("Arrow materialization preserves typed stream failures", {
     error_after = 1L
   )
 
-  expect_error(
+  condition <- expect_error(
     sharing_stream_to_arrow(stream),
-    class = "delta_sharing_kernel_error"
+    "synthetic reader error",
+    fixed = TRUE
   )
+  expect_s3_class(condition, "simpleError")
+  expect_false(inherits(condition, "delta_sharing_kernel_error"))
+  expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
 test_that("projection selects and orders columns", {
@@ -215,7 +223,7 @@ test_that("native CDF reads the local change fixture", {
   expect_setequal(unique(changes$`_change_type`), c("delete", "insert"))
 })
 
-test_that("native condition translation releases streams and redacts failures", {
+test_that("native condition handling releases streams and preserves errors", {
   typed_stream <- native_test_stream()
   expect_error(
     with_native_stream_conditions(
@@ -237,14 +245,18 @@ test_that("native condition translation releases streams and redacts failures", 
   )
 
   failed_stream <- native_test_stream()
-  expect_error(
+  condition <- expect_error(
     with_native_stream_conditions(
-      stop("internal implementation detail"),
+      stop("consumer failure"),
       operation = "read_arrow_stream",
       stream = failed_stream
     ),
-    class = "delta_sharing_kernel_error"
+    "consumer failure",
+    fixed = TRUE
   )
+  expect_s3_class(condition, "simpleError")
+  expect_false(inherits(condition, "delta_sharing_kernel_error"))
+  expect_match(capture.output(print(failed_stream)), "invalid pointer")
 
   original <- simpleError("construction failed")
   expect_error(

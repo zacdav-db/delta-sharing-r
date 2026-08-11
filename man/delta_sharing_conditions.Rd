@@ -6,7 +6,8 @@
 \description{
 Package-specific errors inherit from \code{delta_sharing_error}. More specific
 subclasses identify validation, authentication, protocol, kernel,
-unsupported-feature, and cancellation failures. HTTP requests retain
-\code{\link[httr2:req_perform]{httr2::req_perform()}}'s native condition classes and provider messages.
+unsupported-feature, and cancellation failures. HTTP requests and Arrow
+consumers retain their native condition classes and messages. User
+interrupts are reported as cancellation failures.
 }
 \keyword{internal}
