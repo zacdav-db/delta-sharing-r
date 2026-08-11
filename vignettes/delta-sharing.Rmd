@@ -39,7 +39,7 @@ can be used without registering or creating a private credential:
 library(delta.sharing)
 
 client <- sharing_client(demo_profile())
-client$list_tables()
+client$list_tables("delta_sharing")
 ```
 
 Read a few rows from one of the public tables:
@@ -73,12 +73,12 @@ token exchange, caching, and refresh.
 
 ```{r, eval = FALSE}
 client$list_shares()
-client$list_schemas()
-client$list_tables()
+client$list_schemas("delta_sharing")
+client$list_tables("delta_sharing")
 ```
 
-Discovery follows every page and returns printable lists of records. Supply
-`share` or both `share` and `schema` only when you want to narrow the result.
+Discovery follows every page and returns printable lists of records. Listing
+schemas or tables requires a share; supply a schema to narrow a table listing.
 
 ## Inspect a table
 

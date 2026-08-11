@@ -26,19 +26,7 @@ sharing_list_shares <- function(profile, auth) {
   )
 }
 
-sharing_list_schemas <- function(profile, auth, share = NULL) {
-  if (is.null(share)) {
-    records <- sharing_list_shares(profile, auth) |>
-      purrr::map(\(record) {
-        sharing_list_schemas(profile, auth, record$name)
-      }) |>
-      purrr::list_flatten()
-    return(structure(
-      records,
-      class = c("delta_sharing_listing", "list"),
-      kind = "schemas"
-    ))
-  }
+sharing_list_schemas <- function(profile, auth, share) {
   share <- discovery_name(share, "share", "list_schemas")
   items <- sharing_paginate(
     profile,
@@ -56,43 +44,18 @@ sharing_list_schemas <- function(profile, auth, share = NULL) {
   )
 }
 
-sharing_list_tables <- function(profile, auth, share = NULL, schema = NULL) {
-  if (is.null(share) && is.null(schema)) {
-    records <- sharing_list_schemas(profile, auth) |>
-      purrr::map(\(record) {
-        sharing_list_tables(profile, auth, record$share, record$name)
-      }) |>
-      purrr::list_flatten()
-    return(structure(
-      records,
-      class = c("delta_sharing_listing", "list"),
-      kind = "tables"
-    ))
-  }
-  if (is.null(schema)) {
-    return(sharing_list_tables_in_share(profile, auth, share))
-  }
+sharing_list_tables <- function(profile, auth, share, schema = NULL) {
   share <- discovery_name(share, "share", "list_tables")
-  schema <- discovery_name(schema, "schema", "list_tables")
+  path <- if (is.null(schema)) {
+    c("shares", share, "all-tables")
+  } else {
+    schema <- discovery_name(schema, "schema", "list_tables")
+    c("shares", share, "schemas", schema, "tables")
+  }
   records <- sharing_paginate(
     profile,
     auth,
-    c("shares", share, "schemas", schema, "tables"),
-    "list_tables"
-  )
-  structure(
-    records,
-    class = c("delta_sharing_listing", "list"),
-    kind = "tables"
-  )
-}
-
-sharing_list_tables_in_share <- function(profile, auth, share) {
-  share <- discovery_name(share, "share", "list_tables_in_share")
-  records <- sharing_paginate(
-    profile,
-    auth,
-    c("shares", share, "all-tables"),
+    path,
     "list_tables"
   )
   structure(

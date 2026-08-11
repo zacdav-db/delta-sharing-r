@@ -22,6 +22,6 @@ validates the profile but performs no network request or token exchange.
 \examples{
 \dontshow{if (interactive()) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
 client <- sharing_client(demo_profile())
-client$list_tables()
+client$list_tables("delta_sharing")
 \dontshow{\}) # examplesIf}
 }

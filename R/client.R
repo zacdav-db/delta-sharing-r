@@ -19,7 +19,7 @@ redact_url_userinfo <- function(url) {
 #' @return A [SharingClient].
 #' @examplesIf interactive()
 #' client <- sharing_client(demo_profile())
-#' client$list_tables()
+#' client$list_tables("delta_sharing")
 #' @export
 sharing_client <- function(profile) {
   SharingClient$new(profile)
@@ -58,20 +58,18 @@ SharingClient <- R6::R6Class(
       sharing_list_shares(private$profile, private$auth)
     },
 
-    #' @description List schemas. With no `share`, lists schemas in every
-    #'   accessible share.
-    #' @param share Optional share name.
+    #' @description List schemas in a share.
+    #' @param share Share name.
     #' @return A printable list of schema records.
-    list_schemas = function(share = NULL) {
+    list_schemas = function(share) {
       sharing_list_schemas(private$profile, private$auth, share = share)
     },
 
-    #' @description List tables. With no arguments, lists every accessible
-    #'   table; with `share` only, lists all tables in that share.
-    #' @param share Optional share name.
-    #' @param schema Optional schema name (requires `share`).
+    #' @description List tables in a share, optionally within one schema.
+    #' @param share Share name.
+    #' @param schema Optional schema name.
     #' @return A printable list of table records.
-    list_tables = function(share = NULL, schema = NULL) {
+    list_tables = function(share, schema = NULL) {
       sharing_list_tables(
         private$profile,
         private$auth,

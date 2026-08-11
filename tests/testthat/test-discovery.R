@@ -96,48 +96,12 @@ test_that("list_tables with only a share uses the all-tables route", {
   expect_equal(tables[[1]]$name, "orders")
 })
 
-test_that("unscoped discovery expands shares and schemas", {
-  mock <- function(req) {
-    path <- httr2::url_parse(req$url)$path
-    body <- switch(
-      path,
-      "/api/shares" = list(
-        items = list(
-          list(name = "sales", id = "s1"),
-          list(name = "marketing", id = "s2")
-        )
-      ),
-      "/api/shares/sales/schemas" = list(
-        items = list(list(name = "default"))
-      ),
-      "/api/shares/marketing/schemas" = list(
-        items = list(list(name = "analytics"))
-      ),
-      "/api/shares/sales/schemas/default/tables" = list(
-        items = list(
-          list(share = "sales", schema = "default", name = "orders")
-        )
-      ),
-      "/api/shares/marketing/schemas/analytics/tables" = list(
-        items = list(
-          list(share = "marketing", schema = "analytics", name = "events")
-        )
-      ),
-      NULL
-    )
-    if (is.null(body)) {
-      return(httr2::response(404))
-    }
-    httr2::response_json(body = body)
-  }
+test_that("schema and table listings require a share", {
   client <- test_client()
-  httr2::local_mocked_responses(mock)
 
-  schemas <- client$list_schemas()
-  tables <- client$list_tables()
-
-  expect_equal(purrr::map_chr(schemas, "share"), c("sales", "marketing"))
-  expect_equal(purrr::map_chr(tables, "name"), c("orders", "events"))
+  expect_error(client$list_schemas(), "share.*missing")
+  expect_error(client$list_tables(), "share.*missing")
+  expect_error(client$list_tables(schema = "default"), "share.*missing")
 })
 
 test_that("empty discovery results remain printable lists", {
@@ -160,9 +124,5 @@ test_that("discovery names reject empty and control-character values", {
         class = "delta_sharing_validation_error"
       )
     }
-  )
-  expect_error(
-    test_client()$list_tables(schema = "default"),
-    class = "delta_sharing_validation_error"
   )
 })

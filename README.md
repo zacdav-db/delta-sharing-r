@@ -27,8 +27,8 @@ client <- sharing_client(demo_profile())
 
 # Discover the public example data
 client$list_shares()
-client$list_schemas()
-client$list_tables()
+client$list_schemas("delta_sharing")
+client$list_tables("delta_sharing")
 
 # Create a reusable table handle
 housing <- client$table("delta_sharing.default.boston-housing")
