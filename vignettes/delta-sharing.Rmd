@@ -77,8 +77,8 @@ client$list_schemas()
 client$list_tables()
 ```
 
-Discovery follows every page and returns tibbles. Supply `share` or both
-`share` and `schema` only when you want to narrow the result.
+Discovery follows every page and returns printable lists of records. Supply
+`share` or both `share` and `schema` only when you want to narrow the result.
 
 ## Inspect a table
 

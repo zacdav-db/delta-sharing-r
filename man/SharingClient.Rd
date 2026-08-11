@@ -67,7 +67,7 @@ List available shares.
 }
 
 \subsection{Returns}{
-A tibble with \code{name} and identifier columns.
+A printable list of share records.
 }
 }
 \if{html}{\out{<hr>}}
@@ -88,7 +88,7 @@ accessible share.
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-A tibble with \code{share} and \code{name} columns.
+A printable list of schema records.
 }
 }
 \if{html}{\out{<hr>}}
@@ -111,7 +111,7 @@ table; with \code{share} only, lists all tables in that share.
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-A tibble with \code{share}, \code{schema}, and \code{name} columns.
+A printable list of table records.
 }
 }
 \if{html}{\out{<hr>}}

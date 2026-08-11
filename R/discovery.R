@@ -1,30 +1,49 @@
 # Share/schema/table discovery. Each function paginates the relevant REST route
-# and returns a tibble with stable character columns. Storage locations and
-# other private fields are deliberately excluded.
+# and returns a printable list of records. Storage locations and other private
+# fields are deliberately excluded.
 
-# Build a tibble from a list of record lists, pulling named fields with a
-# missing -> NA fallback so column types stay stable (including across pages
-# and for empty results).
-records_to_tibble <- function(items, fields) {
-  cols <- purrr::map(fields, function(path) {
-    purrr::map_chr(items, \(item) item[[path]] %||% NA_character_)
+# Keep only the public fields from each discovery record.
+discovery_records <- function(items, fields, kind) {
+  records <- purrr::map(items, function(item) {
+    purrr::map(fields, \(field) item[[field]] %||% NA_character_)
   })
-  tibble::as_tibble(rlang::set_names(cols, names(fields)))
+  structure(records, class = c("delta_sharing_listing", "list"), kind = kind)
+}
+
+#' @export
+print.delta_sharing_listing <- function(x, ...) {
+  kind <- attr(x, "kind")
+  fields <- switch(
+    kind,
+    shares = "name",
+    schemas = c("share", "name"),
+    tables = c("share", "schema", "name")
+  )
+  cat(sprintf("<Delta Sharing %s> %d\n", kind, length(x)))
+  purrr::walk(x, function(record) {
+    cat("  ", paste(unlist(record[fields]), collapse = "."), "\n", sep = "")
+  })
+  invisible(x)
 }
 
 sharing_list_shares <- function(profile, auth) {
   profile |>
     sharing_paginate(auth, "shares", "list_shares") |>
-    records_to_tibble(c(name = "name", id = "id"))
+    discovery_records(c(name = "name", id = "id"), "shares")
 }
 
 sharing_list_schemas <- function(profile, auth, share = NULL) {
   if (is.null(share)) {
-    shares <- sharing_list_shares(profile, auth)$name
-    return(
-      purrr::map(shares, \(s) sharing_list_schemas(profile, auth, s)) |>
-        purrr::list_rbind()
-    )
+    records <- sharing_list_shares(profile, auth) |>
+      purrr::map(\(record) {
+        sharing_list_schemas(profile, auth, record$name)
+      }) |>
+      purrr::list_flatten()
+    return(structure(
+      records,
+      class = c("delta_sharing_listing", "list"),
+      kind = "schemas"
+    ))
   }
   share <- discovery_name(share, "share", "list_schemas")
   items <- sharing_paginate(
@@ -33,20 +52,28 @@ sharing_list_schemas <- function(profile, auth, share = NULL) {
     c("shares", share, "schemas"),
     "list_schemas"
   )
-  tibble::tibble(share = share, name = purrr::map_chr(items, "name"))
+  records <- purrr::map(items, \(item) {
+    list(share = share, name = item$name %||% NA_character_)
+  })
+  structure(
+    records,
+    class = c("delta_sharing_listing", "list"),
+    kind = "schemas"
+  )
 }
 
 sharing_list_tables <- function(profile, auth, share = NULL, schema = NULL) {
   if (is.null(share) && is.null(schema)) {
-    schemas <- sharing_list_schemas(profile, auth)
-    return(
-      purrr::map2(
-        schemas$share,
-        schemas$name,
-        \(sh, sc) sharing_list_tables(profile, auth, sh, sc)
-      ) |>
-        purrr::list_rbind()
-    )
+    records <- sharing_list_schemas(profile, auth) |>
+      purrr::map(\(record) {
+        sharing_list_tables(profile, auth, record$share, record$name)
+      }) |>
+      purrr::list_flatten()
+    return(structure(
+      records,
+      class = c("delta_sharing_listing", "list"),
+      kind = "tables"
+    ))
   }
   if (is.null(schema)) {
     return(sharing_list_tables_in_share(profile, auth, share))
@@ -70,7 +97,11 @@ sharing_list_tables_in_share <- function(profile, auth, share) {
 }
 
 table_records <- function(items) {
-  records_to_tibble(items, c(share = "share", schema = "schema", name = "name"))
+  discovery_records(
+    items,
+    c(share = "share", schema = "schema", name = "name"),
+    "tables"
+  )
 }
 
 discovery_name <- function(value, name, operation) {

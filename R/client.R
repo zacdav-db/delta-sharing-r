@@ -53,7 +53,7 @@ SharingClient <- R6::R6Class(
     },
 
     #' @description List available shares.
-    #' @return A tibble with `name` and identifier columns.
+    #' @return A printable list of share records.
     list_shares = function() {
       sharing_list_shares(private$profile, private$auth)
     },
@@ -61,7 +61,7 @@ SharingClient <- R6::R6Class(
     #' @description List schemas. With no `share`, lists schemas in every
     #'   accessible share.
     #' @param share Optional share name.
-    #' @return A tibble with `share` and `name` columns.
+    #' @return A printable list of schema records.
     list_schemas = function(share = NULL) {
       sharing_list_schemas(private$profile, private$auth, share = share)
     },
@@ -70,7 +70,7 @@ SharingClient <- R6::R6Class(
     #'   table; with `share` only, lists all tables in that share.
     #' @param share Optional share name.
     #' @param schema Optional schema name (requires `share`).
-    #' @return A tibble with `share`, `schema`, and `name` columns.
+    #' @return A printable list of table records.
     list_tables = function(share = NULL, schema = NULL) {
       sharing_list_tables(
         private$profile,
