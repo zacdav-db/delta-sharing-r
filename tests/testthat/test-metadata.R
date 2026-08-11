@@ -169,7 +169,7 @@ test_that("failed format negotiation is not cached", {
 
   expect_error(
     resolve_query_format(profile, auth, identifier, "auto"),
-    class = "delta_sharing_http_error"
+    class = "httr2_http_400"
   )
   expect_identical(
     resolve_query_format(profile, auth, identifier, "auto"),

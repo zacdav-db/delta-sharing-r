@@ -6,7 +6,6 @@
 condition_classes <- list(
   validation = "delta_sharing_validation_error",
   auth = "delta_sharing_auth_error",
-  http = "delta_sharing_http_error",
   protocol = "delta_sharing_protocol_error",
   kernel = "delta_sharing_kernel_error",
   unsupported = "delta_sharing_unsupported_error",
@@ -15,11 +14,10 @@ condition_classes <- list(
 
 #' Delta Sharing conditions
 #'
-#' All errors raised by the public API inherit from `delta_sharing_error`. More
-#' specific subclasses identify validation, authentication, HTTP, protocol,
-#' kernel, unsupported-feature, and cancellation failures. Diagnostic fields
-#' (such as `operation` or `status`) are attached as condition data; secrets
-#' are never included.
+#' Package-specific errors inherit from `delta_sharing_error`. More specific
+#' subclasses identify validation, authentication, protocol, kernel,
+#' unsupported-feature, and cancellation failures. HTTP requests retain
+#' [httr2::req_perform()]'s native condition classes and provider messages.
 #'
 #' @name delta_sharing_conditions
 #' @keywords internal
