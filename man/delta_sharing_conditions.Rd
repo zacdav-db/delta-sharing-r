@@ -4,10 +4,9 @@
 \alias{delta_sharing_conditions}
 \title{Delta Sharing conditions}
 \description{
-All errors raised by the public API inherit from \code{delta_sharing_error}. More
-specific subclasses identify validation, authentication, HTTP, protocol,
-kernel, unsupported-feature, and cancellation failures. Diagnostic fields
-(such as \code{operation} or \code{status}) are attached as condition data; secrets
-are never included.
+Package-specific errors inherit from \code{delta_sharing_error}. More specific
+subclasses identify validation, authentication, protocol, kernel,
+unsupported-feature, and cancellation failures. HTTP requests retain
+\code{\link[httr2:req_perform]{httr2::req_perform()}}'s native condition classes and provider messages.
 }
 \keyword{internal}

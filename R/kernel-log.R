@@ -18,7 +18,7 @@
 #   `-- table/_delta_log/<commit>.json  (the table location handed to the kernel)
 log_root_prefix <- ".delta-sharing-snapshot-"
 log_marker_name <- ".delta-sharing-r-prepared-log"
-log_marker_value <- "delta-sharing-r:vnext\n"
+log_marker_value <- "delta-sharing-r:prepared-log\n"
 log_dir_name <- "_delta_log"
 log_commit_name <- "00000000000000000000.json"
 

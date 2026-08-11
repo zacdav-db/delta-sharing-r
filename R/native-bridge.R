@@ -47,18 +47,6 @@ validate_native_location <- function(table_location) {
   fs::path_abs(table_location)
 }
 
-validate_native_columns <- function(columns) {
-  columns <- normalize_columns(columns)
-  if (!is.null(columns) && anyDuplicated(tolower(columns))) {
-    abort(
-      "`columns` must not contain duplicate Delta names ignoring case.",
-      type = "validation",
-      operation = "read_arrow_stream"
-    )
-  }
-  columns
-}
-
 validate_native_batch_size <- function(batch_size) {
   if (
     !rlang::is_scalar_integerish(batch_size, finite = TRUE) ||
@@ -200,8 +188,6 @@ native_snapshot_stream <- function(
   cleanup_root = NULL
 ) {
   table_location <- validate_native_location(table_location)
-  columns <- validate_native_columns(columns)
-  limit <- normalize_limit(limit)
   batch_size <- validate_native_batch_size(batch_size)
 
   stream <- nanoarrow::nanoarrow_allocate_array_stream()
@@ -229,7 +215,6 @@ native_cdf_stream <- function(
   cleanup_root = NULL
 ) {
   table_location <- validate_native_location(table_location)
-  columns <- validate_native_columns(columns)
   batch_size <- validate_native_batch_size(batch_size)
   start_version <- cdf_whole_version(start_version, "start_version")
   end_version <- cdf_whole_version(end_version, "end_version")

@@ -95,7 +95,7 @@ test_that("OAuth request policies are attached lazily", {
   expect_s3_class(oauth_client_for(profile$credentials), "httr2_oauth_client")
 })
 
-test_that("private-key OAuth reads a valid key only when first used", {
+test_that("private-key OAuth uses a signed JWT bearer grant", {
   key_path <- fs::file_temp(ext = ".pem")
   withr::defer(fs::file_delete(key_path))
   openssl::write_pem(openssl::rsa_keygen(), key_path)
@@ -118,9 +118,54 @@ test_that("private-key OAuth reads a valid key only when first used", {
   context <- sharing_auth_context(profile)
 
   request <- context$authenticate(httr2::request(profile$endpoint))
+  policy <- request$policies$auth_sign
+  flow <- policy$params$flow_params
 
   expect_s3_class(request, "httr2_request")
   expect_s3_class(load_private_key(key_path), "key")
+  expect_identical(policy$params$flow, "oauth_flow_bearer_jwt")
+  expect_equal(flow$claim$iss, "cid")
+  expect_equal(flow$claim$aud, "issuer")
+  expect_equal(flow$claim$scope, "read")
+  expect_equal(flow$claim$resource, "audience")
+  expect_equal(flow$signature_params$size, 256L)
+  expect_equal(flow$signature_params$header$kid, "key-id")
+
+  state <- new.env(parent = emptyenv())
+  httr2::local_mocked_responses(function(req) {
+    state$token_request <- req
+    httr2::response(
+      200,
+      headers = list(`content-type` = "application/json"),
+      body = charToRaw(
+        '{"access_token":"token","token_type":"bearer","expires_in":3600}'
+      )
+    )
+  })
+
+  token <- httr2::oauth_flow_bearer_jwt(
+    client = flow$client,
+    claim = flow$claim,
+    signature = flow$signature,
+    signature_params = flow$signature_params,
+    scope = flow$scope,
+    token_params = flow$token_params
+  )
+  token_body <- state$token_request$body$data
+  assertion <- jose::jwt_split(utils::URLdecode(token_body$assertion))
+
+  expect_s3_class(token, "httr2_token")
+  expect_equal(
+    utils::URLdecode(token_body$grant_type),
+    "urn:ietf:params:oauth:grant-type:jwt-bearer"
+  )
+  expect_setequal(names(token_body), c("grant_type", "assertion"))
+  expect_equal(assertion$header$alg, "RS256")
+  expect_equal(assertion$header$kid, "key-id")
+  expect_equal(assertion$payload$iss, "cid")
+  expect_equal(assertion$payload$aud, "issuer")
+  expect_equal(assertion$payload$scope, "read")
+  expect_equal(assertion$payload$resource, "audience")
 })
 
 test_that("unreadable private keys become typed authentication errors", {

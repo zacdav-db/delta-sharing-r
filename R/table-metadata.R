@@ -44,21 +44,11 @@ table_cache_key <- function(identifier) {
 }
 
 cached_response_format <- function(auth, identifier) {
-  cache <- auth$response_format_cache
-  if (!is.environment(cache)) {
-    return(NULL)
-  }
-  cache[[table_cache_key(identifier)]]
+  auth$response_format_cache[[table_cache_key(identifier)]]
 }
 
 remember_response_format <- function(auth, identifier, response_format) {
-  cache <- auth$response_format_cache
-  if (
-    is.environment(cache) &&
-      response_format %in% c("delta", "parquet")
-  ) {
-    cache[[table_cache_key(identifier)]] <- response_format
-  }
+  auth$response_format_cache[[table_cache_key(identifier)]] <- response_format
   response_format
 }
 
@@ -66,8 +56,7 @@ resolve_query_format <- function(
   profile,
   auth,
   identifier,
-  requested,
-  operation = "read"
+  requested
 ) {
   if (!identical(requested, "auto")) {
     return(requested)
@@ -76,8 +65,8 @@ resolve_query_format <- function(
   if (!is.null(cached)) {
     return(cached)
   }
-  req <- metadata_request(profile, auth, identifier, operation, "auto")
-  resp <- sharing_perform(req)
+  req <- metadata_request(profile, auth, identifier, "auto")
+  resp <- httr2::req_perform(req)
   caps <- httr2::resp_header(resp, "delta-sharing-capabilities") %||% ""
   resolved <- if (grepl("responseformat=delta", caps, fixed = TRUE)) {
     "delta"
@@ -102,15 +91,13 @@ metadata_request <- function(
   profile,
   auth,
   identifier,
-  operation,
   response_format = "auto"
 ) {
   req <- sharing_request(
     profile,
     auth,
     c(table_path(identifier), "metadata"),
-    method = "GET",
-    operation = operation
+    method = "GET"
   )
   httr2::req_headers(
     req,
@@ -235,24 +222,23 @@ sharing_table_version <- function(profile, auth, identifier) {
     profile,
     auth,
     table_path(identifier),
-    method = "HEAD",
-    operation = "table_version"
+    method = "HEAD"
   )
-  resp <- sharing_perform(req)
+  resp <- httr2::req_perform(req)
   parse_version_header(resp, "table_version")
 }
 
 sharing_table_protocol <- function(profile, auth, identifier) {
-  req <- metadata_request(profile, auth, identifier, "table_protocol")
-  resp <- sharing_perform(req)
+  req <- metadata_request(profile, auth, identifier)
+  resp <- httr2::req_perform(req)
   parsed <- parse_table_actions(resp, "table_protocol")
   remember_response_format(auth, identifier, parsed$response_format)
   structure(parsed$protocol, class = c("delta_sharing_protocol", "list"))
 }
 
 sharing_table_metadata <- function(profile, auth, identifier) {
-  req <- metadata_request(profile, auth, identifier, "table_metadata")
-  resp <- sharing_perform(req)
+  req <- metadata_request(profile, auth, identifier)
+  resp <- httr2::req_perform(req)
   version <- parse_version_header(resp, "table_metadata")
   parsed <- parse_table_actions(resp, "table_metadata")
   remember_response_format(auth, identifier, parsed$response_format)
@@ -266,8 +252,8 @@ sharing_table_metadata <- function(profile, auth, identifier) {
 }
 
 sharing_table_schema <- function(profile, auth, identifier) {
-  req <- metadata_request(profile, auth, identifier, "table_schema")
-  resp <- sharing_perform(req)
+  req <- metadata_request(profile, auth, identifier)
+  resp <- httr2::req_perform(req)
   parsed <- parse_table_actions(resp, "table_schema")
   remember_response_format(auth, identifier, parsed$response_format)
   schema_string <- parsed$metadata$schema_string

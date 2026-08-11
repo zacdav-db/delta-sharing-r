@@ -1,6 +1,6 @@
 # Read orchestration: turn a snapshot/changes spec into a Delta Kernel Arrow
 # stream. R performs the Query Table request, parses the NDJSON response into
-# protocol/metadata/file actions, streams a synthetic `_delta_log`, and hands
+# protocol/metadata/file actions, writes a synthetic `_delta_log`, and hands
 # the local path to the native kernel scan. Cleanup of the temp log is
 # transferred to the native stream once it is constructed.
 
@@ -12,10 +12,9 @@ query_capabilities <- function(format, for_cdf = FALSE) {
   )
 }
 
-# Stream Query Table pages into one bounded action staging connection. Only the
-# latest protocol/metadata wrappers and page token remain in memory; file
-# actions are normalized and written as each chunk arrives.
-stream_snapshot_query <- function(
+# Fetch Query Table pages and append their file actions to one staging file.
+# Each response page is buffered by httr2, matching its ordinary request path.
+write_snapshot_query_pages <- function(
   profile,
   auth,
   identifier,
@@ -35,62 +34,48 @@ stream_snapshot_query <- function(
       profile,
       auth,
       c(table_path(identifier), "query"),
-      method = "POST",
-      operation = "read"
+      method = "POST"
     )
     req <- httr2::req_headers(
       req,
       `delta-sharing-capabilities` = query_capabilities(format)
     )
     req <- httr2::req_body_json(req, query_body(spec, page_token))
-    page <- sharing_stream_lines(
-      req,
-      function(lines, state) {
-        actions <- parse_ndjson_lines(lines, "read")
-        state <- purrr::reduce(
-          actions,
-          function(state, action) {
-            if (!is.null(action$protocol)) {
-              state$protocol <- action$protocol
-            } else if (!is.null(action$metaData)) {
-              state$metadata <- action$metaData
-            }
-            token <- action$nextPageToken
-            if (is_scalar_character(token) && nzchar(token)) {
-              state$next_page_token <- token
-            }
-            state
-          },
-          .init = state
-        )
-
-        files <- purrr::map(
-          purrr::keep(actions, function(action) !is.null(action$file)),
-          "file"
-        )
-        if (length(files) == 0L) {
-          return(state)
+    resp <- httr2::req_perform(req)
+    actions <- parse_ndjson_lines(httr2::resp_body_string(resp), "read")
+    page <- purrr::reduce(
+      actions,
+      function(state, action) {
+        if (!is.null(action$protocol)) {
+          state$protocol <- action$protocol
+        } else if (!is.null(action$metaData)) {
+          state$metadata <- action$metaData
         }
-
-        state$file_count <- state$file_count + length(files)
-        file_lines <- purrr::map_chr(files, function(file) {
-          log_json_line(synthetic_file_action(file, format, "read"))
-        })
-        writeLines(file_lines, output, useBytes = TRUE)
+        if (is_scalar_character(action$nextPageToken)) {
+          state$next_page_token <- action$nextPageToken
+        }
         state
       },
-      state = list(
+      .init = list(
         protocol = protocol,
         metadata = metadata,
-        next_page_token = NULL,
-        file_count = file_count
+        next_page_token = NULL
       )
     )
+
+    files <- purrr::map(
+      purrr::keep(actions, function(action) !is.null(action$file)),
+      "file"
+    )
+    file_lines <- purrr::map_chr(files, function(file) {
+      log_json_line(synthetic_file_action(file, format, "read"))
+    })
+    writeLines(file_lines, output, useBytes = TRUE)
 
     protocol <- page$protocol
     metadata <- page$metadata
     page_token <- page$next_page_token
-    file_count <- page$file_count
+    file_count <- file_count + length(files)
     if (is.null(page_token)) {
       break
     }
@@ -112,9 +97,8 @@ stream_snapshot_query <- function(
   )
 }
 
-# Prepare the private snapshot log while the HTTP response is being consumed.
-# The staging file is inside the private root and is removed before the handle
-# transfers to the native cleanup guard.
+# Prepare the private snapshot log. The staging file is inside the private root
+# and is removed before the handle transfers to the native cleanup guard.
 prepare_snapshot_query_log <- function(
   profile,
   auth,
@@ -127,7 +111,7 @@ prepare_snapshot_query_log <- function(
     query_result <- local({
       output <- file(staged_actions, open = "wb")
       on.exit(close(output), add = TRUE)
-      stream_snapshot_query(
+      write_snapshot_query_pages(
         profile,
         auth,
         identifier,
@@ -184,8 +168,7 @@ sharing_query_changes <- function(profile, auth, identifier, spec) {
       auth,
       c(table_path(identifier), "changes"),
       method = "GET",
-      query = changes_query(spec, page_token),
-      operation = "changes"
+      query = changes_query(spec, page_token)
     )
     req <- httr2::req_headers(
       req,
@@ -194,7 +177,7 @@ sharing_query_changes <- function(profile, auth, identifier, spec) {
         for_cdf = TRUE
       )
     )
-    resp <- sharing_perform(req)
+    resp <- httr2::req_perform(req)
     page_actions <- parse_ndjson_lines(httr2::resp_body_string(resp), "changes")
     actions <- c(actions, page_actions)
     page_token <- find_next_page_token(page_actions)
@@ -212,9 +195,9 @@ sharing_query_changes <- function(profile, auth, identifier, spec) {
 find_next_page_token <- function(actions) {
   action <- purrr::detect(actions, function(action) {
     token <- action$nextPageToken
-    is_scalar_character(token) && nzchar(token)
+    is_scalar_character(token)
   })
-  action$nextPageToken %||% NULL
+  action$nextPageToken
 }
 
 bucket_cdf_actions <- function(actions, start_version, end_version) {
@@ -339,8 +322,7 @@ sharing_snapshot_stream <- function(
     profile,
     auth,
     identifier,
-    spec$response_format,
-    "read"
+    spec$response_format
   )
   log <- prepare_snapshot_query_log(
     profile,

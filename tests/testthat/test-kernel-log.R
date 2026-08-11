@@ -72,7 +72,7 @@ test_that("prepare_synthetic_log writes the private ownership-marked layout", {
   # ownership marker the native cleanup guard checks
   marker <- fs::path(log$root, ".delta-sharing-r-prepared-log")
   expect_true(fs::file_exists(marker))
-  expect_equal(readChar(marker, 100L), "delta-sharing-r:vnext\n")
+  expect_equal(readChar(marker, 100L), "delta-sharing-r:prepared-log\n")
 
   # the commit itself
   commit <- fs::path(

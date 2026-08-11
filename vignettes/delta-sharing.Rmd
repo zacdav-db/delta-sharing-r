@@ -38,14 +38,8 @@ can be used without registering or creating a private credential:
 ```{r, eval = FALSE}
 library(delta.sharing)
 
-profile_url <- "https://raw.githubusercontent.com/delta-io/delta-sharing/main/examples/open-datasets.share"
-
-open_profile <- httr2::request(profile_url) |>
-  httr2::req_perform() |>
-  httr2::resp_body_string()
-
-client <- sharing_client(open_profile)
-client$list_tables()
+client <- sharing_client(demo_profile())
+client$list_tables("delta_sharing")
 ```
 
 Read a few rows from one of the public tables:
@@ -65,12 +59,11 @@ client <- sharing_client("~/config.share")
 
 `sharing_client()` accepts:
 
-- a path to a `.share` file;
-- an inline JSON string; or
+- a path to a `.share` file; or
 - a parsed list.
 
 Profile versions 1 and 2 support bearer tokens, basic auth, OAuth client
-credentials, and private-key JWT client assertions.
+credentials, and private-key JWT bearer authentication.
 
 Creating the client is offline: it parses the profile without making a request
 or exchanging a token. When authentication is first needed, `httr2` handles
@@ -80,12 +73,12 @@ token exchange, caching, and refresh.
 
 ```{r, eval = FALSE}
 client$list_shares()
-client$list_schemas()
-client$list_tables()
+client$list_schemas("delta_sharing")
+client$list_tables("delta_sharing")
 ```
 
-Discovery follows every page and returns tibbles. Supply `share` or both
-`share` and `schema` only when you want to narrow the result.
+Discovery follows every page and returns printable lists of records. Listing
+schemas or tables requires a share; supply a schema to narrow a table listing.
 
 ## Inspect a table
 
@@ -122,6 +115,8 @@ snapshot <- orders$snapshot(
 
 # Lazy Arrow C stream (use when the result may not fit in memory).
 stream <- snapshot$to_arrow_stream(batch_size = 65536L)
+# Pass the stream to a compatible consumer, or release it when unused.
+stream$release()
 
 # Lazy Arrow reader for consumers such as DuckDB.
 reader <- snapshot$to_arrow_reader()

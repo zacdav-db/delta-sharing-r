@@ -42,6 +42,13 @@
     {
       "distribution": "external R package; code is not bundled",
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
+      "name": "jose",
+      "relationship": "Imports",
+      "requirement": null
+    },
+    {
+      "distribution": "external R package; code is not bundled",
+      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
       "name": "jsonlite",
       "relationship": "Imports",
       "requirement": null
@@ -71,13 +78,6 @@
       "distribution": "external R package; code is not bundled",
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
       "name": "rlang",
-      "relationship": "Imports",
-      "requirement": null
-    },
-    {
-      "distribution": "external R package; code is not bundled",
-      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
-      "name": "tibble",
       "relationship": "Imports",
       "requirement": null
     },

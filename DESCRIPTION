@@ -21,13 +21,13 @@ Imports:
   cli,
   fs,
   httr2,
+  jose,
   jsonlite,
   nanoarrow (>= 0.8.0),
   openssl,
   purrr,
   R6,
-  rlang,
-  tibble
+  rlang
 Suggests:
   arrow,
   DBI,

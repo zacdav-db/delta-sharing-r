@@ -103,11 +103,26 @@ SharingSnapshot <- R6::R6Class(
       predicate = NULL,
       response_format = "auto"
     ) {
-      version <- normalize_version(version, "version")
-      timestamp <- normalize_timestamp(timestamp, "timestamp")
-      if (!is.null(version) && !is.null(timestamp)) {
+      if (
+        !is.null(limit) &&
+          (!rlang::is_scalar_integerish(limit, finite = TRUE) || limit < 0)
+      ) {
         abort(
-          "`version` and `timestamp` are mutually exclusive.",
+          "{.arg limit} must be a non-negative whole number.",
+          type = "validation",
+          operation = "snapshot"
+        )
+      }
+      if (!is.null(columns) && !is.character(columns)) {
+        abort(
+          "{.arg columns} must be a character vector.",
+          type = "validation",
+          operation = "snapshot"
+        )
+      }
+      if (!is.null(predicate) && !is.list(predicate)) {
+        abort(
+          "{.arg predicate} must be a list.",
           type = "validation",
           operation = "snapshot"
         )
@@ -118,10 +133,13 @@ SharingSnapshot <- R6::R6Class(
       private$spec <- list(
         version = version,
         timestamp = timestamp,
-        columns = normalize_columns(columns),
-        limit = normalize_limit(limit),
-        predicate = normalize_predicate(predicate),
-        response_format = normalize_response_format(response_format)
+        columns = columns,
+        limit = limit,
+        predicate = predicate,
+        response_format = rlang::arg_match0(
+          response_format,
+          c("auto", "delta", "parquet")
+        )
       )
       invisible(self)
     }
@@ -142,9 +160,7 @@ SharingSnapshot <- R6::R6Class(
 #' Delta Sharing change data feed reader
 #'
 #' An immutable change data feed specification with Arrow materializers. Created
-#' by `SharingTable$changes()`. Exactly one starting bound is required and an
-#' optional ending bound of the same kind; version and timestamp bounds cannot
-#' be mixed.
+#' by `SharingTable$changes()`. The sharing server validates the supplied bounds.
 #'
 #' @export
 SharingChanges <- R6::R6Class(
@@ -167,16 +183,26 @@ SharingChanges <- R6::R6Class(
       columns = NULL,
       response_format = "auto"
     ) {
+      if (!is.null(columns) && !is.character(columns)) {
+        abort(
+          "{.arg columns} must be a character vector.",
+          type = "validation",
+          operation = "changes"
+        )
+      }
       private$profile <- profile
       private$auth <- auth
       private$identifier <- identifier
-      private$spec <- sharing_changes_validate(
+      private$spec <- list(
         starting_version = starting_version,
         ending_version = ending_version,
         starting_timestamp = starting_timestamp,
         ending_timestamp = ending_timestamp,
         columns = columns,
-        response_format = response_format
+        response_format = rlang::arg_match0(
+          response_format,
+          c("auto", "delta", "parquet")
+        )
       )
       invisible(self)
     }

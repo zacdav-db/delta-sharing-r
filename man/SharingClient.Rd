@@ -39,7 +39,7 @@ Create a client from a profile.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{profile}}{Profile path, parsed list, or JSON string.}
+\item{\code{profile}}{Profile path or parsed list.}
 }
 \if{html}{\out{</div>}}
 }
@@ -67,51 +67,49 @@ List available shares.
 }
 
 \subsection{Returns}{
-A tibble with \code{name} and identifier columns.
+A printable list of share records.
 }
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SharingClient-list_schemas"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingClient-list_schemas}{}}}
 \subsection{Method \code{list_schemas()}}{
-List schemas. With no \code{share}, lists schemas in every
-accessible share.
+List schemas in a share.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_schemas(share = NULL)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_schemas(share)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{share}}{Optional share name.}
+\item{\code{share}}{Share name.}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-A tibble with \code{share} and \code{name} columns.
+A printable list of schema records.
 }
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SharingClient-list_tables"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingClient-list_tables}{}}}
 \subsection{Method \code{list_tables()}}{
-List tables. With no arguments, lists every accessible
-table; with \code{share} only, lists all tables in that share.
+List tables in a share, optionally within one schema.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_tables(share = NULL, schema = NULL)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingClient$list_tables(share, schema = NULL)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{share}}{Optional share name.}
+\item{\code{share}}{Share name.}
 
-\item{\code{schema}}{Optional schema name (requires \code{share}).}
+\item{\code{schema}}{Optional schema name.}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-A tibble with \code{share}, \code{schema}, and \code{name} columns.
+A printable list of table records.
 }
 }
 \if{html}{\out{<hr>}}

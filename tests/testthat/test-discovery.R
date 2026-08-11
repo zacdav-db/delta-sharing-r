@@ -36,12 +36,15 @@ mock_discovery <- function(req) {
   httr2::response(404)
 }
 
-test_that("list_shares returns a tibble of share names", {
+test_that("list_shares returns a printable list of share records", {
   client <- test_client()
   httr2::local_mocked_responses(mock_discovery)
   shares <- client$list_shares()
-  expect_s3_class(shares, "tbl_df")
-  expect_equal(shares$name, c("sales", "mktg"))
+  expect_s3_class(shares, "delta_sharing_listing")
+  expect_type(shares, "list")
+  expect_equal(purrr::map_chr(shares, "name"), c("sales", "mktg"))
+  expect_output(print(shares), "<Delta Sharing shares> 2", fixed = TRUE)
+  expect_output(print(shares), "sales", fixed = TRUE)
 })
 
 test_that("pagination follows nextPageToken across pages", {
@@ -65,7 +68,7 @@ test_that("pagination follows nextPageToken across pages", {
   }
   httr2::local_mocked_responses(mock)
   shares <- client$list_shares()
-  expect_equal(shares$name, c("a", "b"))
+  expect_equal(purrr::map_chr(shares, "name"), c("a", "b"))
   expect_equal(state$page, 2L)
 })
 
@@ -73,80 +76,43 @@ test_that("list_schemas scopes to a share", {
   client <- test_client()
   httr2::local_mocked_responses(mock_discovery)
   schemas <- client$list_schemas(share = "sales")
-  expect_equal(schemas$share, "sales")
-  expect_equal(schemas$name, "default")
+  expect_equal(schemas[[1]], list(share = "sales", name = "default"))
+  expect_output(print(schemas), "sales.default", fixed = TRUE)
 })
 
-test_that("list_tables returns share/schema/name columns", {
+test_that("list_tables returns qualified table records", {
   client <- test_client()
   httr2::local_mocked_responses(mock_discovery)
   tables <- client$list_tables(share = "sales", schema = "default")
-  expect_equal(names(tables), c("share", "schema", "name"))
-  expect_equal(tables$name, "orders")
+  expect_equal(names(tables[[1]]), c("share", "schema", "name"))
+  expect_equal(tables[[1]]$name, "orders")
+  expect_output(print(tables), "sales.default.orders", fixed = TRUE)
 })
 
 test_that("list_tables with only a share uses the all-tables route", {
   client <- test_client()
   httr2::local_mocked_responses(mock_discovery)
   tables <- client$list_tables(share = "sales")
-  expect_equal(tables$name, "orders")
+  expect_equal(tables[[1]]$name, "orders")
 })
 
-test_that("unscoped discovery expands shares and schemas", {
-  mock <- function(req) {
-    path <- httr2::url_parse(req$url)$path
-    body <- switch(
-      path,
-      "/api/shares" = list(
-        items = list(
-          list(name = "sales", id = "s1"),
-          list(name = "marketing", id = "s2")
-        )
-      ),
-      "/api/shares/sales/schemas" = list(
-        items = list(list(name = "default"))
-      ),
-      "/api/shares/marketing/schemas" = list(
-        items = list(list(name = "analytics"))
-      ),
-      "/api/shares/sales/schemas/default/tables" = list(
-        items = list(
-          list(share = "sales", schema = "default", name = "orders")
-        )
-      ),
-      "/api/shares/marketing/schemas/analytics/tables" = list(
-        items = list(
-          list(share = "marketing", schema = "analytics", name = "events")
-        )
-      ),
-      NULL
-    )
-    if (is.null(body)) {
-      return(httr2::response(404))
-    }
-    httr2::response_json(body = body)
-  }
+test_that("schema and table listings require a share", {
   client <- test_client()
-  httr2::local_mocked_responses(mock)
 
-  schemas <- client$list_schemas()
-  tables <- client$list_tables()
-
-  expect_equal(schemas$share, c("sales", "marketing"))
-  expect_equal(tables$name, c("orders", "events"))
+  expect_error(client$list_schemas(), "share.*missing")
+  expect_error(client$list_tables(), "share.*missing")
+  expect_error(client$list_tables(schema = "default"), "share.*missing")
 })
 
-test_that("discovery records stay typed when empty or incomplete", {
-  empty <- records_to_tibble(list(), c(name = "name", id = "id"))
-  incomplete <- records_to_tibble(
-    list(list(name = "sales")),
-    c(name = "name", id = "id")
-  )
+test_that("empty discovery results remain printable lists", {
+  httr2::local_mocked_responses(function(req) {
+    httr2::response_json(body = list(items = list()))
+  })
+  empty <- test_client()$list_shares()
 
-  expect_s3_class(empty, "tbl_df")
-  expect_identical(names(empty), c("name", "id"))
-  expect_identical(nrow(empty), 0L)
-  expect_true(is.na(incomplete$id))
+  expect_s3_class(empty, "delta_sharing_listing")
+  expect_length(empty, 0L)
+  expect_output(print(empty), "<Delta Sharing shares> 0", fixed = TRUE)
 })
 
 test_that("discovery names reject empty and control-character values", {
@@ -158,9 +124,5 @@ test_that("discovery names reject empty and control-character values", {
         class = "delta_sharing_validation_error"
       )
     }
-  )
-  expect_error(
-    test_client()$list_tables(schema = "default"),
-    class = "delta_sharing_validation_error"
   )
 })

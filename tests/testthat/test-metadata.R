@@ -169,7 +169,7 @@ test_that("failed format negotiation is not cached", {
 
   expect_error(
     resolve_query_format(profile, auth, identifier, "auto"),
-    class = "delta_sharing_http_error"
+    class = "httr2_http_400"
   )
   expect_identical(
     resolve_query_format(profile, auth, identifier, "auto"),
@@ -206,7 +206,7 @@ test_that("capability headers distinguish snapshot, CDF, and parquet", {
   expect_identical(capability_header("parquet"), "responseformat=parquet")
 })
 
-test_that("format negotiation falls back to parquet and tolerates old contexts", {
+test_that("format negotiation falls back to parquet", {
   profile <- test_profile()
   auth <- sharing_auth_context(profile)
   identifier <- sharing_table_identifier("sales.default.orders")
@@ -217,12 +217,6 @@ test_that("format negotiation falls back to parquet and tolerates old contexts",
   expect_identical(
     resolve_query_format(profile, auth, identifier, "auto"),
     "parquet"
-  )
-  old_auth <- list(authenticate = auth$authenticate)
-  expect_null(cached_response_format(old_auth, identifier))
-  expect_identical(
-    remember_response_format(old_auth, identifier, "delta"),
-    "delta"
   )
 })
 

@@ -36,108 +36,7 @@ snapshot_delta_actions <- function() {
   )
 }
 
-streaming_test_response <- function(text) {
-  bytes <- charToRaw(text)
-  state <- new.env(parent = emptyenv())
-  state$position <- 1L
-  state$open <- TRUE
-  body <- new.env(parent = emptyenv())
-  body$read <- function(size) {
-    if (!state$open || state$position > length(bytes)) {
-      return(raw())
-    }
-    end <- min(state$position + size - 1L, length(bytes))
-    value <- bytes[seq.int(state$position, end)]
-    state$position <- end + 1L
-    value
-  }
-  body$is_complete <- function() state$position > length(bytes)
-  body$is_open <- function() state$open
-  body$close <- function() {
-    state$open <- FALSE
-    invisible(NULL)
-  }
-  class(body) <- c("StreamingBody", "R6")
-
-  resp <- httr2::response(
-    200,
-    headers = list(`content-type` = "application/x-ndjson")
-  )
-  resp$body <- body
-  resp
-}
-
-test_that("streaming responses deliver bounded groups of lines to R", {
-  body <- paste(sprintf('{"value":%d}', 1:5), collapse = "\n")
-  httr2::local_mocked_responses(
-    function(req) httr2::response(200, body = charToRaw(body))
-  )
-  req <- sharing_request(
-    test_profile(),
-    sharing_auth_context(test_profile()),
-    "stream",
-    operation = "read"
-  )
-  chunks <- sharing_stream_lines(
-    req,
-    function(lines, chunks) {
-      c(chunks, list(lines))
-    },
-    state = list(),
-    lines_per_chunk = 2L
-  )
-
-  expect_equal(purrr::list_c(chunks), strsplit(body, "\n", fixed = TRUE)[[1L]])
-  expect_true(all(purrr::map_int(chunks, length) <= 2L))
-})
-
-test_that("streaming responses exercise httr2's connection-body path", {
-  body <- paste(sprintf('{"value":%d}', 1:5), collapse = "\n")
-  httr2::local_mocked_responses(
-    function(req) streaming_test_response(body)
-  )
-  req <- sharing_request(
-    test_profile(),
-    sharing_auth_context(test_profile()),
-    "stream",
-    operation = "read"
-  )
-  chunks <- sharing_stream_lines(
-    req,
-    function(lines, chunks) {
-      c(chunks, list(lines))
-    },
-    state = list(),
-    lines_per_chunk = 2L
-  )
-
-  expect_equal(purrr::list_c(chunks), strsplit(body, "\n", fixed = TRUE)[[1L]])
-  expect_true(all(purrr::map_int(chunks, length) <= 2L))
-})
-
-test_that("streaming responses reject an oversized NDJSON line", {
-  body <- '{"value":"too-large"}'
-  httr2::local_mocked_responses(
-    function(req) streaming_test_response(body)
-  )
-  req <- sharing_request(
-    test_profile(),
-    sharing_auth_context(test_profile()),
-    "stream",
-    operation = "read"
-  )
-
-  expect_error(
-    sharing_stream_lines(
-      req,
-      function(lines, state) state,
-      max_line_bytes = 8L
-    ),
-    class = "delta_sharing_protocol_error"
-  )
-})
-
-test_that("snapshot pages stream directly into one private commit", {
+test_that("snapshot pages append to one private commit", {
   state <- new.env(parent = emptyenv())
   state$page <- 0L
   mock <- function(req) {
@@ -203,7 +102,7 @@ test_that("snapshot pages stream directly into one private commit", {
   )
 })
 
-test_that("parquet snapshot pages use the same bounded preparation path", {
+test_that("parquet snapshot pages use the same preparation path", {
   actions <- list(
     list(protocol = list(minReaderVersion = 1L, minWriterVersion = 2L)),
     list(

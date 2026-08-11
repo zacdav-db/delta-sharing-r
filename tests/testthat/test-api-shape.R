@@ -42,11 +42,13 @@ test_that("table accepts explicit share, schema, and name components", {
   )
 })
 
-test_that("snapshot rejects mutually exclusive version and timestamp", {
+test_that("snapshot leaves version and timestamp validation to the server", {
   tbl <- test_client()$table("sales.default.orders")
-  expect_error(
-    tbl$snapshot(version = 1, timestamp = as.POSIXct("2020-01-01", tz = "UTC")),
-    class = "delta_sharing_validation_error"
+  expect_no_error(
+    tbl$snapshot(
+      version = 1,
+      timestamp = as.POSIXct("2020-01-01", tz = "UTC")
+    )
   )
 })
 
@@ -58,17 +60,43 @@ test_that("snapshot accepts protocol-native timestamp strings", {
   )
 })
 
-test_that("numeric read options remain non-negative whole numbers", {
+test_that("limit remains a non-negative whole number", {
   tbl <- test_client()$table("sales.default.orders")
 
   purrr::walk(
     list(-1, 1.5, Inf, TRUE),
     function(value) {
       expect_error(
-        tbl$snapshot(version = value),
+        tbl$snapshot(limit = value),
         class = "delta_sharing_validation_error"
       )
     }
+  )
+})
+
+test_that("changes leaves bound validation to the server", {
+  tbl <- test_client()$table("sales.default.orders")
+
+  expect_no_error(tbl$changes(starting_version = 2, ending_version = 1))
+  expect_no_error(tbl$changes(ending_version = 2))
+  expect_no_error(tbl$changes())
+})
+
+test_that("readers validate options interpreted by the package", {
+  tbl <- test_client()$table("sales.default.orders")
+
+  expect_error(
+    tbl$snapshot(columns = 1),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    tbl$snapshot(predicate = "json"),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(tbl$snapshot(response_format = "csv"), class = "rlang_error")
+  expect_error(
+    tbl$changes(columns = 1),
+    class = "delta_sharing_validation_error"
   )
 })
 

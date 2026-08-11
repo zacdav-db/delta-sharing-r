@@ -10,9 +10,7 @@ Delta Sharing change data feed reader
 }
 \details{
 An immutable change data feed specification with Arrow materializers. Created
-by \code{SharingTable$changes()}. Exactly one starting bound is required and an
-optional ending bound of the same kind; version and timestamp bounds cannot
-be mixed.
+by \code{SharingTable$changes()}. The sharing server validates the supplied bounds.
 }
 \section{Super class}{
 \code{\link[delta.sharing:SharingReader]{delta.sharing::SharingReader}} -> \code{SharingChanges}
