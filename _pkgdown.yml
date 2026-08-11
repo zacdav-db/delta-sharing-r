@@ -12,6 +12,7 @@ reference:
   - title: Connect and discover
     desc: Create a client, discover shared data, and obtain table handles.
     contents:
+      - demo_profile
       - sharing_client
       - SharingClient
       - SharingTable
