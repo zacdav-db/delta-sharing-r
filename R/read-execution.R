@@ -115,7 +115,7 @@ prepare_snapshot_query_log <- function(
       query_result$metadata,
       "read"
     )
-    write_staged_snapshot_commit(log_dir, header, staged_actions)
+    write_snapshot_commit(log_dir, header, staged_actions)
     list(
       response_format = format,
       page_count = query_result$page_count,
