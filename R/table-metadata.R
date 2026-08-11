@@ -212,6 +212,13 @@ parse_table_actions <- function(resp, operation) {
       )
     }
   }
+  if (is.null(protocol) || is.null(metadata)) {
+    abort(
+      "The metadata response did not include protocol and metadata.",
+      type = "protocol",
+      operation = operation
+    )
+  }
   list(
     protocol = protocol,
     metadata = metadata,

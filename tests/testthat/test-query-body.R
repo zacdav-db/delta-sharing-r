@@ -53,6 +53,14 @@ test_that("snapshot timestamps are formatted for the wire", {
   )
 })
 
+test_that("snapshot version and timestamp are both sent when supplied", {
+  timestamp <- as.POSIXct("2026-01-01", tz = "UTC")
+  body <- query_body(list(version = 3, timestamp = timestamp), NULL)
+
+  expect_identical(body$version, 3)
+  expect_identical(body$timestamp, "2026-01-01T00:00:00Z")
+})
+
 test_that("parquet action helpers validate required wire fields", {
   expect_equal(as_json_map(NULL), rlang::set_names(list(), character()))
   expect_equal(as_json_map(c(a = 1)), list(a = 1))

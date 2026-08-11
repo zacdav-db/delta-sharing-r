@@ -305,7 +305,8 @@ query_body <- function(spec, page_token) {
   if (!is.null(spec$limit)) body$limitHint <- spec$limit
   if (!is.null(spec$version)) {
     body$version <- spec$version
-  } else if (!is.null(spec$timestamp)) {
+  }
+  if (!is.null(spec$timestamp)) {
     body$timestamp <- format_timestamp(spec$timestamp)
   }
   if (!is.null(page_token)) body$pageToken <- page_token

@@ -34,17 +34,20 @@ test_that("wire projections do not silently coerce or truncate values", {
 })
 
 test_that("metadata fields retain their wire types", {
-  body <- ndjson_body(list(list(
-    metadata = list(
-      id = 42,
-      name = "events",
-      schemaString = "{\"type\":\"struct\",\"fields\":[]}",
-      partitionColumns = list(),
-      numFiles = "5",
-      size = "not-a-number",
-      createdTime = "yesterday"
+  body <- ndjson_body(list(
+    list(protocol = list(minReaderVersion = 1L)),
+    list(
+      metadata = list(
+        id = 42,
+        name = "events",
+        schemaString = "{\"type\":\"struct\",\"fields\":[]}",
+        partitionColumns = list(),
+        numFiles = "5",
+        size = "not-a-number",
+        createdTime = "yesterday"
+      )
     )
-  )))
+  ))
   response <- httr2::response(200, body = charToRaw(body))
 
   metadata <- parse_table_actions(response, "metadata")$metadata
@@ -53,6 +56,26 @@ test_that("metadata fields retain their wire types", {
   expect_identical(metadata$num_files, "5")
   expect_identical(metadata$size, "not-a-number")
   expect_identical(metadata$created_time, "yesterday")
+})
+
+test_that("metadata responses require protocol and metadata actions", {
+  protocol_only <- httr2::response(
+    200,
+    body = charToRaw(ndjson_body(list(list(protocol = list()))))
+  )
+  metadata_only <- httr2::response(
+    200,
+    body = charToRaw(ndjson_body(list(list(metadata = list(id = "table")))))
+  )
+
+  expect_error(
+    parse_table_actions(protocol_only, "metadata"),
+    class = "delta_sharing_protocol_error"
+  )
+  expect_error(
+    parse_table_actions(metadata_only, "metadata"),
+    class = "delta_sharing_protocol_error"
+  )
 })
 
 test_that("table protocol projects delta reader features", {
