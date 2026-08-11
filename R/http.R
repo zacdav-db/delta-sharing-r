@@ -195,7 +195,7 @@ sharing_paginate <- function(
   )
   next_token <- function(resp) {
     token <- discovery_body(resp, operation)$nextPageToken
-    if (is_scalar_character(token) && nzchar(token)) token else NULL
+    if (is_scalar_character(token)) token else NULL
   }
   resps <- with_sharing_errors(
     first,

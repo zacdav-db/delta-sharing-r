@@ -208,10 +208,6 @@ parse_profile_auth <- function(profile, version) {
   )
 }
 
-parse_profile_endpoint <- function(profile) {
-  normalize_profile_url(required_profile_field(profile, "endpoint"))
-}
-
 # Parse a profile source into the plain list the client holds internally.
 sharing_profile_parse <- function(source) {
   profile <- read_profile(source)
@@ -219,7 +215,9 @@ sharing_profile_parse <- function(source) {
   credentials <- parse_profile_auth(profile, version)
   list(
     version = version,
-    endpoint = parse_profile_endpoint(profile),
+    endpoint = normalize_profile_url(
+      required_profile_field(profile, "endpoint")
+    ),
     auth_type = credentials$kind,
     expiration_time = credentials$expiration_time,
     credentials = credentials

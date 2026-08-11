@@ -47,58 +47,6 @@ sharing_changes_validate <- function(
   )
   ending_timestamp <- normalize_timestamp(ending_timestamp, "ending_timestamp")
 
-  has_version <- !is.null(starting_version) || !is.null(ending_version)
-  has_timestamp <- !is.null(starting_timestamp) || !is.null(ending_timestamp)
-
-  if (has_version && has_timestamp) {
-    abort(
-      "Version and timestamp bounds cannot be mixed.",
-      type = "validation",
-      operation = "changes"
-    )
-  }
-  if (!has_version && !has_timestamp) {
-    abort(
-      "One of `starting_version` or `starting_timestamp` is required.",
-      type = "validation",
-      operation = "changes"
-    )
-  }
-  if (has_version && is.null(starting_version)) {
-    abort(
-      "`starting_version` is required for a version range.",
-      type = "validation",
-      operation = "changes"
-    )
-  }
-  if (has_timestamp && is.null(starting_timestamp)) {
-    abort(
-      "`starting_timestamp` is required for a timestamp range.",
-      type = "validation",
-      operation = "changes"
-    )
-  }
-  if (!is.null(ending_version) && ending_version < starting_version) {
-    abort(
-      "`ending_version` must be greater than or equal to `starting_version`.",
-      type = "validation",
-      operation = "changes"
-    )
-  }
-  comparable_timestamps <- inherits(starting_timestamp, "POSIXct") &&
-    inherits(ending_timestamp, "POSIXct")
-  if (
-    !is.null(ending_timestamp) &&
-      comparable_timestamps &&
-      ending_timestamp < starting_timestamp
-  ) {
-    abort(
-      "`ending_timestamp` must be greater than or equal to `starting_timestamp`.",
-      type = "validation",
-      operation = "changes"
-    )
-  }
-
   list(
     starting_version = starting_version,
     ending_version = ending_version,

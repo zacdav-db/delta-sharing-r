@@ -56,7 +56,7 @@ stream_snapshot_query <- function(
               state$metadata <- action$metaData
             }
             token <- action$nextPageToken
-            if (is_scalar_character(token) && nzchar(token)) {
+            if (is_scalar_character(token)) {
               state$next_page_token <- token
             }
             state
@@ -212,9 +212,9 @@ sharing_query_changes <- function(profile, auth, identifier, spec) {
 find_next_page_token <- function(actions) {
   action <- purrr::detect(actions, function(action) {
     token <- action$nextPageToken
-    is_scalar_character(token) && nzchar(token)
+    is_scalar_character(token)
   })
-  action$nextPageToken %||% NULL
+  action$nextPageToken
 }
 
 bucket_cdf_actions <- function(actions, start_version, end_version) {

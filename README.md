@@ -42,7 +42,6 @@ housing$schema()
 snapshot <- housing$snapshot(limit = 1000)
 housing_df <- snapshot$to_data_frame()
 housing_arrow <- snapshot$to_arrow()
-housing_stream <- snapshot$to_arrow_stream()
 ```
 
 Eager reads use the same direct Arrow stream as the lazy materializers, without

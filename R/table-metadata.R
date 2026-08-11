@@ -44,21 +44,11 @@ table_cache_key <- function(identifier) {
 }
 
 cached_response_format <- function(auth, identifier) {
-  cache <- auth$response_format_cache
-  if (!is.environment(cache)) {
-    return(NULL)
-  }
-  cache[[table_cache_key(identifier)]]
+  auth$response_format_cache[[table_cache_key(identifier)]]
 }
 
 remember_response_format <- function(auth, identifier, response_format) {
-  cache <- auth$response_format_cache
-  if (
-    is.environment(cache) &&
-      response_format %in% c("delta", "parquet")
-  ) {
-    cache[[table_cache_key(identifier)]] <- response_format
-  }
+  auth$response_format_cache[[table_cache_key(identifier)]] <- response_format
   response_format
 }
 

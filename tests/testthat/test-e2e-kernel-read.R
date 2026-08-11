@@ -172,10 +172,6 @@ test_that("native scan validation rejects unsafe or ambiguous inputs", {
     paste0("file://", fixture_table("local-table"))
   )
 
-  expect_error(
-    validate_native_columns(c("ID", "id")),
-    class = "delta_sharing_validation_error"
-  )
   purrr::walk(
     list(0, MAX_BATCH_SIZE + 1, 1.5, Inf),
     function(size) {

@@ -17,11 +17,8 @@ normalize_identifier_part <- function(x, name) {
 }
 
 # A non-negative whole number (a Delta table version or a row limit/count).
-normalize_count <- function(x, name, required = FALSE) {
+normalize_count <- function(x, name) {
   if (is.null(x)) {
-    if (required) {
-      abort("{.arg {name}} is required.", type = "validation")
-    }
     return(NULL)
   }
   if (!rlang::is_scalar_integerish(x, finite = TRUE) || x < 0) {
@@ -33,19 +30,16 @@ normalize_count <- function(x, name, required = FALSE) {
   as.double(x)
 }
 
-normalize_version <- function(x, name, required = FALSE) {
-  normalize_count(x, name, required = required)
+normalize_version <- function(x, name) {
+  normalize_count(x, name)
 }
 
 normalize_limit <- function(limit) {
   normalize_count(limit, "limit")
 }
 
-normalize_timestamp <- function(x, name, required = FALSE) {
+normalize_timestamp <- function(x, name) {
   if (is.null(x)) {
-    if (required) {
-      abort("{.arg {name}} is required.", type = "validation")
-    }
     return(NULL)
   }
   if (is_scalar_character(x)) {
@@ -75,9 +69,9 @@ normalize_columns <- function(columns) {
       type = "validation"
     )
   }
-  if (anyDuplicated(columns)) {
+  if (anyDuplicated(tolower(columns))) {
     abort(
-      "{.arg columns} must not contain duplicate names.",
+      "{.arg columns} must not contain duplicate names ignoring case.",
       type = "validation"
     )
   }

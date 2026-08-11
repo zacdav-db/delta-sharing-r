@@ -63,7 +63,7 @@ client <- sharing_client("~/config.share")
 - a parsed list.
 
 Profile versions 1 and 2 support bearer tokens, basic auth, OAuth client
-credentials, and private-key JWT client assertions.
+credentials, and private-key JWT bearer authentication.
 
 Creating the client is offline: it parses the profile without making a request
 or exchanging a token. When authentication is first needed, `httr2` handles
@@ -115,6 +115,8 @@ snapshot <- orders$snapshot(
 
 # Lazy Arrow C stream (use when the result may not fit in memory).
 stream <- snapshot$to_arrow_stream(batch_size = 65536L)
+# Pass the stream to a compatible consumer, or release it when unused.
+stream$release()
 
 # Lazy Arrow reader for consumers such as DuckDB.
 reader <- snapshot$to_arrow_reader()

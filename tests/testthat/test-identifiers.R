@@ -43,31 +43,34 @@ test_that("changes validation accepts protocol-native timestamp strings", {
   expect_equal(spec$ending_timestamp, "2024-01-02T00:00:00.123Z")
 })
 
-test_that("changes validation rejects mixed bounds", {
-  expect_error(
-    sharing_changes_validate(
-      1,
-      NULL,
-      as.POSIXct("2020-01-01"),
-      NULL,
-      NULL,
-      "auto"
-    ),
-    class = "delta_sharing_validation_error"
+test_that("changes validation leaves bound relationships to the server", {
+  mixed <- sharing_changes_validate(
+    1,
+    NULL,
+    as.POSIXct("2020-01-01", tz = "UTC"),
+    NULL,
+    NULL,
+    "auto"
   )
-})
+  expect_identical(mixed$starting_version, 1)
+  expect_s3_class(mixed$starting_timestamp, "POSIXct")
 
-test_that("changes validation requires a starting bound", {
-  expect_error(
-    sharing_changes_validate(NULL, NULL, NULL, NULL, NULL, "auto"),
-    class = "delta_sharing_validation_error"
+  ending_only <- sharing_changes_validate(
+    NULL,
+    2,
+    NULL,
+    NULL,
+    NULL,
+    "auto"
   )
-})
+  expect_identical(ending_only$ending_version, 2)
 
-test_that("changes validation rejects an ending version before its start", {
-  expect_error(
-    sharing_changes_validate(125, 120, NULL, NULL, NULL, "auto"),
-    class = "delta_sharing_validation_error"
+  reversed <- sharing_changes_validate(2, 1, NULL, NULL, NULL, "auto")
+  expect_identical(reversed$starting_version, 2)
+  expect_identical(reversed$ending_version, 1)
+
+  expect_no_error(
+    sharing_changes_validate(NULL, NULL, NULL, NULL, NULL, "auto")
   )
 })
 
@@ -90,34 +93,6 @@ test_that("explicit identifiers require all three components", {
   )
 })
 
-test_that("changes validation rejects ending-only ranges", {
-  expect_error(
-    sharing_changes_validate(NULL, 2, NULL, NULL, NULL, "auto"),
-    class = "delta_sharing_validation_error"
-  )
-  expect_error(
-    sharing_changes_validate(
-      NULL,
-      NULL,
-      NULL,
-      as.POSIXct("2026-01-02", tz = "UTC"),
-      NULL,
-      "auto"
-    ),
-    class = "delta_sharing_validation_error"
-  )
-})
-
-test_that("changes validation orders POSIXct timestamp bounds", {
-  start <- as.POSIXct("2026-01-02", tz = "UTC")
-  end <- as.POSIXct("2026-01-01", tz = "UTC")
-
-  expect_error(
-    sharing_changes_validate(NULL, NULL, start, end, NULL, "auto"),
-    class = "delta_sharing_validation_error"
-  )
-})
-
 test_that("shared validation helpers normalize supported values", {
   expect_null(normalize_count(NULL, "count"))
   expect_identical(normalize_count(3L, "count"), 3)
@@ -134,14 +109,6 @@ test_that("shared validation helpers normalize supported values", {
 })
 
 test_that("shared validation helpers reject malformed values", {
-  expect_error(
-    normalize_count(NULL, "count", required = TRUE),
-    class = "delta_sharing_validation_error"
-  )
-  expect_error(
-    normalize_timestamp(NULL, "timestamp", required = TRUE),
-    class = "delta_sharing_validation_error"
-  )
   purrr::walk(
     list(NA, Inf, as.POSIXct(c("2026-01-01", "2026-01-02"), tz = "UTC")),
     function(value) {
@@ -152,7 +119,14 @@ test_that("shared validation helpers reject malformed values", {
     }
   )
   purrr::walk(
-    list(character(), NA_character_, c("a", ""), c("a", "a"), 1),
+    list(
+      character(),
+      NA_character_,
+      c("a", ""),
+      c("a", "a"),
+      c("A", "a"),
+      1
+    ),
     function(value) {
       expect_error(
         normalize_columns(value),
