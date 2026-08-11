@@ -14,6 +14,10 @@
 # Build the httr2 oauth_client used by both OAuth flows. For client-secret the
 # client authenticates with a secret; for private-key JWT the key signs the
 # bearer assertion used by the token grant.
+oauth_no_client_auth <- function(req, ...) {
+  req
+}
+
 oauth_client_for <- function(credentials) {
   if (identical(credentials$kind, "oauth_client_credentials")) {
     httr2::oauth_client(
@@ -28,9 +32,7 @@ oauth_client_for <- function(credentials) {
       id = credentials$client_id,
       token_url = credentials$token_endpoint,
       key = load_private_key(credentials$private_key_file),
-      # The signed assertion is the grant credential. As in Python, do not add
-      # a second client-authentication field to the token request.
-      auth = function(req, client) req,
+      auth = oauth_no_client_auth,
       name = "delta.sharing"
     )
   } else {
@@ -83,33 +85,20 @@ sharing_auth_context <- function(profile) {
       )
     },
     oauth_jwt_bearer_private_key_jwt = function(req) {
-      now <- Sys.time()
-      algorithm <- credentials$algorithm %||% "RS256"
-      signature_size <- switch(
-        algorithm,
-        RS256 = 256L,
-        RS384 = 384L,
-        RS512 = 512L,
-        abort(
-          "Private-key OAuth algorithm {.val {algorithm}} is not supported.",
-          type = "auth",
-          operation = "oauth_jwt_bearer_private_key_jwt"
-        )
-      )
       httr2::req_oauth_bearer_jwt(
         req,
         client = get_oauth_client(),
         claim = httr2::jwt_claim(
           iss = credentials$client_id,
           aud = credentials$issuer,
-          iat = now,
-          exp = now + 120,
+          exp = Sys.time() + 120,
           scope = credentials$scope,
           resource = credentials$audience
         ),
-        signature = jose::jwt_encode_sig,
         signature_params = list(
-          size = signature_size,
+          size = as.integer(
+            substr(credentials$algorithm %||% "RS256", 3, 5)
+          ),
           header = if (is.null(credentials$key_id)) {
             list()
           } else {
