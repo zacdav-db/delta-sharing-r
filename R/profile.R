@@ -1,27 +1,26 @@
 # Delta Sharing profile parsing. Parses profile versions 1 and 2 from a file
-# path, an inline JSON string, or an already-parsed list, and returns a plain
-# list. No network request or token exchange happens here; credential material
-# stays in the returned list and the client holds it privately.
+# path or an already-parsed list, and returns a plain list. No network request
+# or token exchange happens here; credential material stays in the returned
+# list and the client holds it privately.
 #
 # The profile is a config file the user controls. Matching the Python client,
 # parsing is structural: decode the object, select a supported version/auth
 # shape, and extract the fields that shape requires. Credential content is left
 # to httr2, openssl, the token endpoint, or the sharing server when it is used.
 
-# Read a profile source into a parsed list. A string beginning with "{" is
-# treated as inline JSON, otherwise as a file path.
+# Read a profile file or accept an already-parsed profile list.
 read_profile <- function(source) {
   if (is.list(source)) {
     return(source)
   }
   if (!is_scalar_character(source)) {
     abort(
-      "{.arg profile} must be a file path, a JSON string, or a list.",
+      "{.arg profile} must be a file path or a list.",
       type = "validation",
       operation = "sharing_profile"
     )
   }
-  json <- if (startsWith(trimws(source), "{")) source else read_file(source)
+  json <- read_file(source)
   parsed <- jsonlite::fromJSON(json, simplifyVector = FALSE)
   if (!is.list(parsed) || is.null(names(parsed))) {
     abort(
@@ -31,6 +30,27 @@ read_profile <- function(source) {
     )
   }
   parsed
+}
+
+#' Delta Sharing open-datasets profile
+#'
+#' Fetches the official profile for the Delta Sharing open-datasets server and
+#' returns it as a parsed list. The profile is public, but fetching it requires
+#' an internet connection.
+#'
+#' @return A parsed Delta Sharing profile list.
+#' @examplesIf interactive()
+#' profile <- demo_profile()
+#' names(profile)
+#' @export
+demo_profile <- function() {
+  profile_url <- paste0(
+    "https://raw.githubusercontent.com/delta-io/delta-sharing/",
+    "main/examples/open-datasets.share"
+  )
+  httr2::request(profile_url) |>
+    httr2::req_perform() |>
+    httr2::resp_body_json(check_type = FALSE, simplifyVector = FALSE)
 }
 
 read_file <- function(path) {
@@ -61,12 +81,9 @@ optional_profile_field <- function(profile, name) {
 }
 
 normalize_profile_url <- function(value) {
-  if (is.null(value)) {
-    return(NULL)
-  }
   if (!is.character(value) || length(value) != 1L || is.na(value)) {
     abort(
-      "Profile URL fields must be strings or null.",
+      "Profile URL fields must be strings.",
       type = "validation",
       operation = "sharing_profile"
     )
@@ -79,43 +96,23 @@ normalize_profile_url <- function(value) {
 }
 
 parse_profile_version <- function(profile) {
-  raw <- required_profile_field(profile, "shareCredentialsVersion")
-  if (is.character(raw)) {
-    value <- trimws(raw)
-    valid <- length(value) == 1L &&
-      !is.na(value) &&
-      grepl("^[+-]?[0-9]+$", value)
-    version <- if (valid) suppressWarnings(as.numeric(value)) else NA_real_
-  } else if (is.numeric(raw) || is.logical(raw)) {
-    version <- if (length(raw) == 1L) trunc(as.numeric(raw)) else NA_real_
-  } else {
-    version <- NA_real_
-  }
-  if (length(version) != 1L || is.na(version) || !is.finite(version)) {
+  version <- as.integer(
+    required_profile_field(profile, "shareCredentialsVersion")
+  )
+
+  if (
+    length(version) != 1L ||
+      is.na(version) ||
+      !version %in% c(1L, 2L)
+  ) {
     abort(
       "Profile field {.field shareCredentialsVersion} must be 1 or 2.",
       type = "validation",
       operation = "sharing_profile"
     )
   }
-  if (version > max(profile_versions)) {
-    abort(
-      "Profile version {version} is newer than supported; upgrade delta.sharing.",
-      type = "unsupported",
-      operation = "sharing_profile",
-      feature = "profile version"
-    )
-  }
-  if (!version %in% profile_versions) {
-    abort(
-      "Profile field {.field shareCredentialsVersion} must be 1 or 2.",
-      type = "validation",
-      operation = "sharing_profile"
-    )
-  }
-  as.integer(version)
+  version
 }
-profile_versions <- c(1, 2)
 
 parse_bearer_auth <- function(profile) {
   list(

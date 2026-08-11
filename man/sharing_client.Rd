@@ -7,24 +7,21 @@
 sharing_client(profile)
 }
 \arguments{
-\item{profile}{A profile file path, a parsed profile \code{list}, or a JSON
-string. Profile versions 1 (bearer) and 2 (bearer, basic, OAuth
-client-credentials, and private-key JWT) are supported.}
+\item{profile}{A profile file path or parsed profile \code{list}. Profile versions
+1 (bearer) and 2 (bearer, basic, OAuth client-credentials, and private-key
+JWT) are supported.}
 }
 \value{
 A \link{SharingClient}.
 }
 \description{
 Constructs a \link{SharingClient} from a Delta Sharing profile. The profile may be
-a path to a \code{.share} file, a parsed profile list, or an inline JSON string.
-Construction parses and validates the profile but performs no network request
-or token exchange.
+a path to a \code{.share} file or a parsed profile list. Construction parses and
+validates the profile but performs no network request or token exchange.
 }
 \examples{
-client <- sharing_client(list(
-  shareCredentialsVersion = 2,
-  type = "bearer_token",
-  endpoint = "https://sharing.example.test/api",
-  bearerToken = "example-only-not-a-secret"
-))
+\dontshow{if (interactive()) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+client <- sharing_client(demo_profile())
+client$list_tables()
+\dontshow{\}) # examplesIf}
 }

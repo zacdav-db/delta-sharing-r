@@ -38,13 +38,7 @@ can be used without registering or creating a private credential:
 ```{r, eval = FALSE}
 library(delta.sharing)
 
-profile_url <- "https://raw.githubusercontent.com/delta-io/delta-sharing/main/examples/open-datasets.share"
-
-open_profile <- httr2::request(profile_url) |>
-  httr2::req_perform() |>
-  httr2::resp_body_string()
-
-client <- sharing_client(open_profile)
+client <- sharing_client(demo_profile())
 client$list_tables()
 ```
 
@@ -65,8 +59,7 @@ client <- sharing_client("~/config.share")
 
 `sharing_client()` accepts:
 
-- a path to a `.share` file;
-- an inline JSON string; or
+- a path to a `.share` file; or
 - a parsed list.
 
 Profile versions 1 and 2 support bearer tokens, basic auth, OAuth client

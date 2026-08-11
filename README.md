@@ -23,26 +23,26 @@ Building from source requires Cargo and `rustc >= 1.88`.
 ```r
 library(delta.sharing)
 
-client <- sharing_client("~/config.share")
+client <- sharing_client(demo_profile())
 
-# Discover everything available through the profile
+# Discover the public example data
 client$list_shares()
 client$list_schemas()
 client$list_tables()
 
 # Create a reusable table handle
-orders <- client$table("sales.default.orders")
+housing <- client$table("delta_sharing.default.boston-housing")
 
 # Inspect metadata without scanning rows
-orders$version()
-orders$metadata()
-orders$schema()
+housing$version()
+housing$metadata()
+housing$schema()
 
 # Read a snapshot
-snapshot <- orders$snapshot(columns = c("order_id", "amount"), limit = 1000)
-orders_df <- snapshot$to_data_frame()
-orders_arrow <- snapshot$to_arrow()
-orders_stream <- snapshot$to_arrow_stream()
+snapshot <- housing$snapshot(limit = 1000)
+housing_df <- snapshot$to_data_frame()
+housing_arrow <- snapshot$to_arrow()
+housing_stream <- snapshot$to_arrow_stream()
 ```
 
 Eager reads use the same direct Arrow stream as the lazy materializers, without
@@ -51,6 +51,13 @@ an intermediate collection or replay step.
 The default `response_format = "auto"` negotiation is reused for subsequent
 reads of the same table through one client. Metadata and schema inspection
 remain fresh requests.
+
+For your own share, pass a profile file and select its table:
+
+```r
+client <- sharing_client("~/config.share")
+orders <- client$table("sales.default.orders")
+```
 
 ## Snapshots and changes
 

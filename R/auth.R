@@ -5,22 +5,15 @@
 #   - bearer_token: httr2::req_auth_bearer_token()
 #   - basic:        httr2::req_auth_basic()
 #   - oauth_client_credentials:            httr2::req_oauth_client_credentials()
-#   - oauth_jwt_bearer_private_key_jwt:    oauth_client() with JWT-signature
-#                                          client auth + client-credentials flow
+#   - oauth_jwt_bearer_private_key_jwt:    httr2::req_oauth_bearer_jwt()
 #
 # `sharing_auth_context(profile)` returns an object with an `$authenticate(req)`
 # function that applies the correct auth to an httr2 request. httr2's OAuth cache
 # lives inside the created oauth_client and is reused across requests.
 
-jwt_assertion_type <- "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
-
-auth_abort <- function(message, operation = "authenticate") {
-  abort(message, type = "auth", operation = operation)
-}
-
 # Build the httr2 oauth_client used by both OAuth flows. For client-secret the
-# client authenticates with a secret in the body/header; for private-key JWT the
-# client authenticates by signing a JWT assertion with the RSA key.
+# client authenticates with a secret; for private-key JWT the key signs the
+# bearer assertion used by the token grant.
 oauth_client_for <- function(credentials) {
   if (identical(credentials$kind, "oauth_client_credentials")) {
     httr2::oauth_client(
@@ -31,25 +24,13 @@ oauth_client_for <- function(credentials) {
       name = "delta.sharing"
     )
   } else if (identical(credentials$kind, "oauth_jwt_bearer_private_key_jwt")) {
-    key <- load_private_key(credentials$private_key_file)
-    claim <- list(
-      iss = credentials$issuer,
-      sub = credentials$client_id,
-      aud = credentials$audience
-    )
     httr2::oauth_client(
       id = credentials$client_id,
       token_url = credentials$token_endpoint,
-      key = key,
-      auth = "jwt_sig",
-      auth_params = list(
-        claim = claim,
-        header = if (is.null(credentials$key_id)) {
-          list()
-        } else {
-          list(kid = credentials$key_id)
-        }
-      ),
+      key = load_private_key(credentials$private_key_file),
+      # The signed assertion is the grant credential. As in Python, do not add
+      # a second client-authentication field to the token request.
+      auth = function(req, client) req,
       name = "delta.sharing"
     )
   } else {
@@ -62,8 +43,9 @@ load_private_key <- function(path) {
   tryCatch(
     openssl::read_key(path),
     error = function(cnd) {
-      auth_abort(
+      abort(
         "The configured private key could not be read.",
+        type = "auth",
         operation = "oauth_jwt_bearer_private_key_jwt"
       )
     }
@@ -101,13 +83,46 @@ sharing_auth_context <- function(profile) {
       )
     },
     oauth_jwt_bearer_private_key_jwt = function(req) {
-      httr2::req_oauth_client_credentials(
+      now <- Sys.time()
+      algorithm <- credentials$algorithm %||% "RS256"
+      signature_size <- switch(
+        algorithm,
+        RS256 = 256L,
+        RS384 = 384L,
+        RS512 = 512L,
+        abort(
+          "Private-key OAuth algorithm {.val {algorithm}} is not supported.",
+          type = "auth",
+          operation = "oauth_jwt_bearer_private_key_jwt"
+        )
+      )
+      httr2::req_oauth_bearer_jwt(
         req,
         client = get_oauth_client(),
-        scope = credentials$scope
+        claim = httr2::jwt_claim(
+          iss = credentials$client_id,
+          aud = credentials$issuer,
+          iat = now,
+          exp = now + 120,
+          scope = credentials$scope,
+          resource = credentials$audience
+        ),
+        signature = jose::jwt_encode_sig,
+        signature_params = list(
+          size = signature_size,
+          header = if (is.null(credentials$key_id)) {
+            list()
+          } else {
+            list(kid = credentials$key_id)
+          }
+        )
       )
     },
-    auth_abort("The configured profile authentication type is not supported.")
+    abort(
+      "The configured profile authentication type is not supported.",
+      type = "auth",
+      operation = "authenticate"
+    )
   )
 
   structure(

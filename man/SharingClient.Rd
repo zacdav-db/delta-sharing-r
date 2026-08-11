@@ -39,7 +39,7 @@ Create a client from a profile.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{profile}}{Profile path, parsed list, or JSON string.}
+\item{\code{profile}}{Profile path or parsed list.}
 }
 \if{html}{\out{</div>}}
 }

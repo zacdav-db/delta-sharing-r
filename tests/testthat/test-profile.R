@@ -49,7 +49,7 @@ test_that("profile parsing follows Python's structural validation level", {
   expect_equal(p$expiration_time, "not-a-timestamp")
 })
 
-test_that("numeric profile versions are coerced like Python int", {
+test_that("profile versions use base R integer coercion", {
   p <- sharing_profile_parse(list(
     shareCredentialsVersion = 1.9,
     endpoint = "",
@@ -59,14 +59,28 @@ test_that("numeric profile versions are coerced like Python int", {
   expect_equal(p$version, 1L)
   expect_equal(p$endpoint, "")
 
-  expect_error(
-    sharing_profile_parse(list(
-      shareCredentialsVersion = "1.9",
-      endpoint = "",
-      bearerToken = "t"
-    )),
-    class = "delta_sharing_validation_error"
-  )
+  character_version <- sharing_profile_parse(list(
+    shareCredentialsVersion = "1.9",
+    endpoint = "",
+    bearerToken = "t"
+  ))
+  expect_equal(character_version$version, 1L)
+})
+
+test_that("failed integer coercions warn before rejection", {
+  purrr::walk(list("abc", Inf), function(version) {
+    expect_warning(
+      expect_error(
+        sharing_profile_parse(list(
+          shareCredentialsVersion = version,
+          endpoint = "",
+          bearerToken = "t"
+        )),
+        class = "delta_sharing_validation_error"
+      ),
+      "NAs introduced by coercion"
+    )
+  })
 })
 
 test_that("private-key metadata is preserved without parser policy checks", {
@@ -119,21 +133,15 @@ test_that("only structurally required profile keys are rejected", {
   )
 })
 
-test_that("rejects an unsupported newer profile version", {
+test_that("rejects unsupported profile versions", {
   expect_error(
     sharing_profile_parse(list(
       shareCredentialsVersion = 3,
       endpoint = "https://x.test/api",
       bearerToken = "t"
     )),
-    class = "delta_sharing_unsupported_error"
+    class = "delta_sharing_validation_error"
   )
-})
-
-test_that("parses inline JSON strings", {
-  json <- '{"shareCredentialsVersion":1,"endpoint":"https://x.test/api","bearerToken":"t"}'
-  p <- sharing_profile_parse(json)
-  expect_equal(p$endpoint, "https://x.test/api")
 })
 
 test_that("profile files use fs paths and preserve structural values", {
@@ -158,6 +166,33 @@ test_that("profile files use fs paths and preserve structural values", {
   expect_equal(profile$credentials$username, "user")
 })
 
+test_that("demo_profile returns the official public profile as a list", {
+  httr2::local_mocked_responses(function(req) {
+    expect_equal(
+      req$url,
+      paste0(
+        "https://raw.githubusercontent.com/delta-io/delta-sharing/",
+        "main/examples/open-datasets.share"
+      )
+    )
+    httr2::response(
+      200,
+      headers = list(`content-type` = "text/plain"),
+      body = charToRaw(paste0(
+        '{"shareCredentialsVersion":1,',
+        '"endpoint":"https://sharing.delta.io/delta-sharing/",',
+        '"bearerToken":"public-token"}'
+      ))
+    )
+  })
+
+  profile <- demo_profile()
+
+  expect_type(profile, "list")
+  expect_equal(profile$shareCredentialsVersion, 1L)
+  expect_equal(profile$endpoint, "https://sharing.delta.io/delta-sharing/")
+})
+
 test_that("profile sources must be readable JSON objects", {
   missing <- fs::file_temp(ext = ".share")
   invalid <- fs::file_temp(ext = ".share")
@@ -177,11 +212,9 @@ test_that("profile sources must be readable JSON objects", {
   )
 })
 
-test_that("profile URLs accept null but reject non-scalar values", {
-  expect_null(normalize_profile_url(NULL))
-
+test_that("profile URLs reject null and non-scalar values", {
   purrr::walk(
-    list(NA_character_, character(), c("https://a", "https://b"), 42),
+    list(NULL, NA_character_, character(), c("https://a", "https://b"), 42),
     function(value) {
       expect_error(
         normalize_profile_url(value),
@@ -197,7 +230,7 @@ test_that("profile versions reject unsupported structural shapes", {
     bearerToken = "token"
   )
   purrr::walk(
-    list(NULL, "not-a-version", character(), list(1), 0, Inf),
+    list(NULL, character(), 0),
     function(version) {
       profile <- c(
         list(shareCredentialsVersion = version),

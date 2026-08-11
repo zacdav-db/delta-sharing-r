@@ -21,6 +21,7 @@ Imports:
   cli,
   fs,
   httr2,
+  jose,
   jsonlite,
   nanoarrow (>= 0.8.0),
   openssl,

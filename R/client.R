@@ -1,3 +1,5 @@
+# Remove embedded user information before displaying an endpoint. For example,
+# `https://user:secret@example.com/api` becomes `https://example.com/api`.
 redact_url_userinfo <- function(url) {
   if (!is.character(url) || length(url) != 1L || is.na(url)) {
     return("<invalid endpoint>")
@@ -8,21 +10,16 @@ redact_url_userinfo <- function(url) {
 #' Create a Delta Sharing client
 #'
 #' Constructs a [SharingClient] from a Delta Sharing profile. The profile may be
-#' a path to a `.share` file, a parsed profile list, or an inline JSON string.
-#' Construction parses and validates the profile but performs no network request
-#' or token exchange.
+#' a path to a `.share` file or a parsed profile list. Construction parses and
+#' validates the profile but performs no network request or token exchange.
 #'
-#' @param profile A profile file path, a parsed profile `list`, or a JSON
-#'   string. Profile versions 1 (bearer) and 2 (bearer, basic, OAuth
-#'   client-credentials, and private-key JWT) are supported.
+#' @param profile A profile file path or parsed profile `list`. Profile versions
+#'   1 (bearer) and 2 (bearer, basic, OAuth client-credentials, and private-key
+#'   JWT) are supported.
 #' @return A [SharingClient].
-#' @examples
-#' client <- sharing_client(list(
-#'   shareCredentialsVersion = 2,
-#'   type = "bearer_token",
-#'   endpoint = "https://sharing.example.test/api",
-#'   bearerToken = "example-only-not-a-secret"
-#' ))
+#' @examplesIf interactive()
+#' client <- sharing_client(demo_profile())
+#' client$list_tables()
 #' @export
 sharing_client <- function(profile) {
   SharingClient$new(profile)
@@ -42,7 +39,7 @@ SharingClient <- R6::R6Class(
   cloneable = FALSE,
   public = list(
     #' @description Create a client from a profile.
-    #' @param profile Profile path, parsed list, or JSON string.
+    #' @param profile Profile path or parsed list.
     initialize = function(profile) {
       private$profile <- sharing_profile_parse(profile)
       private$auth <- sharing_auth_context(private$profile)
