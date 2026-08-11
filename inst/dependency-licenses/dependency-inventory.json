@@ -105,13 +105,6 @@
     {
       "distribution": "external R package; code is not bundled",
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
-      "name": "httpuv",
-      "relationship": "Suggests",
-      "requirement": null
-    },
-    {
-      "distribution": "external R package; code is not bundled",
-      "license_authority": "the installed dependency's DESCRIPTION License field and license files",
       "name": "knitr",
       "relationship": "Suggests",
       "requirement": null

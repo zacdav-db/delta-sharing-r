@@ -134,9 +134,6 @@ pub unsafe extern "C" fn delta_sharing_native_populate_snapshot_stream(
         if table_location.is_null() {
             return Err("`table_location` pointer is NULL".to_string());
         }
-        if column_count > 10_000 {
-            return Err("`column_count` must be at most 10000".to_string());
-        }
         if column_count > 0 && columns.is_null() {
             return Err("`columns` pointer is NULL for a non-empty projection".to_string());
         }
@@ -166,8 +163,8 @@ pub unsafe extern "C" fn delta_sharing_native_populate_snapshot_stream(
         let projected_columns = if column_count == 0 {
             None
         } else {
-            // SAFETY: non-null and length bounds were checked above; the C
-            // shim owns this pointer array throughout the Rust call.
+            // SAFETY: the C shim owns this valid pointer array throughout the
+            // Rust call.
             let raw_columns = unsafe { std::slice::from_raw_parts(columns, column_count) };
             let mut projected = Vec::with_capacity(column_count);
             for (index, column) in raw_columns.iter().copied().enumerate() {
@@ -233,9 +230,6 @@ pub unsafe extern "C" fn delta_sharing_native_populate_cdf_stream(
             .ok_or_else(|| "nanoarrow stream pointer is NULL".to_string())?;
         if table_location.is_null() {
             return Err("`table_location` pointer is NULL".to_string());
-        }
-        if column_count > 10_000 {
-            return Err("`column_count` must be at most 10000".to_string());
         }
         if column_count > 0 && columns.is_null() {
             return Err("`columns` pointer is NULL for a non-empty projection".to_string());

@@ -22,8 +22,6 @@ use url::Url;
 const MAX_BATCH_SIZE: usize = 1_000_000;
 const MIN_SOURCE_BATCH_SIZE: usize = 1_000;
 const MAX_SOURCE_BATCH_SIZE: usize = 65_536;
-const MAX_PROJECTION_COLUMNS: usize = 10_000;
-const MAX_TABLE_LOCATION_BYTES: usize = 32_768;
 
 #[derive(Debug, Clone)]
 pub(crate) struct SnapshotReadOptions {
@@ -104,12 +102,6 @@ fn validate_projection(columns: Option<&Vec<String>>) -> Result<(), String> {
     if columns.is_empty() {
         return Err("`columns` must be NULL or contain at least one name".to_string());
     }
-    if columns.len() > MAX_PROJECTION_COLUMNS {
-        return Err(format!(
-            "`columns` must contain at most {MAX_PROJECTION_COLUMNS} names"
-        ));
-    }
-
     let mut seen = HashSet::with_capacity(columns.len());
     for column in columns {
         if column.is_empty() {
@@ -130,11 +122,6 @@ fn validate_projection(columns: Option<&Vec<String>>) -> Result<(), String> {
 fn validate_table_location(table_location: &str) -> Result<(), String> {
     if table_location.is_empty() {
         return Err("`table_location` must not be empty".to_string());
-    }
-    if table_location.len() > MAX_TABLE_LOCATION_BYTES {
-        return Err(format!(
-            "`table_location` must be at most {MAX_TABLE_LOCATION_BYTES} bytes"
-        ));
     }
     if table_location.as_bytes().contains(&0) {
         return Err("`table_location` must not contain NUL bytes".to_string());
@@ -546,6 +533,15 @@ mod tests {
         )
         .is_err());
         assert!(CdfReadOptions::try_new("/tmp/table".to_string(), None, 2, 1, 1_024,).is_err());
+    }
+
+    #[test]
+    fn read_options_do_not_impose_arbitrary_size_limits() {
+        let columns = (0..10_001).map(|i| format!("column_{i}")).collect();
+        assert!(validate_projection(Some(&columns)).is_ok());
+
+        let long_local_path = format!("/{}", "a".repeat(32_768));
+        assert!(validate_table_location(&long_local_path).is_ok());
     }
 
     #[test]

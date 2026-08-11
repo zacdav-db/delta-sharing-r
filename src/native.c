@@ -36,6 +36,19 @@ struct ArrowArrayStream {
   void *private_data;
 };
 
+typedef struct {
+  const char **values;
+  size_t count;
+} DeltaSharingColumns;
+
+typedef struct {
+  ArrowArrayStream *stream;
+  const char *table_location;
+  const char *cleanup_root;
+  DeltaSharingColumns columns;
+  uint32_t batch_size;
+} DeltaSharingReadArguments;
+
 #ifdef _WIN32
 typedef DWORD DeltaSharingThreadId;
 
@@ -218,6 +231,78 @@ static const char *scalar_utf8(SEXP value, const char *name) {
   return result;
 }
 
+static ArrowArrayStream *nanoarrow_stream(SEXP value) {
+  if (TYPEOF(value) != EXTPTRSXP) {
+    Rf_error("`stream_xptr` must be an R external pointer.");
+  }
+  if (!Rf_inherits(value, "nanoarrow_array_stream")) {
+    Rf_error("`stream_xptr` must inherit from 'nanoarrow_array_stream'.");
+  }
+
+  ArrowArrayStream *stream = (ArrowArrayStream *)R_ExternalPtrAddr(value);
+  if (stream == NULL) {
+    Rf_error("nanoarrow stream pointer is NULL.");
+  }
+  return stream;
+}
+
+static uint32_t read_batch_size(SEXP value) {
+  const int32_t batch_size = scalar_int32(value, "batch_size");
+  if (batch_size < 1 || batch_size > 1000000) {
+    Rf_error("`batch_size` must be between 1 and 1000000.");
+  }
+  return (uint32_t)batch_size;
+}
+
+static DeltaSharingColumns read_columns(SEXP value) {
+  DeltaSharingColumns columns = {NULL, 0};
+  if (value == R_NilValue) {
+    return columns;
+  }
+  if (TYPEOF(value) != STRSXP) {
+    Rf_error("`columns` must be NULL or a character vector.");
+  }
+
+  const R_xlen_t count = XLENGTH(value);
+  if (count == 0) {
+    Rf_error("`columns` must be NULL or contain at least one name.");
+  }
+  if ((uintmax_t)count > SIZE_MAX / sizeof(const char *)) {
+    Rf_error("`columns` is too large for this platform.");
+  }
+
+  columns.count = (size_t)count;
+  columns.values =
+      (const char **)R_alloc(columns.count, sizeof(const char *));
+  for (R_xlen_t index = 0; index < count; ++index) {
+    if (STRING_ELT(value, index) == NA_STRING) {
+      Rf_error("`columns` must not contain missing names.");
+    }
+    columns.values[index] = Rf_translateCharUTF8(STRING_ELT(value, index));
+    if (columns.values[index][0] == '\0') {
+      Rf_error("`columns` must not contain empty names.");
+    }
+  }
+  return columns;
+}
+
+static DeltaSharingReadArguments read_arguments(
+    SEXP stream_xptr,
+    SEXP table_location,
+    SEXP cleanup_root,
+    SEXP columns,
+    SEXP batch_size) {
+  DeltaSharingReadArguments arguments;
+  arguments.stream = nanoarrow_stream(stream_xptr);
+  arguments.table_location = scalar_utf8(table_location, "table_location");
+  arguments.cleanup_root = cleanup_root == R_NilValue
+                               ? NULL
+                               : scalar_utf8(cleanup_root, "cleanup_root");
+  arguments.columns = read_columns(columns);
+  arguments.batch_size = read_batch_size(batch_size);
+  return arguments;
+}
+
 static uint64_t optional_limit(SEXP value, int32_t *has_limit) {
   if (value == R_NilValue) {
     *has_limit = 0;
@@ -278,18 +363,7 @@ static SEXP delta_sharing_stream_from_test_data(
     SEXP rows_per_batch,
     SEXP error_after,
     SEXP panic_after) {
-  if (TYPEOF(stream_xptr) != EXTPTRSXP) {
-    Rf_error("`stream_xptr` must be an R external pointer.");
-  }
-  if (!Rf_inherits(stream_xptr, "nanoarrow_array_stream")) {
-    Rf_error("`stream_xptr` must inherit from 'nanoarrow_array_stream'.");
-  }
-
-  ArrowArrayStream *stream =
-      (ArrowArrayStream *)R_ExternalPtrAddr(stream_xptr);
-  if (stream == NULL) {
-    Rf_error("nanoarrow stream pointer is NULL.");
-  }
+  ArrowArrayStream *stream = nanoarrow_stream(stream_xptr);
 
   const int32_t batches_value = scalar_int32(batches, "batches");
   const int32_t rows_value = scalar_int32(rows_per_batch, "rows_per_batch");
@@ -321,77 +395,29 @@ static SEXP delta_sharing_stream_from_snapshot(
     SEXP columns,
     SEXP limit,
     SEXP batch_size) {
-  if (TYPEOF(stream_xptr) != EXTPTRSXP) {
-    Rf_error("`stream_xptr` must be an R external pointer.");
-  }
-  if (!Rf_inherits(stream_xptr, "nanoarrow_array_stream")) {
-    Rf_error("`stream_xptr` must inherit from 'nanoarrow_array_stream'.");
-  }
-
-  ArrowArrayStream *stream =
-      (ArrowArrayStream *)R_ExternalPtrAddr(stream_xptr);
-  if (stream == NULL) {
-    Rf_error("nanoarrow stream pointer is NULL.");
-  }
-
-  const int32_t batch_size_value = scalar_int32(batch_size, "batch_size");
-  if (batch_size_value < 1 || batch_size_value > 1000000) {
-    Rf_error("`batch_size` must be between 1 and 1000000.");
-  }
-
-  if (columns != R_NilValue && TYPEOF(columns) != STRSXP) {
-    Rf_error("`columns` must be NULL or a character vector.");
-  }
-  const R_xlen_t column_count =
-      columns == R_NilValue ? 0 : XLENGTH(columns);
-  if (columns != R_NilValue && column_count == 0) {
-    Rf_error("`columns` must be NULL or contain at least one name.");
-  }
-  if (column_count > 10000) {
-    Rf_error("`columns` must contain at most 10000 names.");
-  }
-
-  const char **column_values = NULL;
-  if (column_count > 0) {
-    column_values =
-        (const char **)R_alloc((size_t)column_count, sizeof(const char *));
-    for (R_xlen_t index = 0; index < column_count; ++index) {
-      if (STRING_ELT(columns, index) == NA_STRING) {
-        Rf_error("`columns` must not contain missing names.");
-      }
-      column_values[index] = Rf_translateCharUTF8(STRING_ELT(columns, index));
-      if (column_values[index][0] == '\0') {
-        Rf_error("`columns` must not contain empty names.");
-      }
-    }
-  }
+  const DeltaSharingReadArguments arguments = read_arguments(
+      stream_xptr, table_location, cleanup_root, columns, batch_size);
 
   int32_t has_limit = 0;
   const uint64_t limit_value = optional_limit(limit, &has_limit);
-  const char *table_location_value =
-      scalar_utf8(table_location, "table_location");
-  const char *cleanup_root_value = NULL;
-  if (cleanup_root != R_NilValue) {
-    cleanup_root_value = scalar_utf8(cleanup_root, "cleanup_root");
-  }
 
   char error[DELTA_SHARING_ERROR_CAPACITY] = {0};
   const int32_t status = delta_sharing_native_populate_snapshot_stream(
-      stream,
-      table_location_value,
-      cleanup_root_value,
-      column_values,
-      (size_t)column_count,
+      arguments.stream,
+      arguments.table_location,
+      arguments.cleanup_root,
+      arguments.columns.values,
+      arguments.columns.count,
       has_limit,
       limit_value,
-      (uint32_t)batch_size_value,
+      arguments.batch_size,
       error,
       sizeof(error));
 
   if (status != 0) {
     raise_native_error(status, error);
   }
-  install_interrupt_wrapper_or_error(stream);
+  install_interrupt_wrapper_or_error(arguments.stream);
 
   return R_NilValue;
 }
@@ -404,54 +430,8 @@ static SEXP delta_sharing_stream_from_cdf(
     SEXP start_version,
     SEXP end_version,
     SEXP batch_size) {
-  if (TYPEOF(stream_xptr) != EXTPTRSXP) {
-    Rf_error("`stream_xptr` must be an R external pointer.");
-  }
-  if (!Rf_inherits(stream_xptr, "nanoarrow_array_stream")) {
-    Rf_error("`stream_xptr` must inherit from 'nanoarrow_array_stream'.");
-  }
-  ArrowArrayStream *stream =
-      (ArrowArrayStream *)R_ExternalPtrAddr(stream_xptr);
-  if (stream == NULL) {
-    Rf_error("nanoarrow stream pointer is NULL.");
-  }
-
-  const int32_t batch_size_value = scalar_int32(batch_size, "batch_size");
-  if (batch_size_value < 1 || batch_size_value > 1000000) {
-    Rf_error("`batch_size` must be between 1 and 1000000.");
-  }
-  if (columns != R_NilValue && TYPEOF(columns) != STRSXP) {
-    Rf_error("`columns` must be NULL or a character vector.");
-  }
-  const R_xlen_t column_count =
-      columns == R_NilValue ? 0 : XLENGTH(columns);
-  if (columns != R_NilValue && column_count == 0) {
-    Rf_error("`columns` must be NULL or contain at least one name.");
-  }
-  if (column_count > 10000) {
-    Rf_error("`columns` must contain at most 10000 names.");
-  }
-  const char **column_values = NULL;
-  if (column_count > 0) {
-    column_values =
-        (const char **)R_alloc((size_t)column_count, sizeof(const char *));
-    for (R_xlen_t index = 0; index < column_count; ++index) {
-      if (STRING_ELT(columns, index) == NA_STRING) {
-        Rf_error("`columns` must not contain missing names.");
-      }
-      column_values[index] = Rf_translateCharUTF8(STRING_ELT(columns, index));
-      if (column_values[index][0] == '\0') {
-        Rf_error("`columns` must not contain empty names.");
-      }
-    }
-  }
-
-  const char *table_location_value =
-      scalar_utf8(table_location, "table_location");
-  const char *cleanup_root_value = NULL;
-  if (cleanup_root != R_NilValue) {
-    cleanup_root_value = scalar_utf8(cleanup_root, "cleanup_root");
-  }
+  const DeltaSharingReadArguments arguments = read_arguments(
+      stream_xptr, table_location, cleanup_root, columns, batch_size);
   const uint64_t start_version_value =
       required_version(start_version, "start_version");
   const uint64_t end_version_value =
@@ -459,20 +439,20 @@ static SEXP delta_sharing_stream_from_cdf(
 
   char error[DELTA_SHARING_ERROR_CAPACITY] = {0};
   const int32_t status = delta_sharing_native_populate_cdf_stream(
-      stream,
-      table_location_value,
-      cleanup_root_value,
-      column_values,
-      (size_t)column_count,
+      arguments.stream,
+      arguments.table_location,
+      arguments.cleanup_root,
+      arguments.columns.values,
+      arguments.columns.count,
       start_version_value,
       end_version_value,
-      (uint32_t)batch_size_value,
+      arguments.batch_size,
       error,
       sizeof(error));
   if (status != 0) {
     raise_native_error(status, error);
   }
-  install_interrupt_wrapper_or_error(stream);
+  install_interrupt_wrapper_or_error(arguments.stream);
   return R_NilValue;
 }
 
