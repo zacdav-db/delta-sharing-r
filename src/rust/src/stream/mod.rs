@@ -311,7 +311,7 @@ fn validate_prepared_root(
     require_plain_file(&marker, "prepared-log ownership marker is invalid")?;
     let marker_value = std::fs::read_to_string(&marker)
         .map_err(|_| "prepared-log ownership marker is invalid".to_string())?;
-    if marker_value != "delta-sharing-r:vnext\n" {
+    if marker_value != "delta-sharing-r:prepared-log\n" {
         return Err("prepared-log ownership marker is invalid".to_string());
     }
 
@@ -497,7 +497,7 @@ impl PendingCleanup {
         let marker_is_valid = || {
             require_plain_file(&marker, "invalid").is_ok()
                 && std::fs::read_to_string(&marker).ok().as_deref()
-                    == Some("delta-sharing-r:vnext\n")
+                    == Some("delta-sharing-r:prepared-log\n")
         };
 
         match self.stage {
@@ -824,7 +824,7 @@ mod tests {
         fs::create_dir_all(&log).unwrap();
         fs::write(
             root.join(".delta-sharing-r-prepared-log"),
-            "delta-sharing-r:vnext\n",
+            "delta-sharing-r:prepared-log\n",
         )
         .unwrap();
         fs::write(log.join("00000000000000000000.json"), "{}\n").unwrap();
