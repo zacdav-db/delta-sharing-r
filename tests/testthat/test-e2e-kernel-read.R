@@ -300,7 +300,10 @@ test_that("public CDF readers paginate and materialize local change files", {
   httr2::local_mocked_responses(function(req) {
     state$page <- state$page + 1L
     page_actions <- if (state$page == 1L) {
-      c(actions[seq_len(3L)], list(list(nextPageToken = "second")))
+      c(
+        actions[seq_len(3L)],
+        list(list(endStreamAction = list(nextPageToken = "second")))
+      )
     } else {
       actions[-seq_len(3L)]
     }

@@ -234,6 +234,10 @@ test_that("metadata protocol validation rejects invalid wire responses", {
     class = "delta_sharing_protocol_error"
   )
   expect_length(parse_ndjson_lines("\n \n", "metadata"), 0L)
+  expect_equal(
+    parse_ndjson_lines('{"a":1}\n\n {"b":[2,3]}\n', "metadata"),
+    list(list(a = 1L), list(b = list(2L, 3L)))
+  )
 })
 
 test_that("parquet metadata envelopes are projected safely", {

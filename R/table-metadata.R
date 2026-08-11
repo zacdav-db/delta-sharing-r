@@ -119,12 +119,18 @@ parse_version_header <- function(resp, operation) {
   value
 }
 
-# Split an NDJSON body into parsed JSON objects (one per non-empty line).
+# Parse one buffered NDJSON page as a JSON array, ignoring empty lines.
 parse_ndjson_lines <- function(text, operation) {
-  lines <- purrr::list_c(strsplit(text, "\n", fixed = TRUE))
+  lines <- strsplit(text, "\n", fixed = TRUE)[[1L]]
   lines <- lines[nzchar(trimws(lines))]
+  if (length(lines) == 0L) {
+    return(list())
+  }
   parsed <- tryCatch(
-    purrr::map(lines, jsonlite::fromJSON, simplifyVector = FALSE),
+    jsonlite::fromJSON(
+      paste0("[", paste(lines, collapse = ","), "]"),
+      simplifyVector = FALSE
+    ),
     error = function(cnd) {
       abort(
         "The server returned an invalid metadata line.",
