@@ -9,15 +9,21 @@ use std::hash::{Hash, Hasher};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
-use std::sync::{Arc, LazyLock, Mutex};
+#[cfg(test)]
+use std::sync::Arc;
+use std::sync::{LazyLock, Mutex};
 
+#[cfg(test)]
 use arrow_array::builder::{Int32Builder, ListBuilder};
 use arrow_array::ffi_stream::FFI_ArrowArrayStream;
+#[cfg(test)]
 use arrow_array::{
-    ArrayRef, Decimal128Array, Int32Array, Int64Array, RecordBatch, RecordBatchReader, StringArray,
-    TimestampMicrosecondArray,
+    ArrayRef, Decimal128Array, Int32Array, Int64Array, StringArray, TimestampMicrosecondArray,
 };
-use arrow_schema::{ArrowError, DataType, Field, Schema, SchemaRef, TimeUnit};
+use arrow_array::{RecordBatch, RecordBatchReader};
+use arrow_schema::{ArrowError, SchemaRef};
+#[cfg(test)]
+use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use same_file::Handle;
 
 static PENDING_CLEANUPS: LazyLock<Mutex<Vec<PendingCleanup>>> =
@@ -638,6 +644,7 @@ where
 }
 
 #[derive(Debug, Clone, Copy)]
+#[cfg(test)]
 pub(crate) struct FixtureStreamConfig {
     batches: usize,
     rows_per_batch: usize,
@@ -645,6 +652,7 @@ pub(crate) struct FixtureStreamConfig {
     panic_after: Option<usize>,
 }
 
+#[cfg(test)]
 impl FixtureStreamConfig {
     pub(crate) fn try_from_raw(
         batches: i32,
@@ -671,17 +679,20 @@ impl FixtureStreamConfig {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn fixture_stream(config: FixtureStreamConfig) -> Result<FFI_ArrowArrayStream, String> {
     let reader = FixtureReader::new(config);
     Ok(record_batch_stream(Box::new(reader)))
 }
 
+#[cfg(test)]
 struct FixtureReader {
     schema: SchemaRef,
     config: FixtureStreamConfig,
     next_batch: usize,
 }
 
+#[cfg(test)]
 impl FixtureReader {
     fn new(config: FixtureStreamConfig) -> Self {
         Self {
@@ -692,6 +703,7 @@ impl FixtureReader {
     }
 }
 
+#[cfg(test)]
 impl Iterator for FixtureReader {
     type Item = Result<RecordBatch, ArrowError>;
 
@@ -721,12 +733,14 @@ impl Iterator for FixtureReader {
     }
 }
 
+#[cfg(test)]
 impl RecordBatchReader for FixtureReader {
     fn schema(&self) -> SchemaRef {
         self.schema.clone()
     }
 }
 
+#[cfg(test)]
 fn fixture_schema() -> SchemaRef {
     Arc::new(Schema::new(vec![
         Field::new("batch_index", DataType::Int32, false),
@@ -746,6 +760,7 @@ fn fixture_schema() -> SchemaRef {
     ]))
 }
 
+#[cfg(test)]
 fn make_fixture_batch(
     schema: SchemaRef,
     batch_index: usize,

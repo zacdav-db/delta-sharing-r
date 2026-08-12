@@ -20,7 +20,6 @@ use std::ptr::NonNull;
 use arrow_array::ffi_stream::FFI_ArrowArrayStream;
 
 use crate::kernel::adapter::{CdfReadOptions, SnapshotReadOptions};
-use crate::stream::{fixture_stream, FixtureStreamConfig};
 
 const STATUS_OK: c_int = 0;
 const STATUS_ERROR: c_int = 1;
@@ -74,32 +73,6 @@ where
             STATUS_PANIC
         }
     }
-}
-
-/// Populate a nanoarrow-owned ArrowArrayStream with deterministic test data.
-///
-/// # Safety
-///
-/// `destination` must point to writable, aligned storage for an uninitialized
-/// Arrow C Stream owned by nanoarrow. `error_buffer`, when non-null, must point
-/// to `error_capacity` writable bytes.
-#[no_mangle]
-pub unsafe extern "C" fn delta_sharing_native_populate_test_stream(
-    destination: *mut FFI_ArrowArrayStream,
-    batches: i32,
-    rows_per_batch: i32,
-    error_after: i32,
-    panic_after: i32,
-    error_buffer: *mut c_char,
-    error_capacity: usize,
-) -> c_int {
-    ffi_boundary(error_buffer, error_capacity, || {
-        let destination = NonNull::new(destination)
-            .ok_or_else(|| "nanoarrow stream pointer is NULL".to_string())?;
-        let config =
-            FixtureStreamConfig::try_from_raw(batches, rows_per_batch, error_after, panic_after)?;
-        stream::populate_stream(destination, || fixture_stream(config))
-    })
 }
 
 /// Populate a nanoarrow-owned ArrowArrayStream from a prepared local Delta table.

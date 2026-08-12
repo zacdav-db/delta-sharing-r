@@ -357,37 +357,6 @@ static void raise_native_error(int32_t status, const char *message) {
   Rf_error("Native operation failed (status %d): %s", status, safe_message);
 }
 
-static SEXP delta_sharing_stream_from_test_data(
-    SEXP stream_xptr,
-    SEXP batches,
-    SEXP rows_per_batch,
-    SEXP error_after,
-    SEXP panic_after) {
-  ArrowArrayStream *stream = nanoarrow_stream(stream_xptr);
-
-  const int32_t batches_value = scalar_int32(batches, "batches");
-  const int32_t rows_value = scalar_int32(rows_per_batch, "rows_per_batch");
-  const int32_t error_value = scalar_int32(error_after, "error_after");
-  const int32_t panic_value = scalar_int32(panic_after, "panic_after");
-
-  char error[DELTA_SHARING_ERROR_CAPACITY] = {0};
-  const int32_t status = delta_sharing_native_populate_test_stream(
-      stream,
-      batches_value,
-      rows_value,
-      error_value,
-      panic_value,
-      error,
-      sizeof(error));
-
-  if (status != 0) {
-    raise_native_error(status, error);
-  }
-  install_interrupt_wrapper_or_error(stream);
-
-  return R_NilValue;
-}
-
 static SEXP delta_sharing_stream_from_snapshot(
     SEXP stream_xptr,
     SEXP table_location,
@@ -468,9 +437,6 @@ static SEXP delta_sharing_reap_pending_cleanups(void) {
 }
 
 static const R_CallMethodDef call_methods[] = {
-    {"delta_sharing_stream_from_test_data",
-     (DL_FUNC)&delta_sharing_stream_from_test_data,
-     5},
     {"delta_sharing_stream_from_snapshot",
      (DL_FUNC)&delta_sharing_stream_from_snapshot,
      6},

@@ -6,15 +6,6 @@
 
 typedef struct ArrowArrayStream ArrowArrayStream;
 
-int32_t delta_sharing_native_populate_test_stream(
-    ArrowArrayStream *destination,
-    int32_t batches,
-    int32_t rows_per_batch,
-    int32_t error_after,
-    int32_t panic_after,
-    char *error_buffer,
-    size_t error_capacity);
-
 int32_t delta_sharing_native_populate_snapshot_stream(
     ArrowArrayStream *destination,
     const char *table_location,

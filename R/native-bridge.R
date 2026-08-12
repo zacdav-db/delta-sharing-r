@@ -74,24 +74,6 @@ cdf_whole_version <- function(value, label) {
   as.double(value)
 }
 
-native_test_stream <- function(
-  batches = 1L,
-  rows_per_batch = 3L,
-  error_after = -1L,
-  panic_after = -1L
-) {
-  stream <- nanoarrow::nanoarrow_allocate_array_stream()
-  .Call(
-    C_delta_sharing_stream_from_test_data,
-    stream,
-    as.integer(batches),
-    as.integer(rows_per_batch),
-    as.integer(error_after),
-    as.integer(panic_after)
-  )
-  interruptible_native_stream(stream)
-}
-
 native_stream_interrupt_message <- "delta-sharing stream interrupted"
 
 native_stream_was_interrupted <- function(condition) {
