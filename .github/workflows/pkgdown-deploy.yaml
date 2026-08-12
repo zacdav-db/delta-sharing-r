@@ -14,8 +14,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  CARGO_TARGET_DIR: ${{ github.workspace }}/.cargo-target
-  CARGO_TERM_COLOR: always
   GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
   R_KEEP_PKG_SOURCE: yes
 
@@ -31,17 +29,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install stable Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
-        with:
-          toolchain: stable
-
-      - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          workspaces: src/rust -> ../../.cargo-target
-          shared-key: r-package-release
-
       - name: Install R
         uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
@@ -53,12 +40,17 @@ jobs:
       - name: Install site dependencies
         uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
-          extra-packages: any::pkgdown, local::.
+          extra-packages: any::pkgdown
           needs: website
           cache-version: 1
 
       - name: Build site
-        run: pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
+        run: >-
+          pkgdown::build_site_github_pages(
+            new_process = FALSE,
+            install = FALSE,
+            examples = FALSE
+          )
         shell: Rscript {0}
 
       - name: Upload site artifact
