@@ -1,8 +1,8 @@
 # Synthetic Delta log construction for the Delta Kernel scan.
 #
 # R fetches the Delta Sharing Query Table response and writes a local
-# `_delta_log/00...0.json` that Delta Kernel reads; the kernel then fetches data
-# directly from the pre-signed URLs in the log. There is no second downloader.
+# `_delta_log/00...0.json` that Delta Kernel reads. Selected data files are
+# staged beside that log first, so the native reader performs local I/O only.
 #
 # Following the Python client, we do not build Delta action structs for the
 # Delta-format path: the server already returns fully-formed actions under
@@ -15,7 +15,9 @@
 #
 #   <root .delta-sharing-snapshot-*>/   (mode 0700)
 #   |-- .delta-sharing-r-prepared-log   (ownership marker)
-#   `-- table/_delta_log/<commit>.json  (the table location handed to the kernel)
+#   `-- table/                          (the location handed to the kernel)
+#       |-- _delta_log/<commit>.json
+#       `-- data/<content hash>.<parquet|bin>
 log_root_prefix <- ".delta-sharing-snapshot-"
 log_marker_name <- ".delta-sharing-r-prepared-log"
 log_marker_value <- "delta-sharing-r:prepared-log\n"
@@ -174,34 +176,45 @@ write_snapshot_commit <- function(log_dir, header, staged_actions) {
 # list(timestamp_ms=, actions=list(...)); `protocol` is pre-unwrapped.
 prepare_cdf_log <- function(protocol, by_version, start_version, end_version) {
   log <- prepare_log(function(log_dir) {
-    if (start_version > 0) {
-      write_fake_checkpoint(log_dir, start_version - 1)
-    }
-
-    purrr::walk(seq.int(start_version, end_version), function(version) {
-      version_data <- by_version[[as.character(version)]]
-      if (is.null(version_data)) {
-        version_data <- list(actions = list(), timestamp_ms = NULL)
-      }
-      actions <- version_data$actions
-
-      if (version == start_version) {
-        actions <- c(list(list(protocol = protocol)), actions)
-      }
-
-      write_cdf_commit(
-        log_dir,
-        version,
-        actions,
-        timestamp_ms = version_data$timestamp_ms
-      )
-    })
+    write_cdf_log(log_dir, protocol, by_version, start_version, end_version)
     invisible(NULL)
   })
 
   log$start_version <- start_version
   log$end_version <- end_version
   log
+}
+
+write_cdf_log <- function(
+  log_dir,
+  protocol,
+  by_version,
+  start_version,
+  end_version
+) {
+  if (start_version > 0) {
+    write_fake_checkpoint(log_dir, start_version - 1)
+  }
+
+  purrr::walk(seq.int(start_version, end_version), function(version) {
+    version_data <- by_version[[as.character(version)]]
+    if (is.null(version_data)) {
+      version_data <- list(actions = list(), timestamp_ms = NULL)
+    }
+    actions <- version_data$actions
+
+    if (version == start_version) {
+      actions <- c(list(list(protocol = protocol)), actions)
+    }
+
+    write_cdf_commit(
+      log_dir,
+      version,
+      actions,
+      timestamp_ms = version_data$timestamp_ms
+    )
+  })
+  invisible(NULL)
 }
 
 cdf_commit_name <- function(version) {

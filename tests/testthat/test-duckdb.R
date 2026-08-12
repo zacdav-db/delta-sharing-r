@@ -83,7 +83,8 @@ test_that("DuckDB early completion releases the prepared snapshot root", {
       predicate = NULL,
       limit = NULL,
       version = NULL,
-      timestamp = NULL
+      timestamp = NULL,
+      cache = FALSE
     ),
     "delta"
   )

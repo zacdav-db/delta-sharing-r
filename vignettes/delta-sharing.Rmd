@@ -167,19 +167,39 @@ orders$changes(
 )$to_data_frame()
 ```
 
+## Reuse downloaded files
+
+Downloads are private to one read by default. For repeated reads of the same
+table, opt into the session cache on `snapshot()` or `changes()`:
+
+```{r, eval = FALSE}
+snapshot <- orders$snapshot(cache = TRUE)
+
+first <- snapshot$to_data_frame(threads = 4)
+second <- snapshot$to_data_frame() # reuses unchanged Delta data files
+
+orders$clear_cache()
+```
+
+`threads` controls the maximum number of concurrent downloads and defaults to
+four. `clear_cache()` removes only that table's cached downloads; active readers
+remain valid. The full session cache is removed when the package unloads.
+
 ## How reads work
 
 A read follows one path:
 
 1. R sends the query to the Delta Sharing server.
-2. R writes the response to a private, temporary Delta log.
-3. Delta Kernel reads that log, fetches the data files directly from their
-   presigned URLs, and exposes the rows as an Arrow stream.
+2. R downloads the selected Parquet and deletion-vector files into a private
+   local table, using bounded parallel requests.
+3. R writes the response as a synthetic Delta log beside those files.
+4. Delta Kernel reads the local table and exposes the rows as an Arrow stream.
 
-Delta and Parquet responses both use this path. R does not download the data
-files separately.
+Delta and Parquet responses, including change data feeds, use this path. Delta
+Kernel remains responsible for projection, deletion vectors, column mapping,
+change semantics, and Arrow batches.
 
 R checks for user interrupts between Arrow batches. If a batch pull is already
-waiting inside Delta Kernel's network I/O, that pull must return or fail before
-R can handle the interrupt. Releasing a stream between pulls still releases the
-Kernel reader and its temporary log immediately.
+waiting inside Delta Kernel's local I/O, that pull must return or fail before R
+can handle the interrupt. Releasing a stream between pulls still releases the
+Kernel reader and its private read directory immediately.

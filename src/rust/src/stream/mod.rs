@@ -148,16 +148,17 @@ pub(crate) fn record_batch_stream_with_resource<T: Any + Send>(
     export_reader(reader, owner)
 }
 
-/// Cleanup token for an R-prepared synthetic log.
+/// Cleanup token for an R-prepared local Delta table.
 ///
 /// Construction proves that the supplied table is exactly the `table` child
 /// of a private `.delta-sharing-snapshot-*` directory. The token performs no
-/// synthetic-log interpretation; it only couples cleanup to native stream
+/// Delta-log or data-file interpretation; it only couples cleanup to stream
 /// release after R transfers ownership.
 pub(crate) struct PreparedLogCleanup {
     root: PathBuf,
     identity: FileIdentity,
     log_entries: Vec<String>,
+    data_entries: Option<Vec<String>>,
     #[cfg(test)]
     full_log_shape_checks: Arc<std::sync::atomic::AtomicUsize>,
     #[cfg(test)]
@@ -210,12 +211,14 @@ impl PreparedLogCleanup {
         }
 
         log_entries.sort();
-        let canonical_root = validate_prepared_root(root_path, table_path, &log_entries)?;
+        let (canonical_root, data_entries) =
+            validate_prepared_root(root_path, table_path, &log_entries)?;
         let identity = file_identity(&canonical_root)?;
         Ok(Self {
             root: canonical_root,
             identity,
             log_entries,
+            data_entries,
             #[cfg(test)]
             full_log_shape_checks: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             #[cfg(test)]
@@ -228,7 +231,9 @@ impl PreparedLogCleanup {
             root: self.root.clone(),
             identity: self.identity.clone(),
             log_entries: self.log_entries.clone(),
+            data_entries: self.data_entries.clone(),
             next_log_entry: 0,
+            next_data_entry: 0,
             stage: CleanupStage::LogEntries,
             #[cfg(test)]
             full_log_shape_checks: self.full_log_shape_checks.clone(),
@@ -286,7 +291,7 @@ fn validate_prepared_root(
     root_path: &Path,
     table_path: &Path,
     expected_log_entries: &[String],
-) -> Result<PathBuf, String> {
+) -> Result<(PathBuf, Option<Vec<String>>), String> {
     let root_metadata = require_plain_directory(
         root_path,
         "prepared-log cleanup root is not a private directory",
@@ -323,7 +328,15 @@ fn validate_prepared_root(
 
     let owned_table = canonical_root.join("table");
     require_plain_directory(&owned_table, "prepared local table is invalid")?;
-    require_exact_entries(&owned_table, &["_delta_log"])?;
+    let data_directory = owned_table.join("data");
+    let data_entries = if data_directory.exists() {
+        require_exact_entries(&owned_table, &["_delta_log", "data"])?;
+        require_plain_directory(&data_directory, "prepared local data is invalid")?;
+        Some(plain_file_entries(&data_directory)?)
+    } else {
+        require_exact_entries(&owned_table, &["_delta_log"])?;
+        None
+    };
     let log_directory = owned_table.join("_delta_log");
     require_plain_directory(&log_directory, "prepared local table log is invalid")?;
     require_exact_entry_names(&log_directory, expected_log_entries)?;
@@ -342,7 +355,31 @@ fn validate_prepared_root(
         return Err("prepared-log cleanup root does not own the local table".to_string());
     }
 
-    Ok(canonical_root)
+    Ok((canonical_root, data_entries))
+}
+
+fn plain_file_entries(path: &Path) -> Result<Vec<String>, String> {
+    let mut entries = std::fs::read_dir(path)
+        .map_err(|_| "prepared local data is invalid".to_string())?
+        .map(|entry| {
+            let entry = entry.map_err(|_| "prepared local data is invalid".to_string())?;
+            let name = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| "prepared local data is invalid".to_string())?;
+            require_plain_file(&entry.path(), "prepared local data is invalid")?;
+            let valid_name = (name.ends_with(".parquet") || name.ends_with(".bin"))
+                && name.split_once('.').is_some_and(|(stem, _)| {
+                    stem.len() == 64 && stem.bytes().all(|byte| byte.is_ascii_hexdigit())
+                });
+            if !valid_name {
+                return Err("prepared local data is invalid".to_string());
+            }
+            Ok(name)
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    entries.sort();
+    Ok(entries)
 }
 
 fn require_plain_directory(path: &Path, message: &str) -> Result<std::fs::Metadata, String> {
@@ -408,6 +445,8 @@ fn require_exact_entry_names(path: &Path, expected: &[String]) -> Result<(), Str
 enum CleanupStage {
     LogEntries,
     LogDirectory,
+    DataEntries,
+    DataDirectory,
     Table,
     Marker,
     Root,
@@ -417,7 +456,9 @@ impl CleanupStage {
     fn next(self) -> Option<Self> {
         match self {
             Self::LogEntries => Some(Self::LogDirectory),
-            Self::LogDirectory => Some(Self::Table),
+            Self::LogDirectory => Some(Self::DataEntries),
+            Self::DataEntries => Some(Self::DataDirectory),
+            Self::DataDirectory => Some(Self::Table),
             Self::Table => Some(Self::Marker),
             Self::Marker => Some(Self::Root),
             Self::Root => None,
@@ -429,7 +470,9 @@ struct PendingCleanup {
     root: PathBuf,
     identity: FileIdentity,
     log_entries: Vec<String>,
+    data_entries: Option<Vec<String>>,
     next_log_entry: usize,
+    next_data_entry: usize,
     stage: CleanupStage,
     #[cfg(test)]
     full_log_shape_checks: Arc<std::sync::atomic::AtomicUsize>,
@@ -466,7 +509,26 @@ impl PendingCleanup {
                     continue;
                 }
             }
+            if self.stage == CleanupStage::DataEntries {
+                let Some(entries) = self.data_entries.as_ref() else {
+                    self.stage = CleanupStage::Table;
+                    continue;
+                };
+                self.next_data_entry += 1;
+                if self.next_data_entry < entries.len() {
+                    continue;
+                }
+            }
             match self.stage.next() {
+                Some(CleanupStage::DataEntries)
+                    if self.data_entries.as_ref().is_none_or(Vec::is_empty) =>
+                {
+                    self.stage = if self.data_entries.is_some() {
+                        CleanupStage::DataDirectory
+                    } else {
+                        CleanupStage::Table
+                    }
+                }
                 Some(next) => self.stage = next,
                 None => return CleanupOutcome::Complete,
             }
@@ -500,6 +562,7 @@ impl PendingCleanup {
         let marker = self.root.join(".delta-sharing-r-prepared-log");
         let table = self.root.join("table");
         let log = table.join("_delta_log");
+        let data = table.join("data");
         let marker_is_valid = || {
             require_plain_file(&marker, "invalid").is_ok()
                 && std::fs::read_to_string(&marker).ok().as_deref()
@@ -515,7 +578,7 @@ impl PendingCleanup {
                     .is_ok()
                     && marker_is_valid()
                     && require_plain_directory(&table, "invalid").is_ok()
-                    && require_exact_entries(&table, &["_delta_log"]).is_ok()
+                    && self.table_shape_is_valid(&table)
                     && require_plain_directory(&log, "invalid").is_ok()
                     && require_plain_file(&log.join(current), "invalid").is_ok()
             }
@@ -527,9 +590,34 @@ impl PendingCleanup {
                     .is_ok()
                     && marker_is_valid()
                     && require_plain_directory(&table, "invalid").is_ok()
-                    && require_exact_entries(&table, &["_delta_log"]).is_ok()
+                    && self.table_shape_is_valid(&table)
                     && require_plain_directory(&log, "invalid").is_ok()
                     && require_exact_entries(&log, &[]).is_ok()
+            }
+            CleanupStage::DataEntries => {
+                let Some(current) = self
+                    .data_entries
+                    .as_ref()
+                    .and_then(|entries| entries.get(self.next_data_entry))
+                else {
+                    return false;
+                };
+                require_exact_entries(&self.root, &[".delta-sharing-r-prepared-log", "table"])
+                    .is_ok()
+                    && marker_is_valid()
+                    && require_plain_directory(&table, "invalid").is_ok()
+                    && require_exact_entries(&table, &["data"]).is_ok()
+                    && require_plain_directory(&data, "invalid").is_ok()
+                    && require_plain_file(&data.join(current), "invalid").is_ok()
+            }
+            CleanupStage::DataDirectory => {
+                require_exact_entries(&self.root, &[".delta-sharing-r-prepared-log", "table"])
+                    .is_ok()
+                    && marker_is_valid()
+                    && require_plain_directory(&table, "invalid").is_ok()
+                    && require_exact_entries(&table, &["data"]).is_ok()
+                    && require_plain_directory(&data, "invalid").is_ok()
+                    && require_exact_entries(&data, &[]).is_ok()
             }
             CleanupStage::Table => {
                 require_exact_entries(&self.root, &[".delta-sharing-r-prepared-log", "table"])
@@ -543,6 +631,15 @@ impl PendingCleanup {
                     && marker_is_valid()
             }
             CleanupStage::Root => require_exact_entries(&self.root, &[]).is_ok(),
+        }
+    }
+
+    fn table_shape_is_valid(&self, table: &Path) -> bool {
+        if self.data_entries.is_some() {
+            require_exact_entries(table, &["_delta_log", "data"]).is_ok()
+                && require_plain_directory(&table.join("data"), "invalid").is_ok()
+        } else {
+            require_exact_entries(table, &["_delta_log"]).is_ok()
         }
     }
 
@@ -565,11 +662,16 @@ impl PendingCleanup {
 
         let table = self.root.join("table");
         let log = table.join("_delta_log");
+        let data = table.join("data");
         match self.stage {
             CleanupStage::LogEntries => {
                 std::fs::remove_file(log.join(&self.log_entries[self.next_log_entry]))
             }
             CleanupStage::LogDirectory => std::fs::remove_dir(log),
+            CleanupStage::DataEntries => std::fs::remove_file(data.join(
+                &self.data_entries.as_ref().expect("validated data entries")[self.next_data_entry],
+            )),
+            CleanupStage::DataDirectory => std::fs::remove_dir(data),
             CleanupStage::Table => std::fs::remove_dir(table),
             CleanupStage::Marker => {
                 std::fs::remove_file(self.root.join(".delta-sharing-r-prepared-log"))
@@ -850,6 +952,17 @@ mod tests {
         }
     }
 
+    fn populate_staged_data(table: &Path) {
+        let data = table.join("data");
+        fs::create_dir(&data).unwrap();
+        fs::write(
+            data.join(format!("{}.parquet", "a".repeat(64))),
+            "parquet bytes",
+        )
+        .unwrap();
+        fs::write(data.join(format!("{}.bin", "b".repeat(64))), "dv bytes").unwrap();
+    }
+
     fn prepared_cdf_root(label: &str, end_version: u64) -> (PathBuf, PathBuf) {
         let (root, table) = prepared_root(label);
         let log = table.join("_delta_log");
@@ -956,6 +1069,33 @@ mod tests {
         fs::write(&unexpected, "must survive fail-closed cleanup").unwrap();
         drop(cleanup);
         assert!(unexpected.exists());
+        fs::remove_dir_all(root).unwrap();
+
+        let (root, table) = prepared_root("staged-data");
+        populate_staged_data(&table);
+        let cleanup =
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), table.to_str().unwrap()).unwrap();
+        drop(cleanup);
+        assert!(!root.exists());
+
+        let (root, table) = prepared_root("mutated-staged-data");
+        populate_staged_data(&table);
+        let cleanup =
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), table.to_str().unwrap()).unwrap();
+        let unexpected = table.join("data/user-file.txt");
+        fs::write(&unexpected, "must survive fail-closed cleanup").unwrap();
+        drop(cleanup);
+        assert!(unexpected.exists());
+        fs::remove_dir_all(root).unwrap();
+
+        let (root, table) = prepared_root("unsafe-staged-data");
+        let data = table.join("data");
+        fs::create_dir(&data).unwrap();
+        fs::write(data.join("user-file.txt"), "must not be deleted").unwrap();
+        assert!(
+            PreparedLogCleanup::try_new(root.to_str().unwrap(), table.to_str().unwrap()).is_err()
+        );
+        assert!(data.join("user-file.txt").exists());
         fs::remove_dir_all(root).unwrap();
     }
 

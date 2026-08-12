@@ -2,6 +2,10 @@ snapshot_identifier <- function() {
   sharing_table_identifier("sales.default.events")
 }
 
+snapshot_file_url <- function(name = "part-00000.parquet") {
+  local_file_url(fs::path(fixture_table("local-table"), name))
+}
+
 snapshot_delta_actions <- function() {
   list(
     list(
@@ -25,8 +29,10 @@ snapshot_delta_actions <- function() {
       file = list(
         deltaSingleAction = list(
           add = list(
-            path = "https://storage.example.test/one.parquet",
-            size = 100,
+            path = snapshot_file_url(),
+            size = as.numeric(fs::file_size(
+              local_file_path(snapshot_file_url())
+            )),
             dataChange = TRUE,
             stats = "{\"numRecords\":10}"
           )
@@ -53,8 +59,10 @@ test_that("snapshot pages append to one private commit", {
         file = list(
           deltaSingleAction = list(
             add = list(
-              path = "https://storage.example.test/two.parquet",
-              size = 70,
+              path = snapshot_file_url("part-00001.parquet"),
+              size = as.numeric(fs::file_size(
+                local_file_path(snapshot_file_url("part-00001.parquet"))
+              )),
               dataChange = TRUE,
               stats = "{\"numRecords\":7}",
               deletionVector = list(cardinality = 2)
@@ -75,7 +83,8 @@ test_that("snapshot pages append to one private commit", {
       predicate = NULL,
       limit = NULL,
       version = NULL,
-      timestamp = NULL
+      timestamp = NULL,
+      cache = FALSE
     ),
     "delta"
   )
@@ -93,13 +102,14 @@ test_that("snapshot pages append to one private commit", {
   expect_length(lines, 4L)
   expect_equal(jsonlite::fromJSON(lines[[1L]])$protocol$minReaderVersion, 3L)
   expect_equal(
-    jsonlite::fromJSON(lines[[3L]])$add$path,
-    "https://storage.example.test/one.parquet"
+    httr2::url_parse(jsonlite::fromJSON(lines[[3L]])$add$path)$scheme,
+    "file"
   )
   expect_equal(
-    jsonlite::fromJSON(lines[[4L]])$add$path,
-    "https://storage.example.test/two.parquet"
+    httr2::url_parse(jsonlite::fromJSON(lines[[4L]])$add$path)$scheme,
+    "file"
   )
+  expect_equal(length(fs::dir_ls(fs::path(log$path, "data"))), 2L)
 })
 
 test_that("parquet snapshot pages use the same preparation path", {
@@ -114,8 +124,10 @@ test_that("parquet snapshot pages use the same preparation path", {
     ),
     list(
       file = list(
-        url = "https://storage.example.test/events.parquet",
-        size = 100,
+        url = snapshot_file_url(),
+        size = as.numeric(fs::file_size(
+          local_file_path(snapshot_file_url())
+        )),
         stats = "{\"numRecords\":4}"
       )
     )
@@ -134,7 +146,8 @@ test_that("parquet snapshot pages use the same preparation path", {
       predicate = NULL,
       limit = NULL,
       version = NULL,
-      timestamp = NULL
+      timestamp = NULL,
+      cache = FALSE
     ),
     "parquet"
   )
@@ -145,8 +158,8 @@ test_that("parquet snapshot pages use the same preparation path", {
   expect_identical(log$file_count, 1L)
   expect_identical(log$response_format, "parquet")
   expect_equal(
-    jsonlite::fromJSON(lines[[3L]])$add$path,
-    "https://storage.example.test/events.parquet"
+    httr2::url_parse(jsonlite::fromJSON(lines[[3L]])$add$path)$scheme,
+    "file"
   )
 })
 
@@ -184,7 +197,8 @@ test_that("a malformed later page removes incomplete snapshot staging", {
         predicate = NULL,
         limit = NULL,
         version = NULL,
-        timestamp = NULL
+        timestamp = NULL,
+        cache = FALSE
       ),
       "delta"
     ),
@@ -220,7 +234,8 @@ test_that("snapshot responses require protocol and metadata", {
         predicate = NULL,
         limit = NULL,
         version = NULL,
-        timestamp = NULL
+        timestamp = NULL,
+        cache = FALSE
       ),
       "delta"
     ),

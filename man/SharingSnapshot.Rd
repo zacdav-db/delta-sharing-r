@@ -48,7 +48,8 @@ Create a snapshot reader. Prefer \code{SharingTable$snapshot()}.
   columns = NULL,
   limit = NULL,
   predicate = NULL,
-  response_format = "auto"
+  response_format = "auto",
+  cache = FALSE
 )}\if{html}{\out{</div>}}
 }
 
@@ -59,6 +60,9 @@ Create a snapshot reader. Prefer \code{SharingTable$snapshot()}.
 
 \item{\code{version, timestamp, columns, limit, predicate, response_format}}{Query
 options; see \link{SharingTable}'s \code{snapshot()} method.}
+
+\item{\code{cache}}{Whether to reuse staged files for this table during the R
+session.}
 }
 \if{html}{\out{</div>}}
 }

@@ -47,7 +47,8 @@ Create a changes reader. Prefer \code{SharingTable$changes()}.
   starting_timestamp = NULL,
   ending_timestamp = NULL,
   columns = NULL,
-  response_format = "auto"
+  response_format = "auto",
+  cache = FALSE
 )}\if{html}{\out{</div>}}
 }
 
@@ -57,6 +58,9 @@ Create a changes reader. Prefer \code{SharingTable$changes()}.
 \item{\code{profile, auth, identifier}}{Internal client state.}
 
 \item{\code{starting_version, ending_version, starting_timestamp, ending_timestamp, columns, response_format}}{Query options; see \link{SharingTable}'s \code{changes()} method.}
+
+\item{\code{cache}}{Whether to reuse staged files for this table during the R
+session.}
 }
 \if{html}{\out{</div>}}
 }

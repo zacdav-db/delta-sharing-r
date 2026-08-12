@@ -16,11 +16,10 @@ arrow-schema = "=58.3.0"
 delta_kernel = { version = "=0.26.0", default-features = false, features = [
   "arrow-58",
 ] }
-# R owns the Sharing protocol; Kernel still needs TLS for the presigned data
-# file URLs recorded in the prepared local Delta log.
+# R owns the Sharing protocol and all remote I/O. The default engine is used
+# only for its local Delta/Parquet implementation.
 delta_kernel_default_engine = { version = "=0.26.0", default-features = false, features = [
   "arrow-58",
-  "rustls",
 ] }
 same-file = "=1.0.6"
 url = "=2.5.8"

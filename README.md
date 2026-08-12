@@ -76,6 +76,23 @@ orders$changes(
 )$to_data_frame()
 ```
 
+Reads download up to four selected data files concurrently by default. Set
+`threads` on a materializer to tune that number. Downloads are read-specific
+unless you opt into the session cache:
+
+```r
+snapshot <- orders$snapshot(cache = TRUE)
+orders_df <- snapshot$to_data_frame(threads = 4)
+
+# A later read can reuse unchanged Delta data files.
+refreshed_df <- snapshot$to_data_frame()
+
+# Remove only this table's cached downloads.
+orders$clear_cache()
+```
+
+The session cache is also removed when the package unloads.
+
 See `vignette("delta-sharing")` for a full walkthrough.
 
 ## Query with DuckDB

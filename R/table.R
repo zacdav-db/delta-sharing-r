@@ -59,6 +59,8 @@ SharingTable <- R6::R6Class(
     #' @param limit Optional non-negative whole-number row limit.
     #' @param predicate Optional structured server-side predicate hint.
     #' @param response_format One of `"auto"`, `"delta"`, or `"parquet"`.
+    #' @param cache Reuse downloaded files for this table during the current R
+    #'   session. The default is `FALSE`.
     #' @return A [SharingSnapshot].
     snapshot = function(
       version = NULL,
@@ -66,7 +68,8 @@ SharingTable <- R6::R6Class(
       columns = NULL,
       limit = NULL,
       predicate = NULL,
-      response_format = "auto"
+      response_format = "auto",
+      cache = FALSE
     ) {
       SharingSnapshot$new(
         profile = private$profile,
@@ -77,7 +80,8 @@ SharingTable <- R6::R6Class(
         columns = columns,
         limit = limit,
         predicate = predicate,
-        response_format = response_format
+        response_format = response_format,
+        cache = cache
       )
     },
 
@@ -87,6 +91,8 @@ SharingTable <- R6::R6Class(
     #'   `POSIXct` bounds.
     #' @param columns Optional character vector of projected columns.
     #' @param response_format One of `"auto"`, `"delta"`, or `"parquet"`.
+    #' @param cache Reuse downloaded files for this table during the current R
+    #'   session. The default is `FALSE`.
     #' @return A [SharingChanges].
     changes = function(
       starting_version = NULL,
@@ -94,7 +100,8 @@ SharingTable <- R6::R6Class(
       starting_timestamp = NULL,
       ending_timestamp = NULL,
       columns = NULL,
-      response_format = "auto"
+      response_format = "auto",
+      cache = FALSE
     ) {
       SharingChanges$new(
         profile = private$profile,
@@ -105,8 +112,17 @@ SharingTable <- R6::R6Class(
         starting_timestamp = starting_timestamp,
         ending_timestamp = ending_timestamp,
         columns = columns,
-        response_format = response_format
+        response_format = response_format,
+        cache = cache
       )
+    },
+
+    #' @description Remove downloaded files cached for this table. Active
+    #'   readers remain valid because they own separate links or copies.
+    #' @return This table, invisibly.
+    clear_cache = function() {
+      clear_table_download_cache(private$profile, private$id)
+      invisible(self)
     },
 
     #' @description Print the table handle.

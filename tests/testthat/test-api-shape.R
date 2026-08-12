@@ -15,18 +15,34 @@ test_that("the staged object graph composes", {
   expect_s3_class(tbl, "SharingTable")
   expect_equal(tbl$identifier()$table, "orders")
 
-  snap <- tbl$snapshot(version = 42, columns = c("a", "b"), limit = 100)
+  snap <- tbl$snapshot(
+    version = 42,
+    columns = c("a", "b"),
+    limit = 100,
+    cache = TRUE
+  )
   expect_s3_class(snap, "SharingSnapshot")
 
-  chg <- tbl$changes(starting_version = 120, ending_version = 125)
+  chg <- tbl$changes(
+    starting_version = 120,
+    ending_version = 125,
+    cache = TRUE
+  )
   expect_s3_class(chg, "SharingChanges")
 })
 
-test_that("eager materializers expose only direct-read controls", {
+test_that("materializers expose batch and download concurrency controls", {
   snapshot <- test_client()$table("sales.default.orders")$snapshot()
 
-  expect_identical(names(formals(snapshot$to_arrow)), "batch_size")
-  expect_identical(names(formals(snapshot$to_data_frame)), "batch_size")
+  purrr::walk(
+    c("to_arrow", "to_arrow_reader", "to_data_frame", "to_arrow_stream"),
+    function(method) {
+      arguments <- formals(snapshot[[method]])
+      expect_identical(names(arguments), c("batch_size", "threads"))
+      expect_identical(arguments$threads, quote(DEFAULT_THREADS))
+    }
+  )
+  expect_identical(DEFAULT_THREADS, 4L)
 })
 
 test_that("table accepts explicit share, schema, and name components", {
@@ -96,6 +112,14 @@ test_that("readers validate options interpreted by the package", {
   expect_error(tbl$snapshot(response_format = "csv"), class = "rlang_error")
   expect_error(
     tbl$changes(columns = 1),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    tbl$snapshot(cache = 1),
+    class = "delta_sharing_validation_error"
+  )
+  expect_error(
+    tbl$changes(cache = NULL),
     class = "delta_sharing_validation_error"
   )
 })

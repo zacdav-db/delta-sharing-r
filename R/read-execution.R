@@ -12,7 +12,9 @@ write_snapshot_query_pages <- function(
   identifier,
   spec,
   format,
-  output
+  output,
+  staging,
+  threads
 ) {
   protocol <- NULL
   metadata <- NULL
@@ -56,9 +58,11 @@ write_snapshot_query_pages <- function(
       purrr::keep(actions, function(action) !is.null(action$file)),
       "file"
     )
-    file_lines <- purrr::map_chr(files, function(file) {
-      log_json_line(synthetic_file_action(file, format, "read"))
+    file_actions <- purrr::map(files, function(file) {
+      synthetic_file_action(file, format, "read")
     })
+    file_actions <- stage_delta_actions(file_actions, staging, threads)
+    file_lines <- purrr::map_chr(file_actions, log_json_line)
     writeLines(file_lines, output, useBytes = TRUE)
 
     protocol <- page$protocol
@@ -86,16 +90,23 @@ write_snapshot_query_pages <- function(
   )
 }
 
-# Prepare the private snapshot log. The staging file is inside the private root
-# and is removed before the handle transfers to the native cleanup guard.
+# Prepare the private local snapshot table. The temporary action file stays
+# inside that table and is removed before native code takes over cleanup.
 prepare_snapshot_query_log <- function(
   profile,
   auth,
   identifier,
   spec,
-  format
+  format,
+  threads = DEFAULT_THREADS
 ) {
   prepare_log(function(log_dir) {
+    staging <- new_staging_context(
+      profile,
+      identifier,
+      fs::path_dir(log_dir),
+      spec$cache
+    )
     staged_actions <- fs::path(log_dir, ".snapshot-actions")
     query_result <- local({
       output <- file(staged_actions, open = "wb")
@@ -106,7 +117,9 @@ prepare_snapshot_query_log <- function(
         identifier,
         spec,
         format,
-        output
+        output,
+        staging,
+        threads
       )
     })
     header <- synthetic_log_header(
@@ -119,9 +132,50 @@ prepare_snapshot_query_log <- function(
     list(
       response_format = format,
       page_count = query_result$page_count,
-      file_count = query_result$file_count
+      file_count = query_result$file_count,
+      downloaded = staging$downloaded,
+      cache_hits = staging$cache_hits
     )
   })
+}
+
+prepare_cdf_query_log <- function(
+  parsed,
+  profile,
+  identifier,
+  cache,
+  threads = DEFAULT_THREADS
+) {
+  log <- prepare_log(function(log_dir) {
+    staging <- new_staging_context(
+      profile,
+      identifier,
+      fs::path_dir(log_dir),
+      cache
+    )
+    by_version <- purrr::map(parsed$by_version, function(version_data) {
+      version_data$actions <- stage_delta_actions(
+        version_data$actions,
+        staging,
+        threads
+      )
+      version_data
+    })
+    write_cdf_log(
+      log_dir,
+      parsed$protocol,
+      by_version,
+      parsed$start_version,
+      parsed$end_version
+    )
+    list(
+      start_version = parsed$start_version,
+      end_version = parsed$end_version,
+      downloaded = staging$downloaded,
+      cache_hits = staging$cache_hits
+    )
+  })
+  log
 }
 
 changes_query <- function(spec, page_token) {
@@ -325,7 +379,8 @@ sharing_snapshot_stream <- function(
   auth,
   identifier,
   spec,
-  batch_size = DEFAULT_BATCH_SIZE
+  batch_size = DEFAULT_BATCH_SIZE,
+  threads = DEFAULT_THREADS
 ) {
   fmt <- resolve_query_format(
     profile,
@@ -338,7 +393,8 @@ sharing_snapshot_stream <- function(
     auth,
     identifier,
     spec,
-    format = fmt
+    format = fmt,
+    threads = threads
   )
 
   # If native construction fails, clean up here; on success the native stream
@@ -369,7 +425,8 @@ sharing_changes_stream <- function(
   auth,
   identifier,
   spec,
-  batch_size = DEFAULT_BATCH_SIZE
+  batch_size = DEFAULT_BATCH_SIZE,
+  threads = DEFAULT_THREADS
 ) {
   # Change data feed is read through the kernel, which requires delta format;
   # the parquet CDF path is not supported. An explicit parquet request is a
@@ -383,11 +440,12 @@ sharing_changes_stream <- function(
     )
   }
   parsed <- sharing_query_changes(profile, auth, identifier, spec)
-  log <- prepare_cdf_log(
-    parsed$protocol,
-    parsed$by_version,
-    parsed$start_version,
-    parsed$end_version
+  log <- prepare_cdf_query_log(
+    parsed,
+    profile,
+    identifier,
+    spec$cache,
+    threads
   )
 
   ownership_transferred <- FALSE

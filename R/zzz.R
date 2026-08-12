@@ -1,4 +1,5 @@
 .onUnload <- function(libpath) {
+  try(clear_session_download_cache(), silent = TRUE)
   # Reaping is best-effort here; the shared library must still be unloaded.
   try(native_reap_pending_cleanups(), silent = TRUE)
   library.dynam.unload("delta.sharing", libpath)

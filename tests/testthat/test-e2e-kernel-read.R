@@ -90,7 +90,7 @@ test_that("a reader exposes the kernel stream as an Arrow reader", {
     inherit = SharingReader,
     cloneable = FALSE,
     private = list(
-      open_stream = function(batch_size) {
+      open_stream = function(batch_size, threads) {
         native_snapshot_stream(
           fixture_table("local-table"),
           batch_size = batch_size
@@ -234,6 +234,67 @@ test_that("native CDF reads the local change fixture", {
     columns = c("id", "_change_type")
   )
   changes <- sharing_stream_to_data_frame(stream)
+
+  expect_gt(nrow(changes), 0L)
+  expect_identical(names(changes), c("id", "_change_type"))
+  expect_setequal(unique(changes$`_change_type`), c("delete", "insert"))
+})
+
+test_that("snapshot and CDF readers stage selected files before Kernel reads", {
+  snapshot_actions <- local_snapshot_actions()
+  cdf_actions <- c(
+    list(list(protocol = snapshot_actions[[1L]]$protocol)),
+    local_cdf_actions()
+  )
+  state <- new.env(parent = emptyenv())
+  state$operation <- "snapshot"
+  httr2::local_mocked_responses(function(req) {
+    actions <- if (identical(state$operation, "snapshot")) {
+      snapshot_actions
+    } else {
+      cdf_actions
+    }
+    httr2::response(200, body = charToRaw(ndjson_body(actions)))
+  })
+  profile <- test_profile()
+  auth <- sharing_auth_context(profile)
+  identifier <- sharing_table_identifier("sales.default.events")
+
+  snapshot <- sharing_snapshot_stream(
+    profile,
+    auth,
+    identifier,
+    list(
+      version = NULL,
+      timestamp = NULL,
+      columns = NULL,
+      limit = NULL,
+      predicate = NULL,
+      response_format = "delta",
+      cache = FALSE
+    ),
+    threads = 4L
+  ) |>
+    sharing_stream_to_data_frame()
+  expect_equal(nrow(snapshot), 7L)
+
+  state$operation <- "cdf"
+  changes <- sharing_changes_stream(
+    profile,
+    auth,
+    identifier,
+    list(
+      starting_version = 1,
+      ending_version = 2,
+      starting_timestamp = NULL,
+      ending_timestamp = NULL,
+      columns = c("id", "_change_type"),
+      response_format = "delta",
+      cache = FALSE
+    ),
+    threads = 4L
+  ) |>
+    sharing_stream_to_data_frame()
 
   expect_gt(nrow(changes), 0L)
   expect_identical(names(changes), c("id", "_change_type"))

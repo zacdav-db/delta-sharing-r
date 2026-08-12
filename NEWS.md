@@ -13,3 +13,5 @@ compatibility aliases or migration shims for earlier package versions.
   JWT profiles.
 - Added deletion-vector, column-mapping, partitioned, nested, and logical-type
   read support through Delta Kernel.
+- Added bounded parallel staging of selected data files and an opt-in,
+  table-scoped session cache with `SharingTable$clear_cache()`.
