@@ -74,24 +74,6 @@ cdf_whole_version <- function(value, label) {
   as.double(value)
 }
 
-native_test_stream <- function(
-  batches = 1L,
-  rows_per_batch = 3L,
-  error_after = -1L,
-  panic_after = -1L
-) {
-  stream <- nanoarrow::nanoarrow_allocate_array_stream()
-  .Call(
-    C_delta_sharing_stream_from_test_data,
-    stream,
-    as.integer(batches),
-    as.integer(rows_per_batch),
-    as.integer(error_after),
-    as.integer(panic_after)
-  )
-  interruptible_native_stream(stream)
-}
-
 native_stream_interrupt_message <- "delta-sharing stream interrupted"
 
 native_stream_was_interrupted <- function(condition) {
@@ -111,41 +93,17 @@ abort_native_stream_interrupt <- function(operation) {
   )
 }
 
-abort_native_stream_failure <- function(operation) {
-  abort(
-    "Delta Kernel could not produce the requested Arrow data.",
-    type = "kernel",
-    operation = operation,
-    kernel_category = "data_scan"
-  )
-}
-
 with_native_stream_conditions <- function(code, operation, stream = NULL) {
   tryCatch(
     code,
     error = function(condition) {
-      if (inherits(condition, "delta_sharing_error")) {
-        if (!is.null(stream)) {
-          release_materializer_stream(stream)
-        }
-        stop(condition)
+      if (!is.null(stream)) {
+        release_materializer_stream(stream)
       }
       if (native_stream_was_interrupted(condition)) {
-        if (!is.null(stream)) {
-          release_materializer_stream(stream)
-        }
         abort_native_stream_interrupt(operation)
       }
-      if (is.null(stream)) {
-        stop(condition)
-      }
-      # At this point a live stream has entered its consumer. Hook-shape
-      # validation and Arrow reader construction happen before this guard;
-      # production code inside it only performs schema and data pulls.
-      # Injected internal consumer hooks intentionally share this public
-      # redaction boundary so their implementation detail cannot escape.
-      release_materializer_stream(stream)
-      abort_native_stream_failure(operation)
+      stop(condition)
     },
     interrupt = function(condition) {
       if (!is.null(stream)) {

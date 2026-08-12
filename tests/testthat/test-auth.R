@@ -8,8 +8,8 @@ test_that("bearer auth applies an Authorization header", {
   ctx <- sharing_auth_context(p)
   expect_equal(ctx$kind, "bearer_token")
   req <- ctx$authenticate(httr2::request("https://x.test/api"))
-  dr <- httr2::req_dry_run(req, quiet = TRUE, redact_headers = FALSE)
-  expect_equal(dr$headers$authorization, "Bearer tok")
+  headers <- httr2::req_get_headers(req, redacted = "reveal")
+  expect_equal(headers$Authorization, "Bearer tok")
 })
 
 test_that("bearer expiration metadata does not block requests eagerly", {
@@ -21,9 +21,9 @@ test_that("bearer expiration metadata does not block requests eagerly", {
   ))
   ctx <- sharing_auth_context(p)
   req <- ctx$authenticate(httr2::request("https://x.test/api"))
-  dr <- httr2::req_dry_run(req, quiet = TRUE, redact_headers = FALSE)
+  headers <- httr2::req_get_headers(req, redacted = "reveal")
 
-  expect_equal(dr$headers$authorization, "Bearer t")
+  expect_equal(headers$Authorization, "Bearer t")
 })
 
 test_that("basic auth applies a base64 Authorization header", {
@@ -36,9 +36,9 @@ test_that("basic auth applies a base64 Authorization header", {
   ))
   ctx <- sharing_auth_context(p)
   req <- ctx$authenticate(httr2::request("https://x.test/api"))
-  dr <- httr2::req_dry_run(req, quiet = TRUE, redact_headers = FALSE)
+  headers <- httr2::req_get_headers(req, redacted = "reveal")
   expect_equal(
-    dr$headers$authorization,
+    headers$Authorization,
     paste0("Basic ", openssl::base64_encode("u:pw"))
   )
 })

@@ -45,7 +45,7 @@ test_that("snapshot pages append to one private commit", {
       expect_null(req$body$data$pageToken)
       actions <- c(
         snapshot_delta_actions(),
-        list(list(nextPageToken = "page-two"))
+        list(list(endStreamAction = list(nextPageToken = "page-two")))
       )
     } else {
       expect_equal(req$body$data$pageToken, "page-two")
@@ -164,7 +164,7 @@ test_that("a malformed later page removes incomplete snapshot staging", {
     if (state$page == 1L) {
       actions <- c(
         snapshot_delta_actions(),
-        list(list(nextPageToken = "broken-page"))
+        list(list(endStreamAction = list(nextPageToken = "broken-page")))
       )
       return(httr2::response(
         200,
@@ -204,8 +204,10 @@ test_that("snapshot responses require protocol and metadata", {
   httr2::local_mocked_responses(function(req) {
     httr2::response(
       200,
-      body = charToRaw(ndjson_body(list(list(nextPageToken = ""))))
-    )
+      body = charToRaw(ndjson_body(list(list(
+        endStreamAction = list(nextPageToken = "")
+      )))
+    ))
   })
   profile <- test_profile()
 

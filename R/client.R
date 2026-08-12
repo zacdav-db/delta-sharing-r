@@ -1,10 +1,7 @@
-# Remove embedded user information before displaying an endpoint. For example,
-# `https://user:secret@example.com/api` becomes `https://example.com/api`.
-redact_url_userinfo <- function(url) {
-  if (!is.character(url) || length(url) != 1L || is.na(url)) {
-    return("<invalid endpoint>")
-  }
-  sub("^([^:/?#]+://)[^/@]*@", "\\1", url)
+# Remove credentials, query parameters, and fragments from a printed endpoint.
+redact_endpoint <- function(endpoint) {
+  endpoint <- sub("^([^:/?#]+://)[^/@]*@", "\\1", endpoint)
+  sub("[?#].*$", "", endpoint)
 }
 
 #' Create a Delta Sharing client
@@ -94,7 +91,7 @@ SharingClient <- R6::R6Class(
     print = function(...) {
       cat(sprintf(
         "<SharingClient> %s [%s]\n",
-        redact_url_userinfo(private$profile$endpoint),
+        redact_endpoint(private$profile$endpoint),
         private$profile$auth_type
       ))
       invisible(self)

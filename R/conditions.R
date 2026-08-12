@@ -16,8 +16,9 @@ condition_classes <- list(
 #'
 #' Package-specific errors inherit from `delta_sharing_error`. More specific
 #' subclasses identify validation, authentication, protocol, kernel,
-#' unsupported-feature, and cancellation failures. HTTP requests retain
-#' [httr2::req_perform()]'s native condition classes and provider messages.
+#' unsupported-feature, and cancellation failures. HTTP requests and Arrow
+#' consumers retain their native condition classes and messages. User
+#' interrupts are reported as cancellation failures.
 #'
 #' @name delta_sharing_conditions
 #' @keywords internal

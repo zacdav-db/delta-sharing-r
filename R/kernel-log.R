@@ -140,8 +140,10 @@ prepare_synthetic_log <- function(lines) {
   })
 }
 
-# Write a commit header followed by the bytes in one bounded action stage.
-write_staged_commit <- function(commit, header, staged_actions) {
+# Write a snapshot commit from its header and bounded action stage. The stage
+# is copied in chunks, then removed before ownership transfers to Rust.
+write_snapshot_commit <- function(log_dir, header, staged_actions) {
+  commit <- fs::path(log_dir, log_commit_name)
   local({
     output <- file(commit, open = "wb")
     on.exit(close(output), add = TRUE)
@@ -157,15 +159,6 @@ write_staged_commit <- function(commit, header, staged_actions) {
       writeBin(bytes, output)
     }
   })
-  invisible(commit)
-}
-
-# Publish a snapshot commit from a bounded action staging file. The staging
-# file lives inside the private log root and is removed before native ownership
-# validation, leaving exactly the one commit expected by the cleanup guard.
-write_staged_snapshot_commit <- function(log_dir, header, staged_actions) {
-  commit <- fs::path(log_dir, log_commit_name)
-  write_staged_commit(commit, header, staged_actions)
   fs::file_delete(staged_actions)
   invisible(commit)
 }

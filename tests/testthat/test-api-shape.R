@@ -110,14 +110,23 @@ test_that("print methods are stable", {
 test_that("client printing redacts endpoint user information", {
   client <- sharing_client(list(
     shareCredentialsVersion = 1,
-    endpoint = "https://user:secret@sharing.example.test/api",
+    endpoint = paste0(
+      "https://user:secret@sharing.example.test/api",
+      "?access_token=query-secret#private-fragment"
+    ),
     bearerToken = "tok"
   ))
 
   output <- capture.output(print(client))
+  expect_equal(client$endpoint(), paste0(
+    "https://user:secret@sharing.example.test/api",
+    "?access_token=query-secret#private-fragment"
+  ))
   expect_match(output, "sharing.example.test", fixed = TRUE)
   expect_false(grepl("user", output, fixed = TRUE))
   expect_false(grepl("secret", output, fixed = TRUE))
+  expect_false(grepl("access_token", output, fixed = TRUE))
+  expect_false(grepl("fragment", output, fixed = TRUE))
 })
 
 test_that("base readers require a concrete stream implementation", {

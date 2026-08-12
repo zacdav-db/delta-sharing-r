@@ -12,10 +12,11 @@ test_that("CDF requests include versioned metadata and CDF capabilities", {
   expect_equal(query$includeHistoricalMetadata, "true")
   expect_equal(query$pageToken, "next")
 
-  capabilities <- query_capabilities("delta", for_cdf = TRUE)
+  capabilities <- capability_header("delta", for_cdf = TRUE)
   expect_match(capabilities, "responseformat=delta", fixed = TRUE)
   expect_match(capabilities, "deletionvectors,columnmapping", fixed = TRUE)
   expect_false(grepl("timestampntz", capabilities, fixed = TRUE))
+  expect_false(grepl("includeendstreamaction", capabilities, fixed = TRUE))
 })
 
 test_that("CDF requests support open version and timestamp ranges", {
@@ -79,6 +80,10 @@ test_that("CDF actions retain versioned metadata and response bounds", {
   expect_equal(parsed$end_version, 4)
   expect_setequal(names(parsed$by_version), c("1", "3", "4"))
   expect_equal(parsed$by_version[["1"]]$actions[[1]]$metaData$id, "table")
+  expect_equal(
+    parsed$by_version[["1"]]$actions[[2]]$add$path,
+    "one.parquet"
+  )
   expect_equal(
     parsed$by_version[["4"]]$actions[[1]]$metaData$name,
     "renamed"
@@ -236,5 +241,27 @@ test_that("CDF action buckets require protocol and represented versions", {
     ),
     class = "delta_sharing_protocol_error"
   )
-  expect_null(find_next_page_token(list(list(protocol = list()))))
+  expect_null(find_next_page_token(list(list(protocol = list())), "changes"))
+})
+
+test_that("query pagination follows nested end stream actions", {
+  expect_equal(
+    find_next_page_token(
+      list(list(endStreamAction = list(nextPageToken = "next"))),
+      "changes"
+    ),
+    "next"
+  )
+  expect_null(find_next_page_token(list(list(protocol = list())), "changes"))
+  expect_error(
+    find_next_page_token(
+      list(list(endStreamAction = list(
+        errorMessage = "query failed",
+        httpStatusErrorCode = 500L
+      ))),
+      "changes"
+    ),
+    "query failed",
+    class = "delta_sharing_protocol_error"
+  )
 })

@@ -4,14 +4,6 @@
 # the local path to the native kernel scan. Cleanup of the temp log is
 # transferred to the native stream once it is constructed.
 
-# The query endpoints require a single response format, unlike /metadata.
-query_capabilities <- function(format, for_cdf = FALSE) {
-  paste0(
-    capability_header(format, for_cdf = for_cdf),
-    ";includeendstreamaction=true"
-  )
-}
-
 # Fetch Query Table pages and append their file actions to one staging file.
 # Each response page is buffered by httr2, matching its ordinary request path.
 write_snapshot_query_pages <- function(
@@ -38,11 +30,12 @@ write_snapshot_query_pages <- function(
     )
     req <- httr2::req_headers(
       req,
-      `delta-sharing-capabilities` = query_capabilities(format)
+      `delta-sharing-capabilities` = capability_header(format)
     )
     req <- httr2::req_body_json(req, query_body(spec, page_token))
     resp <- httr2::req_perform(req)
     actions <- parse_ndjson_lines(httr2::resp_body_string(resp), "read")
+    next_page_token <- find_next_page_token(actions, "read")
     page <- purrr::reduce(
       actions,
       function(state, action) {
@@ -51,15 +44,11 @@ write_snapshot_query_pages <- function(
         } else if (!is.null(action$metaData)) {
           state$metadata <- action$metaData
         }
-        if (is_scalar_character(action$nextPageToken)) {
-          state$next_page_token <- action$nextPageToken
-        }
         state
       },
       .init = list(
         protocol = protocol,
-        metadata = metadata,
-        next_page_token = NULL
+        metadata = metadata
       )
     )
 
@@ -74,7 +63,7 @@ write_snapshot_query_pages <- function(
 
     protocol <- page$protocol
     metadata <- page$metadata
-    page_token <- page$next_page_token
+    page_token <- next_page_token
     file_count <- file_count + length(files)
     if (is.null(page_token)) {
       break
@@ -126,7 +115,7 @@ prepare_snapshot_query_log <- function(
       query_result$metadata,
       "read"
     )
-    write_staged_snapshot_commit(log_dir, header, staged_actions)
+    write_snapshot_commit(log_dir, header, staged_actions)
     list(
       response_format = format,
       page_count = query_result$page_count,
@@ -160,7 +149,7 @@ changes_query <- function(spec, page_token) {
 # effective bounds come from the versions represented in the response, as in
 # the Python Kernel reader.
 sharing_query_changes <- function(profile, auth, identifier, spec) {
-  actions <- list()
+  pages <- list()
   page_token <- NULL
   repeat {
     req <- sharing_request(
@@ -172,48 +161,55 @@ sharing_query_changes <- function(profile, auth, identifier, spec) {
     )
     req <- httr2::req_headers(
       req,
-      `delta-sharing-capabilities` = query_capabilities(
+      `delta-sharing-capabilities` = capability_header(
         "delta",
         for_cdf = TRUE
       )
     )
     resp <- httr2::req_perform(req)
     page_actions <- parse_ndjson_lines(httr2::resp_body_string(resp), "changes")
-    actions <- c(actions, page_actions)
-    page_token <- find_next_page_token(page_actions)
+    pages[[length(pages) + 1L]] <- page_actions
+    page_token <- find_next_page_token(page_actions, "changes")
     if (is.null(page_token)) {
       break
     }
   }
   bucket_cdf_actions(
-    actions,
+    purrr::list_c(pages),
     spec$starting_version,
     spec$ending_version
   )
 }
 
-find_next_page_token <- function(actions) {
+# EndStreamAction is optional, but servers use it for pagination and failures.
+find_next_page_token <- function(actions, operation) {
   action <- purrr::detect(actions, function(action) {
-    token <- action$nextPageToken
-    is_scalar_character(token)
+    !is.null(action$endStreamAction)
   })
-  action$nextPageToken
+  terminal <- action$endStreamAction
+  if (!is.null(terminal$errorMessage)) {
+    abort(
+      "The server ended the query with an error: {terminal$errorMessage}",
+      type = "protocol",
+      operation = operation,
+      status_code = terminal$httpStatusErrorCode
+    )
+  }
+  token <- terminal$nextPageToken
+  if (is_scalar_character(token)) token else NULL
 }
 
 bucket_cdf_actions <- function(actions, start_version, end_version) {
-  protocol <- NULL
-  by_version <- list() # keyed by as.character(version)
-  new_version <- function(version) {
-    list(
-      version = version,
-      timestamp_ms = NA_real_,
-      actions = list()
-    )
-  }
-  for (action in actions) {
-    if (!is.null(action$protocol)) {
-      protocol <- action$protocol$deltaProtocol %||% action$protocol
-    } else if (!is.null(action$metaData)) {
+  protocol_action <- purrr::detect(
+    rev(actions),
+    function(action) !is.null(action$protocol)
+  )
+  protocol <- protocol_action$protocol$deltaProtocol %||%
+    protocol_action$protocol
+
+  # Normalize and group once rather than repeatedly growing each version list.
+  entries <- purrr::map(actions, function(action) {
+    if (!is.null(action$metaData)) {
       # Metadata applies at the start of the range when the server omits a
       # version (as Databricks does).
       v <- action$metaData$version
@@ -227,27 +223,39 @@ bucket_cdf_actions <- function(actions, start_version, end_version) {
         }
         v <- start_version
       }
-      key <- as.character(v)
-      version_data <- by_version[[key]] %||% new_version(v)
-      version_data$actions <- c(
-        version_data$actions,
-        list(list(
+      return(list(
+        version = v,
+        action = list(
           metaData = action$metaData$deltaMetadata %||% action$metaData
-        ))
-      )
-      by_version[[key]] <- version_data
-    } else if (!is.null(action$file)) {
-      f <- action$file
-      key <- as.character(f$version)
-      version_data <- by_version[[key]] %||% new_version(f$version)
-      version_data$timestamp_ms <- f$timestamp
-      version_data$actions <- c(
-        version_data$actions,
-        list(f$deltaSingleAction)
-      )
-      by_version[[key]] <- version_data
+        )
+      ))
     }
-  }
+    if (!is.null(action$file)) {
+      f <- action$file
+      return(list(
+        version = f$version,
+        timestamp_ms = f$timestamp,
+        action = f$deltaSingleAction
+      ))
+    }
+    NULL
+  })
+  entries <- purrr::compact(entries)
+  by_version <- split(
+    entries,
+    purrr::map_chr(entries, function(entry) as.character(entry$version))
+  )
+  by_version <- purrr::map(by_version, function(entries) {
+    last_file <- purrr::detect(
+      rev(entries),
+      function(entry) !is.null(entry$timestamp_ms)
+    )
+    list(
+      version = entries[[1L]]$version,
+      timestamp_ms = last_file$timestamp_ms %||% NA_real_,
+      actions = purrr::map(entries, "action")
+    )
+  })
   if (is.null(protocol)) {
     abort(
       "The change data feed response did not include a protocol.",
@@ -297,7 +305,8 @@ query_body <- function(spec, page_token) {
   if (!is.null(spec$limit)) body$limitHint <- spec$limit
   if (!is.null(spec$version)) {
     body$version <- spec$version
-  } else if (!is.null(spec$timestamp)) {
+  }
+  if (!is.null(spec$timestamp)) {
     body$timestamp <- format_timestamp(spec$timestamp)
   }
   if (!is.null(page_token)) body$pageToken <- page_token

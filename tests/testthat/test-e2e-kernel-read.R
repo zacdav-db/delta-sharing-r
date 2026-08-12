@@ -3,6 +3,35 @@
 # exercise the native reader, Arrow C stream, and nanoarrow conversion without a
 # network mock. This is the layer unit tests with httr2 mocks cannot cover.
 
+corrupt_snapshot_fixture <- function() {
+  table <- fs::path(
+    withr::local_tempdir(
+      pattern = "delta-sharing-corrupt-",
+      .local_envir = parent.frame()
+    ),
+    "table"
+  )
+  fs::dir_copy(fixture_table("local-table"), table)
+  writeBin(
+    charToRaw("not parquet"),
+    fs::path(table, "part-00001.parquet")
+  )
+  table
+}
+
+test_that("the installed native API contains only production entry points", {
+  routines <- getDLLRegisteredRoutines("delta.sharing")$.Call
+
+  expect_setequal(
+    names(routines),
+    c(
+      "delta_sharing_stream_from_snapshot",
+      "delta_sharing_stream_from_cdf",
+      "delta_sharing_reap_pending_cleanups"
+    )
+  )
+})
+
 test_that("kernel reads a local table to a data frame", {
   stream <- native_snapshot_stream(fixture_table("local-table"))
   df <- sharing_stream_to_data_frame(stream)
@@ -20,31 +49,24 @@ test_that("kernel reads a local table to a data frame", {
   expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
-test_that("data-frame materialization exhausts its native stream", {
-  stream <- native_test_stream(batches = 3L, rows_per_batch = 2L)
+test_that("data-frame materialization preserves native stream failures", {
+  stream <- native_snapshot_stream(
+    corrupt_snapshot_fixture(),
+    batch_size = 2L
+  )
 
-  df <- sharing_stream_to_data_frame(stream)
-
-  expect_s3_class(df, "data.frame")
-  expect_equal(nrow(df), 6L)
+  condition <- expect_error(
+    sharing_stream_to_data_frame(stream),
+    "Delta Kernel data scan failed",
+    fixed = TRUE
+  )
+  expect_s3_class(condition, "simpleError")
+  expect_false(inherits(condition, "delta_sharing_kernel_error"))
   expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
-test_that("data-frame materialization preserves typed stream failures", {
-  stream <- native_test_stream(
-    batches = 3L,
-    rows_per_batch = 2L,
-    error_after = 1L
-  )
-
-  expect_error(
-    sharing_stream_to_data_frame(stream),
-    class = "delta_sharing_kernel_error"
-  )
-})
-
 test_that("the native stream boundary translates user interrupts", {
-  stream <- native_test_stream()
+  stream <- native_snapshot_stream(fixture_table("local-table"))
   interrupt <- structure(
     list(message = "simulated user interrupt"),
     class = c("interrupt", "condition")
@@ -98,18 +120,21 @@ test_that("Arrow materialization exhausts its native stream", {
   expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
-test_that("Arrow materialization preserves typed stream failures", {
+test_that("Arrow materialization preserves native stream failures", {
   skip_if_not_installed("arrow")
-  stream <- native_test_stream(
-    batches = 3L,
-    rows_per_batch = 2L,
-    error_after = 1L
+  stream <- native_snapshot_stream(
+    corrupt_snapshot_fixture(),
+    batch_size = 2L
   )
 
-  expect_error(
+  condition <- expect_error(
     sharing_stream_to_arrow(stream),
-    class = "delta_sharing_kernel_error"
+    "Delta Kernel data scan failed",
+    fixed = TRUE
   )
+  expect_s3_class(condition, "simpleError")
+  expect_false(inherits(condition, "delta_sharing_kernel_error"))
+  expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
 test_that("projection selects and orders columns", {
@@ -215,8 +240,8 @@ test_that("native CDF reads the local change fixture", {
   expect_setequal(unique(changes$`_change_type`), c("delete", "insert"))
 })
 
-test_that("native condition translation releases streams and redacts failures", {
-  typed_stream <- native_test_stream()
+test_that("native condition handling releases streams and preserves errors", {
+  typed_stream <- native_snapshot_stream(fixture_table("local-table"))
   expect_error(
     with_native_stream_conditions(
       abort("bad protocol", type = "protocol"),
@@ -226,7 +251,7 @@ test_that("native condition translation releases streams and redacts failures", 
     class = "delta_sharing_protocol_error"
   )
 
-  interrupted_stream <- native_test_stream()
+  interrupted_stream <- native_snapshot_stream(fixture_table("local-table"))
   expect_error(
     with_native_stream_conditions(
       stop(native_stream_interrupt_message),
@@ -236,15 +261,19 @@ test_that("native condition translation releases streams and redacts failures", 
     class = "delta_sharing_cancelled"
   )
 
-  failed_stream <- native_test_stream()
-  expect_error(
+  failed_stream <- native_snapshot_stream(fixture_table("local-table"))
+  condition <- expect_error(
     with_native_stream_conditions(
-      stop("internal implementation detail"),
+      stop("consumer failure"),
       operation = "read_arrow_stream",
       stream = failed_stream
     ),
-    class = "delta_sharing_kernel_error"
+    "consumer failure",
+    fixed = TRUE
   )
+  expect_s3_class(condition, "simpleError")
+  expect_false(inherits(condition, "delta_sharing_kernel_error"))
+  expect_match(capture.output(print(failed_stream)), "invalid pointer")
 
   original <- simpleError("construction failed")
   expect_error(
@@ -258,7 +287,7 @@ test_that("native condition translation releases streams and redacts failures", 
 })
 
 test_that("interruptible streams preserve non-pull methods", {
-  stream <- native_test_stream()
+  stream <- native_snapshot_stream(fixture_table("local-table"))
   withr::defer(release_materializer_stream(stream))
 
   expect_type(stream$get_schema, "closure")
@@ -300,7 +329,10 @@ test_that("public CDF readers paginate and materialize local change files", {
   httr2::local_mocked_responses(function(req) {
     state$page <- state$page + 1L
     page_actions <- if (state$page == 1L) {
-      c(actions[seq_len(3L)], list(list(nextPageToken = "second")))
+      c(
+        actions[seq_len(3L)],
+        list(list(endStreamAction = list(nextPageToken = "second")))
+      )
     } else {
       actions[-seq_len(3L)]
     }

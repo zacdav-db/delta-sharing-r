@@ -20,7 +20,6 @@ use std::ptr::NonNull;
 use arrow_array::ffi_stream::FFI_ArrowArrayStream;
 
 use crate::kernel::adapter::{CdfReadOptions, SnapshotReadOptions};
-use crate::stream::{fixture_stream, FixtureStreamConfig};
 
 const STATUS_OK: c_int = 0;
 const STATUS_ERROR: c_int = 1;
@@ -76,32 +75,6 @@ where
     }
 }
 
-/// Populate a nanoarrow-owned ArrowArrayStream with deterministic test data.
-///
-/// # Safety
-///
-/// `destination` must point to writable, aligned storage for an uninitialized
-/// Arrow C Stream owned by nanoarrow. `error_buffer`, when non-null, must point
-/// to `error_capacity` writable bytes.
-#[no_mangle]
-pub unsafe extern "C" fn delta_sharing_native_populate_test_stream(
-    destination: *mut FFI_ArrowArrayStream,
-    batches: i32,
-    rows_per_batch: i32,
-    error_after: i32,
-    panic_after: i32,
-    error_buffer: *mut c_char,
-    error_capacity: usize,
-) -> c_int {
-    ffi_boundary(error_buffer, error_capacity, || {
-        let destination = NonNull::new(destination)
-            .ok_or_else(|| "nanoarrow stream pointer is NULL".to_string())?;
-        let config =
-            FixtureStreamConfig::try_from_raw(batches, rows_per_batch, error_after, panic_after)?;
-        stream::populate_stream(destination, || fixture_stream(config))
-    })
-}
-
 /// Populate a nanoarrow-owned ArrowArrayStream from a prepared local Delta table.
 ///
 /// This is the complete native reader boundary: R owns all control-plane work
@@ -134,9 +107,6 @@ pub unsafe extern "C" fn delta_sharing_native_populate_snapshot_stream(
         if table_location.is_null() {
             return Err("`table_location` pointer is NULL".to_string());
         }
-        if column_count > 10_000 {
-            return Err("`column_count` must be at most 10000".to_string());
-        }
         if column_count > 0 && columns.is_null() {
             return Err("`columns` pointer is NULL for a non-empty projection".to_string());
         }
@@ -166,8 +136,8 @@ pub unsafe extern "C" fn delta_sharing_native_populate_snapshot_stream(
         let projected_columns = if column_count == 0 {
             None
         } else {
-            // SAFETY: non-null and length bounds were checked above; the C
-            // shim owns this pointer array throughout the Rust call.
+            // SAFETY: the C shim owns this valid pointer array throughout the
+            // Rust call.
             let raw_columns = unsafe { std::slice::from_raw_parts(columns, column_count) };
             let mut projected = Vec::with_capacity(column_count);
             for (index, column) in raw_columns.iter().copied().enumerate() {
@@ -233,9 +203,6 @@ pub unsafe extern "C" fn delta_sharing_native_populate_cdf_stream(
             .ok_or_else(|| "nanoarrow stream pointer is NULL".to_string())?;
         if table_location.is_null() {
             return Err("`table_location` pointer is NULL".to_string());
-        }
-        if column_count > 10_000 {
-            return Err("`column_count` must be at most 10000".to_string());
         }
         if column_count > 0 && columns.is_null() {
             return Err("`columns` pointer is NULL for a non-empty projection".to_string());
