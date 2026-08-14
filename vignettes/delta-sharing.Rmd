@@ -25,7 +25,7 @@ Most workflows have four steps:
 1. create a client from a standard Delta Sharing profile;
 2. get a reusable table handle;
 3. configure a snapshot or change data feed read; and
-4. materialize it as an Arrow stream, an Arrow table, or a data frame.
+4. materialize it as a tibble, data frame, or Arrow object.
 
 ## Connect to a share
 
@@ -46,7 +46,7 @@ Read a few rows from one of the public tables:
 
 ```{r, eval = FALSE}
 housing <- client$table("delta_sharing.default.boston-housing")
-housing$snapshot(limit = 5)$to_data_frame()
+housing$snapshot(limit = 5)$to_tibble()
 ```
 
 ### Use your own profile
@@ -113,6 +113,12 @@ snapshot <- orders$snapshot(
   limit = 1000
 )
 
+# The usual eager R result.
+data_tbl <- snapshot$to_tibble()
+
+# A base data frame wrapper over the tibble materializer.
+df <- snapshot$to_data_frame()
+
 # Lazy Arrow C stream (use when the result may not fit in memory).
 stream <- snapshot$to_arrow_stream(batch_size = 65536L)
 # Pass the stream to a compatible consumer, or release it when unused.
@@ -122,17 +128,16 @@ stream$release()
 reader <- snapshot$to_arrow_reader()
 reader$Close()
 
-# Eager adapters over the same stream path.
-df <- snapshot$to_data_frame()
-tbl <- snapshot$to_arrow() # requires the optional {arrow} package
+# Eager Arrow table (requires the optional {arrow} package).
+arrow_table <- snapshot$to_arrow()
 ```
 
 Read a specific version or point in time:
 
 ```{r, eval = FALSE}
-orders$snapshot(version = 42)$to_data_frame()
-orders$snapshot(timestamp = as.POSIXct("2024-01-01", tz = "UTC"))$to_data_frame()
-orders$snapshot(timestamp = "2024-01-01T00:00:00Z")$to_data_frame()
+orders$snapshot(version = 42)$to_tibble()
+orders$snapshot(timestamp = as.POSIXct("2024-01-01", tz = "UTC"))$to_tibble()
+orders$snapshot(timestamp = "2024-01-01T00:00:00Z")$to_tibble()
 ```
 
 `limit` is enforced exactly by the Kernel scan. A `predicate` is a best-effort
@@ -154,32 +159,60 @@ active_orders <- list(
     list(op = "literal", value = "true", valueType = "bool")
   )
 )
-orders$snapshot(predicate = active_orders)$to_data_frame()
+orders$snapshot(predicate = active_orders)$to_tibble()
 ```
 
 ## Read a change data feed
 
 ```{r, eval = FALSE}
-orders$changes(starting_version = 120, ending_version = 125)$to_data_frame()
+orders$changes(starting_version = 120, ending_version = 125)$to_tibble()
 orders$changes(
   starting_timestamp = "2024-01-01T00:00:00Z",
   ending_timestamp = "2024-01-02T00:00:00Z"
-)$to_data_frame()
+)$to_tibble()
 ```
+
+Change data feeds expose the same materializers as snapshots. Delta Kernel
+applies change semantics and deletion vectors before returning rows.
+
+## Reuse downloaded files
+
+Downloads are cached for the R session. New handles for the same endpoint and
+table reuse the same files:
+
+```{r, eval = FALSE}
+orders <- client$table("sales.default.orders", concurrency = 4)
+
+first <- orders$snapshot()$to_tibble()
+second <- orders$snapshot()$to_tibble() # reuses unchanged data files
+
+orders$cache_path
+```
+
+`concurrency` controls the maximum number of concurrent downloads and defaults
+to four. R removes the cache with its session temporary directory. Advanced
+users can remove `orders$cache_path` manually, but should not do so while a lazy
+reader is active; the next read recreates it.
+
+In an interactive R session, missing-file downloads show their file count and,
+when the server supplies sizes, the total bytes to download.
 
 ## How reads work
 
 A read follows one path:
 
 1. R sends the query to the Delta Sharing server.
-2. R writes the response to a private, temporary Delta log.
-3. Delta Kernel reads that log, fetches the data files directly from their
-   presigned URLs, and exposes the rows as an Arrow stream.
+2. R downloads missing Parquet and deletion-vector files into the table's
+   session cache, using bounded parallel requests.
+3. R writes a fresh synthetic Delta log whose file actions point to those
+   cached local files.
+4. Delta Kernel reads through that log and exposes the rows as an Arrow stream.
 
-Delta and Parquet responses both use this path. R does not download the data
-files separately.
+Delta and Parquet responses, including change data feeds, use this path. Delta
+Kernel remains responsible for projection, deletion vectors, column mapping,
+change semantics, and Arrow batches.
 
 R checks for user interrupts between Arrow batches. If a batch pull is already
-waiting inside Delta Kernel's network I/O, that pull must return or fail before
-R can handle the interrupt. Releasing a stream between pulls still releases the
-Kernel reader and its temporary log immediately.
+waiting inside Delta Kernel's local I/O, that pull must return or fail before R
+can handle the interrupt. Releasing a stream between pulls releases the Kernel
+reader; its session-temporary log remains until R removes the session directory.

@@ -57,22 +57,17 @@ test_that("parquet format synthesizes a flat add with object-valued maps", {
   expect_true(is.list(metaline$metaData$configuration))
 })
 
-test_that("prepare_synthetic_log writes the private ownership-marked layout", {
+test_that("prepare_synthetic_log writes the session-temporary layout", {
   lines <- c(
     '{"protocol":{"minReaderVersion":1,"minWriterVersion":2}}',
     '{"metaData":{"id":"t"}}'
   )
   log <- prepare_synthetic_log(lines)
-  withr::defer(log$cleanup())
+  withr::defer(fs::dir_delete(log$root))
 
-  # root is a private .delta-sharing-snapshot-* dir; table location is <root>/table
+  # root is a .delta-sharing-snapshot-* dir; table location is <root>/table
   expect_match(fs::path_file(log$root), "^\\.delta-sharing-snapshot-")
   expect_equal(fs::path_file(log$path), "table")
-
-  # ownership marker the native cleanup guard checks
-  marker <- fs::path(log$root, ".delta-sharing-r-prepared-log")
-  expect_true(fs::file_exists(marker))
-  expect_equal(readChar(marker, 100L), "delta-sharing-r:prepared-log\n")
 
   # the commit itself
   commit <- fs::path(
@@ -85,7 +80,7 @@ test_that("prepare_synthetic_log writes the private ownership-marked layout", {
   expect_match(content[[1]], "protocol")
 })
 
-test_that("prepare_log removes an incomplete log after a write failure", {
+test_that("prepare_log leaves failed work under the session temporary root", {
   state <- new.env(parent = emptyenv())
   state$root <- NULL
   withr::defer({
@@ -102,5 +97,5 @@ test_that("prepare_log removes an incomplete log after a write failure", {
     "synthetic write failure"
   )
 
-  expect_false(fs::dir_exists(state$root))
+  expect_true(fs::dir_exists(state$root))
 })

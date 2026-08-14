@@ -60,7 +60,7 @@ test_that("DuckDB queries eager Arrow tables", {
   expect_gt(nrow(result), 0L)
 })
 
-test_that("DuckDB early completion releases the prepared snapshot root", {
+test_that("DuckDB early completion releases the Arrow stream", {
   skip_if_not_installed("arrow")
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
@@ -87,12 +87,10 @@ test_that("DuckDB early completion releases the prepared snapshot root", {
     ),
     "delta"
   )
-  root <- log$root
   result <- local({
     stream <- native_snapshot_stream(
       table_location = log$path,
-      batch_size = 2L,
-      cleanup_root = root
+      batch_size = 2L
     )
     reader <- sharing_stream_to_arrow_reader(stream)
     withr::defer(reader$Close())
@@ -119,8 +117,8 @@ test_that("DuckDB early completion releases the prepared snapshot root", {
   })
 
   expect_identical(nrow(result), 1L)
-  expect_false(fs::dir_exists(root))
-  expect_identical(native_reap_pending_cleanups(), 0)
+  expect_true(fs::dir_exists(log$root))
+  fs::dir_delete(log$root)
 })
 
 test_that("DuckDB queries CDF metadata columns", {

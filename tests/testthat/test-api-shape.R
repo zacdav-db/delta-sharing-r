@@ -11,22 +11,47 @@ test_that("sharing_client builds a SharingClient", {
 
 test_that("the staged object graph composes", {
   client <- test_client()
-  tbl <- client$table("sales.default.orders")
+  tbl <- client$table("sales.default.orders", concurrency = 8)
   expect_s3_class(tbl, "SharingTable")
   expect_equal(tbl$identifier()$table, "orders")
+  expect_true(fs::dir_exists(tbl$cache_path))
 
-  snap <- tbl$snapshot(version = 42, columns = c("a", "b"), limit = 100)
+  snap <- tbl$snapshot(
+    version = 42,
+    columns = c("a", "b"),
+    limit = 100
+  )
   expect_s3_class(snap, "SharingSnapshot")
 
-  chg <- tbl$changes(starting_version = 120, ending_version = 125)
+  chg <- tbl$changes(
+    starting_version = 120,
+    ending_version = 125
+  )
   expect_s3_class(chg, "SharingChanges")
 })
 
-test_that("eager materializers expose only direct-read controls", {
+test_that("download concurrency belongs to the table", {
   snapshot <- test_client()$table("sales.default.orders")$snapshot()
 
-  expect_identical(names(formals(snapshot$to_arrow)), "batch_size")
-  expect_identical(names(formals(snapshot$to_data_frame)), "batch_size")
+  purrr::walk(
+    c(
+      "to_arrow",
+      "to_arrow_reader",
+      "to_data_frame",
+      "to_tibble",
+      "to_arrow_stream"
+    ),
+    function(method) {
+      arguments <- formals(snapshot[[method]])
+      expect_identical(names(arguments), "batch_size")
+      expect_identical(arguments$batch_size, 65536L)
+    }
+  )
+  expect_identical(formals(test_client()$table)$concurrency, 4L)
+  expect_error(
+    test_client()$table("sales.default.orders", concurrency = 0),
+    class = "rlang_error"
+  )
 })
 
 test_that("table accepts explicit share, schema, and name components", {

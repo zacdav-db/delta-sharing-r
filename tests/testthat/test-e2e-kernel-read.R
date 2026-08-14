@@ -26,8 +26,7 @@ test_that("the installed native API contains only production entry points", {
     names(routines),
     c(
       "delta_sharing_stream_from_snapshot",
-      "delta_sharing_stream_from_cdf",
-      "delta_sharing_reap_pending_cleanups"
+      "delta_sharing_stream_from_cdf"
     )
   )
 })
@@ -37,6 +36,7 @@ test_that("kernel reads a local table to a data frame", {
   df <- sharing_stream_to_data_frame(stream)
 
   expect_s3_class(df, "data.frame")
+  expect_false(inherits(df, "tbl_df"))
   expect_equal(names(df), c("id", "group", "value", "active"))
   # two parquet files (3 + 4 rows) read as one table
   expect_equal(nrow(df), 7L)
@@ -47,6 +47,28 @@ test_that("kernel reads a local table to a data frame", {
   expect_true(1 %in% df$id)
   expect_true("alpha" %in% df$group)
   expect_match(capture.output(print(stream)), "invalid pointer")
+})
+
+test_that("a reader materializes a local table as a tibble", {
+  LocalSharingReader <- R6::R6Class(
+    "LocalTibbleSharingReader",
+    inherit = SharingReader,
+    cloneable = FALSE,
+    private = list(
+      open_stream = function(batch_size) {
+        native_snapshot_stream(
+          fixture_table("local-table"),
+          batch_size = batch_size
+        )
+      }
+    )
+  )
+
+  result <- LocalSharingReader$new()$to_tibble(batch_size = 2L)
+
+  expect_s3_class(result, "tbl_df")
+  expect_equal(nrow(result), 7L)
+  expect_equal(names(result), c("id", "group", "value", "active"))
 })
 
 test_that("data-frame materialization preserves native stream failures", {
@@ -63,6 +85,21 @@ test_that("data-frame materialization preserves native stream failures", {
   expect_s3_class(condition, "simpleError")
   expect_false(inherits(condition, "delta_sharing_kernel_error"))
   expect_match(capture.output(print(stream)), "invalid pointer")
+})
+
+test_that("failed stream creation is evaluated once", {
+  state <- rlang::env(attempts = 0L)
+
+  expect_error(
+    sharing_stream_to_tibble({
+      state$attempts <- state$attempts + 1L
+      stop("stream did not open")
+    }),
+    "stream did not open",
+    fixed = TRUE
+  )
+
+  expect_equal(state$attempts, 1L)
 })
 
 test_that("the native stream boundary translates user interrupts", {
@@ -240,6 +277,67 @@ test_that("native CDF reads the local change fixture", {
   expect_setequal(unique(changes$`_change_type`), c("delete", "insert"))
 })
 
+test_that("snapshot and CDF readers stage selected files before Kernel reads", {
+  snapshot_actions <- local_snapshot_actions()
+  cdf_actions <- c(
+    list(list(protocol = snapshot_actions[[1L]]$protocol)),
+    local_cdf_actions()
+  )
+  state <- new.env(parent = emptyenv())
+  state$operation <- "snapshot"
+  httr2::local_mocked_responses(function(req) {
+    actions <- if (identical(state$operation, "snapshot")) {
+      snapshot_actions
+    } else {
+      cdf_actions
+    }
+    httr2::response(200, body = charToRaw(ndjson_body(actions)))
+  })
+  profile <- test_profile()
+  auth <- sharing_auth_context(profile)
+  identifier <- sharing_table_identifier("sales.default.events")
+
+  snapshot <- sharing_snapshot_stream(
+    profile,
+    auth,
+    identifier,
+    list(
+      version = NULL,
+      timestamp = NULL,
+      columns = NULL,
+      limit = NULL,
+      predicate = NULL,
+      response_format = "delta"
+    ),
+    table_download_cache(profile, identifier),
+    concurrency = 4L
+  ) |>
+    sharing_stream_to_data_frame()
+  expect_equal(nrow(snapshot), 7L)
+
+  state$operation <- "cdf"
+  changes <- sharing_changes_stream(
+    profile,
+    auth,
+    identifier,
+    list(
+      starting_version = 1,
+      ending_version = 2,
+      starting_timestamp = NULL,
+      ending_timestamp = NULL,
+      columns = c("id", "_change_type"),
+      response_format = "delta"
+    ),
+    table_download_cache(profile, identifier),
+    concurrency = 4L
+  ) |>
+    sharing_stream_to_data_frame()
+
+  expect_gt(nrow(changes), 0L)
+  expect_identical(names(changes), c("id", "_change_type"))
+  expect_setequal(unique(changes$`_change_type`), c("delete", "insert"))
+})
+
 test_that("native condition handling releases streams and preserves errors", {
   typed_stream <- native_snapshot_stream(fixture_table("local-table"))
   expect_error(
@@ -295,7 +393,6 @@ test_that("interruptible streams preserve non-pull methods", {
     simpleError(native_stream_interrupt_message)
   ))
   expect_false(native_stream_was_interrupted(simpleError("other")))
-  expect_no_error(native_reap_pending_cleanups())
 })
 
 test_that("public snapshot readers materialize through mocked local files", {

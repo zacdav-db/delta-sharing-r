@@ -40,12 +40,14 @@ housing$schema()
 
 # Read a snapshot
 snapshot <- housing$snapshot(limit = 1000)
+housing_tbl <- snapshot$to_tibble()
 housing_df <- snapshot$to_data_frame()
 housing_arrow <- snapshot$to_arrow()
 ```
 
-Eager reads use the same direct Arrow stream as the lazy materializers, without
-an intermediate collection or replay step.
+`to_tibble()` is the usual eager R materializer. `to_data_frame()` returns the
+same result as a base data frame, while `to_arrow()` keeps it in Arrow memory.
+All three consume the same direct Arrow stream without an intermediate replay.
 
 The default `response_format = "auto"` negotiation is reused for subsequent
 reads of the same table through one client. Metadata and schema inspection
@@ -55,7 +57,7 @@ For your own share, pass a profile file and select its table:
 
 ```r
 client <- sharing_client("~/config.share")
-orders <- client$table("sales.default.orders")
+orders <- client$table("sales.default.orders", concurrency = 4)
 ```
 
 ## Snapshots and changes
@@ -63,8 +65,8 @@ orders <- client$table("sales.default.orders")
 Read a table at a specific version or timestamp:
 
 ```r
-orders$snapshot(version = 42)$to_data_frame()
-orders$snapshot(timestamp = "2026-01-01T00:00:00Z")$to_data_frame()
+orders$snapshot(version = 42)$to_tibble()
+orders$snapshot(timestamp = "2026-01-01T00:00:00Z")$to_tibble()
 ```
 
 Read an inclusive change data feed range:
@@ -73,8 +75,28 @@ Read an inclusive change data feed range:
 orders$changes(
   starting_version = 120,
   ending_version = 125
-)$to_data_frame()
+)$to_tibble()
 ```
+
+Each table downloads up to four selected files concurrently by default. Its
+downloads are cached for the R session and reused by other handles for the same
+endpoint and table:
+
+```r
+orders_tbl <- orders$snapshot()$to_tibble()
+
+# A later read can reuse unchanged Delta data files.
+refreshed_tbl <- orders$snapshot()$to_tibble()
+
+# The cache is an ordinary directory under R's session temp directory.
+orders$cache_path
+```
+
+Set `concurrency` when creating the table handle to tune downloads. R removes
+the cache with its session temporary directory. Advanced users can delete
+`orders$cache_path` manually; do not do that while a lazy reader is active.
+Interactive downloads report completed files and total bytes when sizes are
+available from the sharing server.
 
 See `vignette("delta-sharing")` for a full walkthrough.
 
@@ -133,14 +155,15 @@ several times.
 
 ## Performance
 
-Directional end-to-end snapshot results, reported as medians of three reads
-after one warm-up.
+Median end-to-end snapshot times from three `to_tibble()` reads at the default
+concurrency of four. A cached read repeats the query after its selected files
+have been downloaded into the session cache.
 
-*Apple M2 Pro MacBook Pro, 32 GB RAM, R 4.5.1; VPN connection: 93 Mbps
-down, 115 ms base round-trip latency.*
+*Apple M2 Pro (12 cores), 32 GB RAM, R 4.5.1; VPN connection: 92 Mbps down,
+111 ms base round-trip latency.*
 
-| Rows | Materialized R size | Elapsed, median (range) | Median rows/s |
+| Rows | Materialized R size | Empty file cache | Cached files |
 |---:|---:|---:|---:|
-| 10,000 | 0.38 MiB | 5.83 s (5.82–7.77) | 1,700 |
-| 1,000,000 | 38.15 MiB | 11.91 s (11.33–25.66) | 84,000 |
-| 10,000,000 | 381.47 MiB | 71.49 s (66.36–71.79) | 140,000 |
+| 10,000 | 0.38 MiB | 5.15 s | 0.82 s |
+| 1,000,000 | 38.1 MiB | 8.16 s | 1.69 s |
+| 10,000,000 | 381 MiB | 28.3 s | 6.45 s |

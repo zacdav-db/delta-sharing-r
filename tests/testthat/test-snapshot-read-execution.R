@@ -2,6 +2,10 @@ snapshot_identifier <- function() {
   sharing_table_identifier("sales.default.events")
 }
 
+snapshot_file_url <- function(name = "part-00000.parquet") {
+  local_file_url(fs::path(fixture_table("local-table"), name))
+}
+
 snapshot_delta_actions <- function() {
   list(
     list(
@@ -23,10 +27,16 @@ snapshot_delta_actions <- function() {
     ),
     list(
       file = list(
+        id = fixture_file_id(snapshot_file_url()),
+        size = as.numeric(fs::file_size(
+          local_file_path(snapshot_file_url())
+        )),
         deltaSingleAction = list(
           add = list(
-            path = "https://storage.example.test/one.parquet",
-            size = 100,
+            path = snapshot_file_url(),
+            size = as.numeric(fs::file_size(
+              local_file_path(snapshot_file_url())
+            )),
             dataChange = TRUE,
             stats = "{\"numRecords\":10}"
           )
@@ -51,10 +61,16 @@ test_that("snapshot pages append to one private commit", {
       expect_equal(req$body$data$pageToken, "page-two")
       actions <- list(list(
         file = list(
+          id = fixture_file_id(snapshot_file_url("part-00001.parquet")),
+          size = as.numeric(fs::file_size(
+            local_file_path(snapshot_file_url("part-00001.parquet"))
+          )),
           deltaSingleAction = list(
             add = list(
-              path = "https://storage.example.test/two.parquet",
-              size = 70,
+              path = snapshot_file_url("part-00001.parquet"),
+              size = as.numeric(fs::file_size(
+                local_file_path(snapshot_file_url("part-00001.parquet"))
+              )),
               dataChange = TRUE,
               stats = "{\"numRecords\":7}",
               deletionVector = list(cardinality = 2)
@@ -67,6 +83,11 @@ test_that("snapshot pages append to one private commit", {
   }
   httr2::local_mocked_responses(mock)
   profile <- test_profile()
+  cache <- table_download_cache(profile, snapshot_identifier())
+  if (fs::dir_exists(cache)) {
+    fs::dir_delete(cache)
+  }
+  withr::defer(if (fs::dir_exists(cache)) fs::dir_delete(cache))
   log <- prepare_snapshot_query_log(
     profile,
     sharing_auth_context(profile),
@@ -79,7 +100,7 @@ test_that("snapshot pages append to one private commit", {
     ),
     "delta"
   )
-  withr::defer(log$cleanup())
+  withr::defer(fs::dir_delete(log$root))
 
   log_dir <- fs::path(log$path, "_delta_log")
   commit <- fs::path(log_dir, log_commit_name)
@@ -93,13 +114,14 @@ test_that("snapshot pages append to one private commit", {
   expect_length(lines, 4L)
   expect_equal(jsonlite::fromJSON(lines[[1L]])$protocol$minReaderVersion, 3L)
   expect_equal(
-    jsonlite::fromJSON(lines[[3L]])$add$path,
-    "https://storage.example.test/one.parquet"
+    httr2::url_parse(jsonlite::fromJSON(lines[[3L]])$add$path)$scheme,
+    "file"
   )
   expect_equal(
-    jsonlite::fromJSON(lines[[4L]])$add$path,
-    "https://storage.example.test/two.parquet"
+    httr2::url_parse(jsonlite::fromJSON(lines[[4L]])$add$path)$scheme,
+    "file"
   )
+  expect_equal(length(fs::dir_ls(cache)), 2L)
 })
 
 test_that("parquet snapshot pages use the same preparation path", {
@@ -114,8 +136,11 @@ test_that("parquet snapshot pages use the same preparation path", {
     ),
     list(
       file = list(
-        url = "https://storage.example.test/events.parquet",
-        size = 100,
+        id = fixture_file_id(snapshot_file_url()),
+        url = snapshot_file_url(),
+        size = as.numeric(fs::file_size(
+          local_file_path(snapshot_file_url())
+        )),
         stats = "{\"numRecords\":4}"
       )
     )
@@ -138,15 +163,15 @@ test_that("parquet snapshot pages use the same preparation path", {
     ),
     "parquet"
   )
-  withr::defer(log$cleanup())
+  withr::defer(fs::dir_delete(log$root))
 
   lines <- readLines(fs::path(log$path, "_delta_log", log_commit_name))
   expect_identical(log$page_count, 1L)
   expect_identical(log$file_count, 1L)
   expect_identical(log$response_format, "parquet")
   expect_equal(
-    jsonlite::fromJSON(lines[[3L]])$add$path,
-    "https://storage.example.test/events.parquet"
+    httr2::url_parse(jsonlite::fromJSON(lines[[3L]])$add$path)$scheme,
+    "file"
   )
 })
 

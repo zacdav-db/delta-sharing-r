@@ -7,9 +7,11 @@ compatibility aliases or migration shims for earlier package versions.
   discovery, metadata inspection, and reads.
 - Added Delta Kernel-backed snapshot and change data feed reads with
   projection, limits, predicate hints, version bounds, and timestamp bounds.
-- Added direct Arrow stream, Arrow reader, Arrow table, and data-frame
+- Added direct Arrow stream, Arrow reader, Arrow table, tibble, and data-frame
   materializers, including DuckDB interoperability.
 - Added support for bearer, basic, OAuth client-credentials, and private-key
   JWT profiles.
 - Added deletion-vector, column-mapping, partitioned, nested, and logical-type
   read support through Delta Kernel.
+- Added bounded parallel staging with interactive download progress and a
+  table-scoped cache under R's session temporary directory.

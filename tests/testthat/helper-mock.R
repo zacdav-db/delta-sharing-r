@@ -23,6 +23,12 @@ fixture_table <- function(name) {
   as.character(fs::path_real(path))
 }
 
+fixture_file_id <- function(path) {
+  unclass(as.character(openssl::sha256(
+    charToRaw(enc2utf8(as.character(path)))
+  )))
+}
+
 # Build an NDJSON body from a list of action lists.
 ndjson_body <- function(actions) {
   lines <- purrr::map_chr(
@@ -98,8 +104,13 @@ local_snapshot_actions <- function() {
       return(list(metaData = list(deltaMetadata = action$metaData)))
     }
     add <- action$add
-    add$path <- paste0("file://", fs::path(root, add$path))
-    list(file = list(deltaSingleAction = list(add = add)))
+    path <- fs::path(root, add$path)
+    add$path <- local_file_url(path)
+    list(file = list(
+      id = fixture_file_id(path),
+      size = as.numeric(fs::file_size(path)),
+      deltaSingleAction = list(add = add)
+    ))
   })
 }
 
@@ -121,8 +132,11 @@ local_cdf_actions <- function() {
         }
         kind <- purrr::detect(c("add", "remove", "cdc"), ~ !is.null(action[[.x]]))
         file_action <- action[[kind]]
-        file_action$path <- paste0("file://", fs::path(root, file_action$path))
+        path <- fs::path(root, file_action$path)
+        file_action$path <- local_file_url(path)
         list(file = list(
+          id = fixture_file_id(path),
+          size = as.numeric(fs::file_size(path)),
           version = version,
           timestamp = timestamp,
           deltaSingleAction = rlang::set_names(list(file_action), kind)

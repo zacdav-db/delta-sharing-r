@@ -2,7 +2,8 @@
 #'
 #' A cheap, reusable reference to a shared table. Metadata methods query the
 #' control plane without scanning rows. `snapshot()` and `changes()` create
-#' reader objects that carry query options and expose materializers.
+#' reader objects that carry query options and expose materializers. Downloaded
+#' files are cached for the R session and shared by handles for the same table.
 #'
 #' Created via `SharingClient$table()`, not directly.
 #'
@@ -15,10 +16,19 @@ SharingTable <- R6::R6Class(
     #' @param profile Parsed profile (internal).
     #' @param auth Authentication context (internal).
     #' @param identifier A `list(share, schema, table)` (internal).
-    initialize = function(profile, auth, identifier) {
+    #' @param concurrency Maximum number of concurrent file downloads.
+    initialize = function(
+      profile,
+      auth,
+      identifier,
+      concurrency = 4L
+    ) {
+      rlang::check_number_whole(concurrency, min = 1)
       private$profile <- profile
       private$auth <- auth
       private$id <- identifier
+      private$concurrency <- concurrency
+      private$cache_directory <- table_download_cache(profile, identifier)
       invisible(self)
     },
 
@@ -77,7 +87,9 @@ SharingTable <- R6::R6Class(
         columns = columns,
         limit = limit,
         predicate = predicate,
-        response_format = response_format
+        response_format = response_format,
+        cache_path = private$cache_directory,
+        concurrency = private$concurrency
       )
     },
 
@@ -105,7 +117,9 @@ SharingTable <- R6::R6Class(
         starting_timestamp = starting_timestamp,
         ending_timestamp = ending_timestamp,
         columns = columns,
-        response_format = response_format
+        response_format = response_format,
+        cache_path = private$cache_directory,
+        concurrency = private$concurrency
       )
     },
 
@@ -121,9 +135,21 @@ SharingTable <- R6::R6Class(
       invisible(self)
     }
   ),
+  active = list(
+    #' @field cache_path Read-only path to this table's session cache. Removing
+    #'   it manually invalidates active lazy readers; the next read recreates it.
+    cache_path = function(value) {
+      if (!missing(value)) {
+        stop("`cache_path` is read-only.", call. = FALSE)
+      }
+      private$cache_directory
+    }
+  ),
   private = list(
     profile = NULL,
     auth = NULL,
-    id = NULL
+    id = NULL,
+    cache_directory = NULL,
+    concurrency = NULL
   )
 )

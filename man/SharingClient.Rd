@@ -10,8 +10,9 @@ Delta Sharing client
 }
 \details{
 A reusable client that owns a parsed profile and its authentication context.
-Discovery and table handles are created from the client. Query configuration
-lives on snapshot/changes reader objects, not on the client or table.
+Discovery and table handles are created from the client. Download
+concurrency is configured on each table handle; query options live on its
+snapshot and changes readers.
 
 Most users call \code{\link[=sharing_client]{sharing_client()}} rather than \code{SharingClient$new()}.
 }
@@ -118,7 +119,7 @@ A printable list of table records.
 \subsection{Method \code{table()}}{
 Create a reusable table handle.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$table(name, schema = NULL, share = NULL)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingClient$table(name, schema = NULL, share = NULL, concurrency = 4L)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -130,6 +131,8 @@ and \code{schema} are omitted.}
 \item{\code{schema}}{Schema name when using explicit components.}
 
 \item{\code{share}}{Share name when using explicit components.}
+
+\item{\code{concurrency}}{Maximum number of data files downloaded concurrently.}
 }
 \if{html}{\out{</div>}}
 }

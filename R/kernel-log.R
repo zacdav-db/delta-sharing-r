@@ -1,8 +1,8 @@
 # Synthetic Delta log construction for the Delta Kernel scan.
 #
 # R fetches the Delta Sharing Query Table response and writes a local
-# `_delta_log/00...0.json` that Delta Kernel reads; the kernel then fetches data
-# directly from the pre-signed URLs in the log. There is no second downloader.
+# `_delta_log/00...0.json` that Delta Kernel reads. Selected data files are
+# staged beside that log first, so the native reader performs local I/O only.
 #
 # Following the Python client, we do not build Delta action structs for the
 # Delta-format path: the server already returns fully-formed actions under
@@ -10,24 +10,13 @@
 # so we unwrap and write them verbatim. Parquet-format responses synthesize a
 # flat `add` action (that path carries no deletion vectors).
 
-# The native cleanup guard only deletes a directory it can prove it owns, so the
-# synthetic log is written into a private layout it validates:
+# Synthetic logs live under R's session temporary directory:
 #
 #   <root .delta-sharing-snapshot-*>/   (mode 0700)
-#   |-- .delta-sharing-r-prepared-log   (ownership marker)
-#   `-- table/_delta_log/<commit>.json  (the table location handed to the kernel)
+#   `-- table/_delta_log/<commit>.json  (location handed to the kernel)
 log_root_prefix <- ".delta-sharing-snapshot-"
-log_marker_name <- ".delta-sharing-r-prepared-log"
-log_marker_value <- "delta-sharing-r:prepared-log\n"
 log_dir_name <- "_delta_log"
 log_commit_name <- "00000000000000000000.json"
-
-delete_log_root <- function(root) {
-  if (fs::dir_exists(root)) {
-    fs::dir_delete(root)
-  }
-  invisible(NULL)
-}
 
 # Encode one action list as a single JSON line.
 log_json_line <- function(action) {
@@ -98,35 +87,19 @@ synthetic_file_action <- function(file, response_format, operation) {
   }
 }
 
-# Create the private, ownership-marked layout the native cleanup guard
-# validates, and return its paths plus a `write()` callback that receives the
-# `_delta_log` directory to populate. A writer may return named fields to append
-# to the handle. The handle carries an explicit `cleanup()` for the failure
-# path, before ownership transfers to Rust.
+# Create a session-temporary Delta log. R removes the containing temporary
+# directory at the end of the session, which also keeps lazy readers valid.
 prepare_log <- function(write) {
   root <- fs::file_temp(pattern = log_root_prefix)
   log_dir <- fs::path(root, "table", log_dir_name)
   fs::dir_create(log_dir, mode = "u=rwx,go=")
 
-  log_complete <- FALSE
-  on.exit(
-    {
-      if (!log_complete) {
-        delete_log_root(root)
-      }
-    },
-    add = TRUE
-  )
-
   details <- write(log_dir)
-  writeChar(log_marker_value, fs::path(root, log_marker_name), eos = NULL)
-  log_complete <- TRUE
 
   c(
     list(
       root = fs::path_real(root),
-      path = fs::path_real(fs::path(root, "table")),
-      cleanup = function() delete_log_root(root)
+      path = fs::path_real(fs::path(root, "table"))
     ),
     details
   )
@@ -140,29 +113,6 @@ prepare_synthetic_log <- function(lines) {
   })
 }
 
-# Write a snapshot commit from its header and bounded action stage. The stage
-# is copied in chunks, then removed before ownership transfers to Rust.
-write_snapshot_commit <- function(log_dir, header, staged_actions) {
-  commit <- fs::path(log_dir, log_commit_name)
-  local({
-    output <- file(commit, open = "wb")
-    on.exit(close(output), add = TRUE)
-    input <- file(staged_actions, open = "rb")
-    on.exit(close(input), add = TRUE)
-
-    writeLines(header, output, useBytes = TRUE)
-    repeat {
-      bytes <- readBin(input, what = "raw", n = 1024 * 1024)
-      if (length(bytes) == 0L) {
-        break
-      }
-      writeBin(bytes, output)
-    }
-  })
-  fs::file_delete(staged_actions)
-  invisible(commit)
-}
-
 # Change data feed: the kernel's TableChanges reads a real multi-version log,
 # so this writes one commit per version across the observed `[start, end]` range
 # (including interior versions with no changes). The protocol goes in the first
@@ -174,34 +124,45 @@ write_snapshot_commit <- function(log_dir, header, staged_actions) {
 # list(timestamp_ms=, actions=list(...)); `protocol` is pre-unwrapped.
 prepare_cdf_log <- function(protocol, by_version, start_version, end_version) {
   log <- prepare_log(function(log_dir) {
-    if (start_version > 0) {
-      write_fake_checkpoint(log_dir, start_version - 1)
-    }
-
-    purrr::walk(seq.int(start_version, end_version), function(version) {
-      version_data <- by_version[[as.character(version)]]
-      if (is.null(version_data)) {
-        version_data <- list(actions = list(), timestamp_ms = NULL)
-      }
-      actions <- version_data$actions
-
-      if (version == start_version) {
-        actions <- c(list(list(protocol = protocol)), actions)
-      }
-
-      write_cdf_commit(
-        log_dir,
-        version,
-        actions,
-        timestamp_ms = version_data$timestamp_ms
-      )
-    })
+    write_cdf_log(log_dir, protocol, by_version, start_version, end_version)
     invisible(NULL)
   })
 
   log$start_version <- start_version
   log$end_version <- end_version
   log
+}
+
+write_cdf_log <- function(
+  log_dir,
+  protocol,
+  by_version,
+  start_version,
+  end_version
+) {
+  if (start_version > 0) {
+    write_fake_checkpoint(log_dir, start_version - 1)
+  }
+
+  purrr::walk(seq.int(start_version, end_version), function(version) {
+    version_data <- by_version[[as.character(version)]]
+    if (is.null(version_data)) {
+      version_data <- list(actions = list(), timestamp_ms = NULL)
+    }
+    actions <- version_data$actions
+
+    if (version == start_version) {
+      actions <- c(list(list(protocol = protocol)), actions)
+    }
+
+    write_cdf_commit(
+      log_dir,
+      version,
+      actions,
+      timestamp_ms = version_data$timestamp_ms
+    )
+  })
+  invisible(NULL)
 }
 
 cdf_commit_name <- function(version) {

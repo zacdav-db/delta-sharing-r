@@ -180,7 +180,7 @@ test_that("prepared CDF logs span the effective response range", {
   )
 
   log <- prepare_cdf_log(protocol, by_version, 1, 3)
-  withr::defer(log$cleanup())
+  withr::defer(fs::dir_delete(log$root))
   log_dir <- fs::path(log$path, "_delta_log")
   entries <- fs::dir_ls(log_dir, type = "file") |>
     fs::path_file() |>
