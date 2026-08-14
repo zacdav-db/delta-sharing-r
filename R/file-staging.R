@@ -120,7 +120,7 @@ download_request <- function(url) {
     )
 }
 
-# Download into sibling temporary paths, then publish only complete files.
+# Download beside each target so publishing can use a same-filesystem rename.
 download_staged_assets <- function(assets, targets, concurrency) {
   if (length(assets) == 0L) {
     return(invisible(NULL))
@@ -168,6 +168,7 @@ download_staged_assets <- function(assets, targets, concurrency) {
 
   purrr::walk2(temporary, targets, function(source, target) {
     fs::file_chmod(source, "u=rw,go=")
+    # This atomically publishes the file without copying its contents again.
     fs::file_move(source, target)
   })
   invisible(NULL)
