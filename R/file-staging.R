@@ -155,7 +155,7 @@ download_staged_assets <- function(assets, targets, concurrency) {
       }),
       paths = temporary[remote_index],
       on_error = "stop",
-      progress = FALSE,
+      progress = interactive(),
       max_active = concurrency
     )
   }
