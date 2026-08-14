@@ -28,6 +28,7 @@ table_download_cache <- function(profile, identifier) {
   fs::path_real(path)
 }
 
+# Identify which Delta action contains the shared file metadata.
 delta_file_field <- function(action) {
   purrr::detect(c("add", "remove", "cdc"), function(name) {
     !is.null(action[[name]])
@@ -56,6 +57,7 @@ file_wrapper_action <- function(file, response_format, operation) {
   synthetic_file_action(file, response_format, operation)
 }
 
+# Expand one shared file into the data and deletion-vector assets it needs.
 file_wrapper_assets <- function(file, response_format, operation) {
   action <- file_wrapper_action(file, response_format, operation)
   field <- delta_file_field(action)
@@ -89,6 +91,7 @@ file_wrapper_assets <- function(file, response_format, operation) {
   assets
 }
 
+# A cached asset is reusable only when its optional server size still matches.
 staged_asset_is_complete <- function(path, asset) {
   fs::file_exists(path) && (
     is.null(asset$size) || fs::file_size(path) == asset$size
@@ -174,12 +177,14 @@ download_staged_assets <- function(assets, targets, concurrency) {
   invisible(NULL)
 }
 
+# Reuse complete assets and download only the missing or invalid ones.
 ensure_staged_assets <- function(assets, cache_path, concurrency) {
   fs::dir_create(cache_path, mode = "u=rwx,go=")
   if (length(assets) == 0L) {
     return(list(paths = list(), downloaded = 0L, cache_hits = 0L))
   }
 
+  # A response can reference the same immutable server asset more than once.
   asset_names <- purrr::map_chr(assets, "name")
   keep <- !duplicated(asset_names)
   assets <- assets[keep]
@@ -202,6 +207,7 @@ ensure_staged_assets <- function(assets, cache_path, concurrency) {
   )
 }
 
+# Point a Delta action at its cached data and deletion-vector files.
 rewrite_staged_file <- function(file, response_format, operation, paths) {
   action <- file_wrapper_action(file, response_format, operation)
   field <- delta_file_field(action)
@@ -225,6 +231,7 @@ rewrite_staged_file <- function(file, response_format, operation, paths) {
   action
 }
 
+# Stage every asset, then return the original actions with local file URLs.
 stage_file_wrappers <- function(
   files,
   response_format,
