@@ -149,13 +149,38 @@ download_staged_assets <- function(assets, targets, concurrency) {
   })
 
   if (length(remote_index) > 0L) {
+    download_sizes <- purrr::map_dbl(
+      assets[remote_index],
+      "size",
+      .default = NA_real_
+    )
+    download_label <- if (anyNA(download_sizes)) {
+      "Downloading"
+    } else {
+      paste(
+        "Downloading",
+        fs::as_fs_bytes(sum(download_sizes)),
+        "total"
+      )
+    }
+
     httr2::req_perform_parallel(
       purrr::map(assets[remote_index], function(asset) {
         download_request(asset$url)
       }),
       paths = temporary[remote_index],
       on_error = "stop",
-      progress = interactive(),
+      progress = if (interactive()) {
+        list(
+          format = paste(
+            download_label,
+            "| {cli::pb_current}/{cli::pb_total} files |",
+            "{cli::pb_bar} {cli::pb_percent}"
+          )
+        )
+      } else {
+        FALSE
+      },
       max_active = concurrency
     )
   }
