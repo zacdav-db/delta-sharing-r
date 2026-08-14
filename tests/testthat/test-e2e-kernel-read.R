@@ -87,6 +87,21 @@ test_that("data-frame materialization preserves native stream failures", {
   expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
+test_that("failed stream creation is evaluated once", {
+  state <- rlang::env(attempts = 0L)
+
+  expect_error(
+    sharing_stream_to_tibble({
+      state$attempts <- state$attempts + 1L
+      stop("stream did not open")
+    }),
+    "stream did not open",
+    fixed = TRUE
+  )
+
+  expect_equal(state$attempts, 1L)
+})
+
 test_that("the native stream boundary translates user interrupts", {
   stream <- native_snapshot_stream(fixture_table("local-table"))
   interrupt <- structure(

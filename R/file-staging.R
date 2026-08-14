@@ -74,11 +74,11 @@ file_wrapper_assets <- function(file, response_format, operation) {
 
   dv <- data$deletionVector
   if (!is.null(dv) && identical(dv$storageType, "p")) {
+    # sizeInBytes describes one bitmap payload, not its containing DV file.
     assets[[2L]] <- staged_asset(
       "deletion-vector",
       file$deletionVectorFileId,
-      dv$pathOrInlineDv,
-      dv$sizeInBytes
+      dv$pathOrInlineDv
     )
   } else if (!is.null(dv) && identical(dv$storageType, "u")) {
     abort(

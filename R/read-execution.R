@@ -462,6 +462,7 @@ sharing_stream_to_arrow_reader <- function(
 }
 
 sharing_stream_to_arrow <- function(stream) {
+  force(stream)
   require_arrow("to_arrow")
   on.exit(release_materializer_stream(stream), add = TRUE)
   reader <- sharing_stream_to_arrow_reader(stream, operation = "to_arrow")
@@ -473,6 +474,7 @@ sharing_stream_to_arrow <- function(stream) {
 }
 
 sharing_stream_to_tibble <- function(stream) {
+  force(stream)
   on.exit(release_materializer_stream(stream), add = TRUE)
   with_native_stream_conditions(
     tibble::as_tibble(nanoarrow::convert_array_stream(stream)),

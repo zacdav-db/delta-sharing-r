@@ -178,11 +178,14 @@ test_that("staging uses file and deletion-vector IDs directly", {
         storageType = "p",
         pathOrInlineDv = local_file_url(dv),
         offset = 1,
-        sizeInBytes = as.numeric(fs::file_size(dv)),
+        sizeInBytes = as.numeric(fs::file_size(dv)) - 9,
         cardinality = 2
       )
     ))
   )
+
+  assets <- file_wrapper_assets(wrapper, "delta", "read")
+  expect_null(assets[[2L]]$size)
 
   result <- stage_file_wrappers(
     list(wrapper),
