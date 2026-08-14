@@ -7,6 +7,23 @@
 #'
 #' Created via `SharingClient$table()`, not directly.
 #'
+#' @section Predicate hints:
+#' Snapshot predicates are ordinary nested R lists. For example:
+#'
+#' ```r
+#' active_orders <- list(
+#'   op = "equal",
+#'   children = list(
+#'     list(op = "column", name = "is_active", valueType = "bool"),
+#'     list(op = "literal", value = "true", valueType = "bool")
+#'   )
+#' )
+#' orders$snapshot(predicate = active_orders)
+#' ```
+#'
+#' The sharing server treats the predicate as a best-effort hint, not an exact
+#' row filter.
+#'
 #' @export
 SharingTable <- R6::R6Class(
   classname = "SharingTable",
@@ -67,7 +84,8 @@ SharingTable <- R6::R6Class(
     #' @param timestamp Optional scalar timestamp string or `POSIXct` value.
     #' @param columns Optional character vector of projected columns.
     #' @param limit Optional non-negative whole-number row limit.
-    #' @param predicate Optional structured server-side predicate hint.
+    #' @param predicate Optional nested R list representing a structured
+    #'   server-side predicate hint. This is not an exact row filter.
     #' @param response_format One of `"auto"`, `"delta"`, or `"parquet"`.
     #' @return A [SharingSnapshot].
     snapshot = function(
