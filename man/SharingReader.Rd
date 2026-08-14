@@ -91,7 +91,8 @@ A \code{tibble::tbl_df}.
 \if{html}{\out{<a id="method-SharingReader-to_data_frame"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingReader-to_data_frame}{}}}
 \subsection{Method \code{to_data_frame()}}{
-Materialize as a base data frame.
+Materialize as a base data frame by dropping the tibble
+class from \code{to_tibble()}.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_data_frame(batch_size = 65536L)}\if{html}{\out{</div>}}
 }

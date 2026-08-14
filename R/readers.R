@@ -45,7 +45,8 @@ SharingReader <- R6::R6Class(
       )
     },
 
-    #' @description Materialize as a base data frame.
+    #' @description Materialize as a base data frame by dropping the tibble
+    #'   class from `to_tibble()`.
     #' @param batch_size Rows per batch.
     #' @return A data frame.
     to_data_frame = function(batch_size = 65536L) {

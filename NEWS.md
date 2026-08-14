@@ -13,5 +13,5 @@ compatibility aliases or migration shims for earlier package versions.
   JWT profiles.
 - Added deletion-vector, column-mapping, partitioned, nested, and logical-type
   read support through Delta Kernel.
-- Added bounded parallel staging of selected data files and a table-scoped
-  cache under R's session temporary directory.
+- Added bounded parallel staging with interactive download progress and a
+  table-scoped cache under R's session temporary directory.
