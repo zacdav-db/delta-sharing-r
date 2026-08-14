@@ -26,8 +26,7 @@ test_that("the installed native API contains only production entry points", {
     names(routines),
     c(
       "delta_sharing_stream_from_snapshot",
-      "delta_sharing_stream_from_cdf",
-      "delta_sharing_reap_pending_cleanups"
+      "delta_sharing_stream_from_cdf"
     )
   )
 })
@@ -90,7 +89,7 @@ test_that("a reader exposes the kernel stream as an Arrow reader", {
     inherit = SharingReader,
     cloneable = FALSE,
     private = list(
-      open_stream = function(batch_size, threads) {
+      open_stream = function(batch_size) {
         native_snapshot_stream(
           fixture_table("local-table"),
           batch_size = batch_size
@@ -270,10 +269,10 @@ test_that("snapshot and CDF readers stage selected files before Kernel reads", {
       columns = NULL,
       limit = NULL,
       predicate = NULL,
-      response_format = "delta",
-      cache = FALSE
+      response_format = "delta"
     ),
-    threads = 4L
+    table_download_cache(profile, identifier),
+    concurrency = 4L
   ) |>
     sharing_stream_to_data_frame()
   expect_equal(nrow(snapshot), 7L)
@@ -289,10 +288,10 @@ test_that("snapshot and CDF readers stage selected files before Kernel reads", {
       starting_timestamp = NULL,
       ending_timestamp = NULL,
       columns = c("id", "_change_type"),
-      response_format = "delta",
-      cache = FALSE
+      response_format = "delta"
     ),
-    threads = 4L
+    table_download_cache(profile, identifier),
+    concurrency = 4L
   ) |>
     sharing_stream_to_data_frame()
 
@@ -356,7 +355,6 @@ test_that("interruptible streams preserve non-pull methods", {
     simpleError(native_stream_interrupt_message)
   ))
   expect_false(native_stream_was_interrupted(simpleError("other")))
-  expect_no_error(native_reap_pending_cleanups())
 })
 
 test_that("public snapshot readers materialize through mocked local files", {

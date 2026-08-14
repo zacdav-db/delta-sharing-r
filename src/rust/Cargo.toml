@@ -21,7 +21,6 @@ delta_kernel = { version = "=0.26.0", default-features = false, features = [
 delta_kernel_default_engine = { version = "=0.26.0", default-features = false, features = [
   "arrow-58",
 ] }
-same-file = "=1.0.6"
 url = "=2.5.8"
 
 [dev-dependencies]

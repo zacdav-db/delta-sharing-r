@@ -169,21 +169,22 @@ orders$changes(
 
 ## Reuse downloaded files
 
-Downloads are private to one read by default. For repeated reads of the same
-table, opt into the session cache on `snapshot()` or `changes()`:
+Downloads are cached for the R session. New handles for the same endpoint and
+table reuse the same files:
 
 ```{r, eval = FALSE}
-snapshot <- orders$snapshot(cache = TRUE)
+orders <- client$table("sales.default.orders", concurrency = 4)
 
-first <- snapshot$to_data_frame(threads = 4)
-second <- snapshot$to_data_frame() # reuses unchanged Delta data files
+first <- orders$snapshot()$to_data_frame()
+second <- orders$snapshot()$to_data_frame() # reuses unchanged data files
 
-orders$clear_cache()
+orders$cache_path
 ```
 
-`threads` controls the maximum number of concurrent downloads and defaults to
-four. `clear_cache()` removes only that table's cached downloads; active readers
-remain valid. The full session cache is removed when the package unloads.
+`concurrency` controls the maximum number of concurrent downloads and defaults
+to four. R removes the cache with its session temporary directory. Advanced
+users can remove `orders$cache_path` manually, but should not do so while a lazy
+reader is active; the next read recreates it.
 
 ## How reads work
 
@@ -201,5 +202,5 @@ change semantics, and Arrow batches.
 
 R checks for user interrupts between Arrow batches. If a batch pull is already
 waiting inside Delta Kernel's local I/O, that pull must return or fail before R
-can handle the interrupt. Releasing a stream between pulls still releases the
-Kernel reader and its private read directory immediately.
+can handle the interrupt. Releasing a stream between pulls releases the Kernel
+reader; its session-temporary log remains until R removes the session directory.

@@ -16,14 +16,10 @@ SharingReader <- R6::R6Class(
   public = list(
     #' @description Materialize as an Arrow table (requires `{arrow}`).
     #' @param batch_size Rows per batch.
-    #' @param threads Maximum number of files downloaded concurrently.
     #' @return An `arrow::Table`.
-    to_arrow = function(
-      batch_size = DEFAULT_BATCH_SIZE,
-      threads = DEFAULT_THREADS
-    ) {
+    to_arrow = function(batch_size = DEFAULT_BATCH_SIZE) {
       sharing_stream_to_arrow(
-        self$to_arrow_stream(batch_size = batch_size, threads = threads)
+        self$to_arrow_stream(batch_size = batch_size)
       )
     },
 
@@ -32,40 +28,27 @@ SharingReader <- R6::R6Class(
     #'   its `Close()` method. Downstream consumers must serialize pulls from
     #'   this single-consumer stream.
     #' @param batch_size Rows per batch.
-    #' @param threads Maximum number of files downloaded concurrently.
     #' @return An `arrow::RecordBatchReader`.
-    to_arrow_reader = function(
-      batch_size = DEFAULT_BATCH_SIZE,
-      threads = DEFAULT_THREADS
-    ) {
+    to_arrow_reader = function(batch_size = DEFAULT_BATCH_SIZE) {
       sharing_stream_to_arrow_reader(
-        self$to_arrow_stream(batch_size = batch_size, threads = threads)
+        self$to_arrow_stream(batch_size = batch_size)
       )
     },
 
     #' @description Materialize as a base data frame.
     #' @param batch_size Rows per batch.
-    #' @param threads Maximum number of files downloaded concurrently.
     #' @return A data frame.
-    to_data_frame = function(
-      batch_size = DEFAULT_BATCH_SIZE,
-      threads = DEFAULT_THREADS
-    ) {
+    to_data_frame = function(batch_size = DEFAULT_BATCH_SIZE) {
       sharing_stream_to_data_frame(
-        self$to_arrow_stream(batch_size = batch_size, threads = threads)
+        self$to_arrow_stream(batch_size = batch_size)
       )
     },
 
     #' @description Materialize as a lazy Arrow C stream.
     #' @param batch_size Rows per batch (1..1,000,000; default 65,536).
-    #' @param threads Maximum number of files downloaded concurrently (default
-    #'   4).
     #' @return A `nanoarrow_array_stream`.
-    to_arrow_stream = function(
-      batch_size = DEFAULT_BATCH_SIZE,
-      threads = DEFAULT_THREADS
-    ) {
-      private$open_stream(batch_size, threads)
+    to_arrow_stream = function(batch_size = DEFAULT_BATCH_SIZE) {
+      private$open_stream(batch_size)
     },
 
     #' @description Print the reader.
@@ -87,7 +70,9 @@ SharingReader <- R6::R6Class(
     auth = NULL,
     identifier = NULL,
     spec = NULL,
-    open_stream = function(batch_size, threads) {
+    cache_path = NULL,
+    concurrency = NULL,
+    open_stream = function(batch_size) {
       stop("`open_stream()` must be implemented by a SharingReader subclass.")
     }
   )
@@ -109,8 +94,7 @@ SharingSnapshot <- R6::R6Class(
     #' @param profile,auth,identifier Internal client state.
     #' @param version,timestamp,columns,limit,predicate,response_format Query
     #'   options; see [SharingTable]'s `snapshot()` method.
-    #' @param cache Whether to reuse staged files for this table during the R
-    #'   session.
+    #' @param cache_path,concurrency Internal table execution settings.
     initialize = function(
       profile,
       auth,
@@ -121,7 +105,8 @@ SharingSnapshot <- R6::R6Class(
       limit = NULL,
       predicate = NULL,
       response_format = "auto",
-      cache = FALSE
+      cache_path,
+      concurrency
     ) {
       if (
         !is.null(limit) &&
@@ -147,16 +132,11 @@ SharingSnapshot <- R6::R6Class(
           operation = "snapshot"
         )
       }
-      if (!rlang::is_bool(cache)) {
-        abort(
-          "{.arg cache} must be TRUE or FALSE.",
-          type = "validation",
-          operation = "snapshot"
-        )
-      }
       private$profile <- profile
       private$auth <- auth
       private$identifier <- identifier
+      private$cache_path <- cache_path
+      private$concurrency <- concurrency
       private$spec <- list(
         version = version,
         timestamp = timestamp,
@@ -166,21 +146,21 @@ SharingSnapshot <- R6::R6Class(
         response_format = rlang::arg_match0(
           response_format,
           c("auto", "delta", "parquet")
-        ),
-        cache = cache
+        )
       )
       invisible(self)
     }
   ),
   private = list(
-    open_stream = function(batch_size, threads) {
+    open_stream = function(batch_size) {
       sharing_snapshot_stream(
         private$profile,
         private$auth,
         private$identifier,
         private$spec,
+        private$cache_path,
         batch_size = batch_size,
-        threads = threads
+        concurrency = private$concurrency
       )
     }
   )
@@ -201,8 +181,7 @@ SharingChanges <- R6::R6Class(
     #' @param profile,auth,identifier Internal client state.
     #' @param starting_version,ending_version,starting_timestamp,ending_timestamp,columns,response_format
     #'   Query options; see [SharingTable]'s `changes()` method.
-    #' @param cache Whether to reuse staged files for this table during the R
-    #'   session.
+    #' @param cache_path,concurrency Internal table execution settings.
     initialize = function(
       profile,
       auth,
@@ -213,7 +192,8 @@ SharingChanges <- R6::R6Class(
       ending_timestamp = NULL,
       columns = NULL,
       response_format = "auto",
-      cache = FALSE
+      cache_path,
+      concurrency
     ) {
       if (!is.null(columns) && !is.character(columns)) {
         abort(
@@ -222,16 +202,11 @@ SharingChanges <- R6::R6Class(
           operation = "changes"
         )
       }
-      if (!rlang::is_bool(cache)) {
-        abort(
-          "{.arg cache} must be TRUE or FALSE.",
-          type = "validation",
-          operation = "changes"
-        )
-      }
       private$profile <- profile
       private$auth <- auth
       private$identifier <- identifier
+      private$cache_path <- cache_path
+      private$concurrency <- concurrency
       private$spec <- list(
         starting_version = starting_version,
         ending_version = ending_version,
@@ -241,21 +216,21 @@ SharingChanges <- R6::R6Class(
         response_format = rlang::arg_match0(
           response_format,
           c("auto", "delta", "parquet")
-        ),
-        cache = cache
+        )
       )
       invisible(self)
     }
   ),
   private = list(
-    open_stream = function(batch_size, threads) {
+    open_stream = function(batch_size) {
       sharing_changes_stream(
         private$profile,
         private$auth,
         private$identifier,
         private$spec,
+        private$cache_path,
         batch_size = batch_size,
-        threads = threads
+        concurrency = private$concurrency
       )
     }
   )

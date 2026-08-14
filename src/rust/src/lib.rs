@@ -55,10 +55,7 @@ where
     F: FnOnce() -> Result<(), String>,
 {
     clear_error(error_buffer, error_capacity);
-    match catch_unwind(AssertUnwindSafe(|| {
-        stream::reap_pending_cleanups();
-        operation()
-    })) {
+    match catch_unwind(AssertUnwindSafe(operation)) {
         Ok(Ok(())) => STATUS_OK,
         Ok(Err(error)) => {
             write_error(error_buffer, error_capacity, &error);
@@ -92,7 +89,6 @@ where
 pub unsafe extern "C" fn delta_sharing_native_populate_snapshot_stream(
     destination: *mut FFI_ArrowArrayStream,
     table_location: *const c_char,
-    cleanup_root: *const c_char,
     columns: *const *const c_char,
     column_count: usize,
     has_limit: c_int,
@@ -120,19 +116,6 @@ pub unsafe extern "C" fn delta_sharing_native_populate_snapshot_stream(
             .to_str()
             .map_err(|_| "`table_location` must be valid UTF-8".to_string())?
             .to_string();
-        let cleanup_root = if cleanup_root.is_null() {
-            None
-        } else {
-            // SAFETY: the C shim promises a NUL-terminated string that
-            // remains alive for this synchronous construction call.
-            Some(
-                unsafe { CStr::from_ptr(cleanup_root) }
-                    .to_str()
-                    .map_err(|_| "`cleanup_root` must be valid UTF-8".to_string())?
-                    .to_string(),
-            )
-        };
-
         let projected_columns = if column_count == 0 {
             None
         } else {
@@ -154,7 +137,6 @@ pub unsafe extern "C" fn delta_sharing_native_populate_snapshot_stream(
             Some(projected)
         };
 
-        let cleanup_table_location = table_location.clone();
         let options = SnapshotReadOptions::try_new(
             table_location,
             projected_columns,
@@ -163,14 +145,7 @@ pub unsafe extern "C" fn delta_sharing_native_populate_snapshot_stream(
         )?;
         stream::populate_stream(destination, || {
             let reader = kernel::adapter::snapshot_reader(options)?;
-            match cleanup_root {
-                Some(root) => {
-                    let cleanup =
-                        stream::PreparedLogCleanup::try_new(&root, &cleanup_table_location)?;
-                    Ok(stream::record_batch_stream_with_resource(reader, cleanup))
-                }
-                None => Ok(stream::record_batch_stream(reader)),
-            }
+            Ok(stream::record_batch_stream(reader))
         })
     })
 }
@@ -179,7 +154,7 @@ pub unsafe extern "C" fn delta_sharing_native_populate_snapshot_stream(
 ///
 /// R has already resolved and validated the inclusive provider bounds and
 /// constructed the private local log. This boundary owns only Kernel
-/// `TableChanges`, Arrow streaming, and prepared-root cleanup.
+/// `TableChanges` and Arrow streaming.
 ///
 /// # Safety
 ///
@@ -189,7 +164,6 @@ pub unsafe extern "C" fn delta_sharing_native_populate_snapshot_stream(
 pub unsafe extern "C" fn delta_sharing_native_populate_cdf_stream(
     destination: *mut FFI_ArrowArrayStream,
     table_location: *const c_char,
-    cleanup_root: *const c_char,
     columns: *const *const c_char,
     column_count: usize,
     start_version: u64,
@@ -213,16 +187,6 @@ pub unsafe extern "C" fn delta_sharing_native_populate_cdf_stream(
             .to_str()
             .map_err(|_| "`table_location` must be valid UTF-8".to_string())?
             .to_string();
-        let cleanup_root = if cleanup_root.is_null() {
-            None
-        } else {
-            Some(
-                unsafe { CStr::from_ptr(cleanup_root) }
-                    .to_str()
-                    .map_err(|_| "`cleanup_root` must be valid UTF-8".to_string())?
-                    .to_string(),
-            )
-        };
         let projected_columns = if column_count == 0 {
             None
         } else {
@@ -241,7 +205,6 @@ pub unsafe extern "C" fn delta_sharing_native_populate_cdf_stream(
             Some(projected)
         };
 
-        let cleanup_table_location = table_location.clone();
         let options = CdfReadOptions::try_new(
             table_location,
             projected_columns,
@@ -251,43 +214,7 @@ pub unsafe extern "C" fn delta_sharing_native_populate_cdf_stream(
         )?;
         stream::populate_stream(destination, || {
             let reader = kernel::adapter::cdf_reader(options)?;
-            match cleanup_root {
-                Some(root) => {
-                    let cleanup = stream::PreparedLogCleanup::try_new_cdf(
-                        &root,
-                        &cleanup_table_location,
-                        start_version,
-                        end_version,
-                    )?;
-                    Ok(stream::record_batch_stream_with_resource(reader, cleanup))
-                }
-                None => Ok(stream::record_batch_stream(reader)),
-            }
+            Ok(stream::record_batch_stream(reader))
         })
-    })
-}
-
-/// Retry capability-checked prepared-log cleanups retained after transient
-/// filesystem failures.
-///
-/// # Safety
-///
-/// `pending` must point to writable storage for one `u64`. `error_buffer`,
-/// when non-null, must point to `error_capacity` writable bytes.
-#[no_mangle]
-pub unsafe extern "C" fn delta_sharing_native_reap_pending(
-    pending: *mut u64,
-    error_buffer: *mut c_char,
-    error_capacity: usize,
-) -> c_int {
-    ffi_boundary(error_buffer, error_capacity, || {
-        let pending =
-            NonNull::new(pending).ok_or_else(|| "pending cleanup output is NULL".to_string())?;
-        stream::reap_pending_cleanups();
-        // SAFETY: the caller supplied writable storage for one `u64`.
-        unsafe {
-            pending.as_ptr().write(stream::pending_cleanup_count());
-        }
-        Ok(())
     })
 }

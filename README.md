@@ -55,7 +55,7 @@ For your own share, pass a profile file and select its table:
 
 ```r
 client <- sharing_client("~/config.share")
-orders <- client$table("sales.default.orders")
+orders <- client$table("sales.default.orders", concurrency = 4)
 ```
 
 ## Snapshots and changes
@@ -76,22 +76,23 @@ orders$changes(
 )$to_data_frame()
 ```
 
-Reads download up to four selected data files concurrently by default. Set
-`threads` on a materializer to tune that number. Downloads are read-specific
-unless you opt into the session cache:
+Each table downloads up to four selected files concurrently by default. Its
+downloads are cached for the R session and reused by other handles for the same
+endpoint and table:
 
 ```r
-snapshot <- orders$snapshot(cache = TRUE)
-orders_df <- snapshot$to_data_frame(threads = 4)
+orders_df <- orders$snapshot()$to_data_frame()
 
 # A later read can reuse unchanged Delta data files.
-refreshed_df <- snapshot$to_data_frame()
+refreshed_df <- orders$snapshot()$to_data_frame()
 
-# Remove only this table's cached downloads.
-orders$clear_cache()
+# The cache is an ordinary directory under R's session temp directory.
+orders$cache_path
 ```
 
-The session cache is also removed when the package unloads.
+Set `concurrency` when creating the table handle to tune downloads. R removes
+the cache with its session temporary directory. Advanced users can delete
+`orders$cache_path` manually; do not do that while a lazy reader is active.
 
 See `vignette("delta-sharing")` for a full walkthrough.
 

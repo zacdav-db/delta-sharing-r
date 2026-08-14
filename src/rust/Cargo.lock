@@ -639,7 +639,6 @@ dependencies = [
  "delta_kernel",
  "delta_kernel_default_engine",
  "parquet",
- "same-file",
  "url",
 ]
 

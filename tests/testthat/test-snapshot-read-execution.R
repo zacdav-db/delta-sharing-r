@@ -27,6 +27,10 @@ snapshot_delta_actions <- function() {
     ),
     list(
       file = list(
+        id = fixture_file_id(snapshot_file_url()),
+        size = as.numeric(fs::file_size(
+          local_file_path(snapshot_file_url())
+        )),
         deltaSingleAction = list(
           add = list(
             path = snapshot_file_url(),
@@ -57,6 +61,10 @@ test_that("snapshot pages append to one private commit", {
       expect_equal(req$body$data$pageToken, "page-two")
       actions <- list(list(
         file = list(
+          id = fixture_file_id(snapshot_file_url("part-00001.parquet")),
+          size = as.numeric(fs::file_size(
+            local_file_path(snapshot_file_url("part-00001.parquet"))
+          )),
           deltaSingleAction = list(
             add = list(
               path = snapshot_file_url("part-00001.parquet"),
@@ -75,6 +83,11 @@ test_that("snapshot pages append to one private commit", {
   }
   httr2::local_mocked_responses(mock)
   profile <- test_profile()
+  cache <- table_download_cache(profile, snapshot_identifier())
+  if (fs::dir_exists(cache)) {
+    fs::dir_delete(cache)
+  }
+  withr::defer(if (fs::dir_exists(cache)) fs::dir_delete(cache))
   log <- prepare_snapshot_query_log(
     profile,
     sharing_auth_context(profile),
@@ -83,12 +96,11 @@ test_that("snapshot pages append to one private commit", {
       predicate = NULL,
       limit = NULL,
       version = NULL,
-      timestamp = NULL,
-      cache = FALSE
+      timestamp = NULL
     ),
     "delta"
   )
-  withr::defer(log$cleanup())
+  withr::defer(fs::dir_delete(log$root))
 
   log_dir <- fs::path(log$path, "_delta_log")
   commit <- fs::path(log_dir, log_commit_name)
@@ -109,7 +121,7 @@ test_that("snapshot pages append to one private commit", {
     httr2::url_parse(jsonlite::fromJSON(lines[[4L]])$add$path)$scheme,
     "file"
   )
-  expect_equal(length(fs::dir_ls(fs::path(log$path, "data"))), 2L)
+  expect_equal(length(fs::dir_ls(cache)), 2L)
 })
 
 test_that("parquet snapshot pages use the same preparation path", {
@@ -124,6 +136,7 @@ test_that("parquet snapshot pages use the same preparation path", {
     ),
     list(
       file = list(
+        id = fixture_file_id(snapshot_file_url()),
         url = snapshot_file_url(),
         size = as.numeric(fs::file_size(
           local_file_path(snapshot_file_url())
@@ -146,12 +159,11 @@ test_that("parquet snapshot pages use the same preparation path", {
       predicate = NULL,
       limit = NULL,
       version = NULL,
-      timestamp = NULL,
-      cache = FALSE
+      timestamp = NULL
     ),
     "parquet"
   )
-  withr::defer(log$cleanup())
+  withr::defer(fs::dir_delete(log$root))
 
   lines <- readLines(fs::path(log$path, "_delta_log", log_commit_name))
   expect_identical(log$page_count, 1L)
@@ -197,8 +209,7 @@ test_that("a malformed later page removes incomplete snapshot staging", {
         predicate = NULL,
         limit = NULL,
         version = NULL,
-        timestamp = NULL,
-        cache = FALSE
+        timestamp = NULL
       ),
       "delta"
     ),
@@ -234,8 +245,7 @@ test_that("snapshot responses require protocol and metadata", {
         predicate = NULL,
         limit = NULL,
         version = NULL,
-        timestamp = NULL,
-        cache = FALSE
+        timestamp = NULL
       ),
       "delta"
     ),

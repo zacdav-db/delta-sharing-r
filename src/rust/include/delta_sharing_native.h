@@ -9,7 +9,6 @@ typedef struct ArrowArrayStream ArrowArrayStream;
 int32_t delta_sharing_native_populate_snapshot_stream(
     ArrowArrayStream *destination,
     const char *table_location,
-    const char *cleanup_root,
     const char *const *columns,
     size_t column_count,
     int32_t has_limit,
@@ -21,17 +20,11 @@ int32_t delta_sharing_native_populate_snapshot_stream(
 int32_t delta_sharing_native_populate_cdf_stream(
     ArrowArrayStream *destination,
     const char *table_location,
-    const char *cleanup_root,
     const char *const *columns,
     size_t column_count,
     uint64_t start_version,
     uint64_t end_version,
     uint32_t batch_size,
-    char *error_buffer,
-    size_t error_capacity);
-
-int32_t delta_sharing_native_reap_pending(
-    uint64_t *pending,
     char *error_buffer,
     size_t error_capacity);
 

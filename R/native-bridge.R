@@ -1,7 +1,6 @@
 # Internal native lifecycle and compact Kernel invocation. R completes all
-# control-plane and synthetic-log work, then supplies a prepared local table
-# path (plus an optional temp `cleanup_root` whose lifetime the native stream
-# takes over) to the Delta Kernel scan.
+# control-plane and synthetic-log work, then supplies a local table path to the
+# Delta Kernel scan.
 
 release_materializer_stream <- function(stream) {
   if (inherits(stream, "nanoarrow_array_stream")) {
@@ -142,21 +141,16 @@ native_snapshot_stream <- function(
   table_location,
   columns = NULL,
   limit = NULL,
-  batch_size = DEFAULT_BATCH_SIZE,
-  cleanup_root = NULL
+  batch_size = DEFAULT_BATCH_SIZE
 ) {
   table_location <- validate_native_location(table_location)
   batch_size <- validate_native_batch_size(batch_size)
 
   stream <- nanoarrow::nanoarrow_allocate_array_stream()
-  # Successful construction transfers `cleanup_root` ownership to Rust, which
-  # deletes it when the native stream is released. Rust retains no R object and
-  # performs no log interpretation.
   .Call(
     C_delta_sharing_stream_from_snapshot,
     stream,
     table_location,
-    cleanup_root,
     columns,
     limit,
     batch_size
@@ -169,8 +163,7 @@ native_cdf_stream <- function(
   start_version,
   end_version,
   columns = NULL,
-  batch_size = DEFAULT_BATCH_SIZE,
-  cleanup_root = NULL
+  batch_size = DEFAULT_BATCH_SIZE
 ) {
   table_location <- validate_native_location(table_location)
   batch_size <- validate_native_batch_size(batch_size)
@@ -189,15 +182,10 @@ native_cdf_stream <- function(
     C_delta_sharing_stream_from_cdf,
     stream,
     table_location,
-    cleanup_root,
     columns,
     start_version,
     end_version,
     batch_size
   )
   interruptible_native_stream(stream)
-}
-
-native_reap_pending_cleanups <- function() {
-  .Call(C_delta_sharing_reap_pending_cleanups)
 }

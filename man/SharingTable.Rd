@@ -11,9 +11,18 @@ Delta Sharing table handle
 \details{
 A cheap, reusable reference to a shared table. Metadata methods query the
 control plane without scanning rows. \code{snapshot()} and \code{changes()} create
-reader objects that carry query options and expose materializers.
+reader objects that carry query options and expose materializers. Downloaded
+files are cached for the R session and shared by handles for the same table.
 
 Created via \code{SharingClient$table()}, not directly.
+}
+\section{Active bindings}{
+\if{html}{\out{<div class="r6-active-bindings">}}
+\describe{
+\item{\code{cache_path}}{Read-only path to this table's session cache. Removing
+it manually invalidates active lazy readers; the next read recreates it.}
+}
+\if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
@@ -26,7 +35,6 @@ Created via \code{SharingClient$table()}, not directly.
 \item \href{#method-SharingTable-schema}{\code{SharingTable$schema()}}
 \item \href{#method-SharingTable-snapshot}{\code{SharingTable$snapshot()}}
 \item \href{#method-SharingTable-changes}{\code{SharingTable$changes()}}
-\item \href{#method-SharingTable-clear_cache}{\code{SharingTable$clear_cache()}}
 \item \href{#method-SharingTable-print}{\code{SharingTable$print()}}
 }
 }
@@ -36,7 +44,7 @@ Created via \code{SharingClient$table()}, not directly.
 \subsection{Method \code{new()}}{
 Create a table handle. Prefer \code{SharingClient$table()}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingTable$new(profile, auth, identifier)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingTable$new(profile, auth, identifier, concurrency = DEFAULT_CONCURRENCY)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -47,6 +55,8 @@ Create a table handle. Prefer \code{SharingClient$table()}.
 \item{\code{auth}}{Authentication context (internal).}
 
 \item{\code{identifier}}{A \code{list(share, schema, table)} (internal).}
+
+\item{\code{concurrency}}{Maximum number of concurrent file downloads.}
 }
 \if{html}{\out{</div>}}
 }
@@ -128,8 +138,7 @@ Configure a snapshot read.
   columns = NULL,
   limit = NULL,
   predicate = NULL,
-  response_format = "auto",
-  cache = FALSE
+  response_format = "auto"
 )}\if{html}{\out{</div>}}
 }
 
@@ -147,9 +156,6 @@ Configure a snapshot read.
 \item{\code{predicate}}{Optional structured server-side predicate hint.}
 
 \item{\code{response_format}}{One of \code{"auto"}, \code{"delta"}, or \code{"parquet"}.}
-
-\item{\code{cache}}{Reuse downloaded files for this table during the current R
-session. The default is \code{FALSE}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -169,8 +175,7 @@ Configure a change data feed read.
   starting_timestamp = NULL,
   ending_timestamp = NULL,
   columns = NULL,
-  response_format = "auto",
-  cache = FALSE
+  response_format = "auto"
 )}\if{html}{\out{</div>}}
 }
 
@@ -185,28 +190,11 @@ Configure a change data feed read.
 \item{\code{columns}}{Optional character vector of projected columns.}
 
 \item{\code{response_format}}{One of \code{"auto"}, \code{"delta"}, or \code{"parquet"}.}
-
-\item{\code{cache}}{Reuse downloaded files for this table during the current R
-session. The default is \code{FALSE}.}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
 A \link{SharingChanges}.
-}
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SharingTable-clear_cache"></a>}}
-\if{latex}{\out{\hypertarget{method-SharingTable-clear_cache}{}}}
-\subsection{Method \code{clear_cache()}}{
-Remove downloaded files cached for this table. Active
-readers remain valid because they own separate links or copies.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingTable$clear_cache()}\if{html}{\out{</div>}}
-}
-
-\subsection{Returns}{
-This table, invisibly.
 }
 }
 \if{html}{\out{<hr>}}

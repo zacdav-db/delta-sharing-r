@@ -44,7 +44,6 @@ typedef struct {
 typedef struct {
   ArrowArrayStream *stream;
   const char *table_location;
-  const char *cleanup_root;
   DeltaSharingColumns columns;
   uint32_t batch_size;
 } DeltaSharingReadArguments;
@@ -289,15 +288,11 @@ static DeltaSharingColumns read_columns(SEXP value) {
 static DeltaSharingReadArguments read_arguments(
     SEXP stream_xptr,
     SEXP table_location,
-    SEXP cleanup_root,
     SEXP columns,
     SEXP batch_size) {
   DeltaSharingReadArguments arguments;
   arguments.stream = nanoarrow_stream(stream_xptr);
   arguments.table_location = scalar_utf8(table_location, "table_location");
-  arguments.cleanup_root = cleanup_root == R_NilValue
-                               ? NULL
-                               : scalar_utf8(cleanup_root, "cleanup_root");
   arguments.columns = read_columns(columns);
   arguments.batch_size = read_batch_size(batch_size);
   return arguments;
@@ -360,12 +355,11 @@ static void raise_native_error(int32_t status, const char *message) {
 static SEXP delta_sharing_stream_from_snapshot(
     SEXP stream_xptr,
     SEXP table_location,
-    SEXP cleanup_root,
     SEXP columns,
     SEXP limit,
     SEXP batch_size) {
   const DeltaSharingReadArguments arguments = read_arguments(
-      stream_xptr, table_location, cleanup_root, columns, batch_size);
+      stream_xptr, table_location, columns, batch_size);
 
   int32_t has_limit = 0;
   const uint64_t limit_value = optional_limit(limit, &has_limit);
@@ -374,7 +368,6 @@ static SEXP delta_sharing_stream_from_snapshot(
   const int32_t status = delta_sharing_native_populate_snapshot_stream(
       arguments.stream,
       arguments.table_location,
-      arguments.cleanup_root,
       arguments.columns.values,
       arguments.columns.count,
       has_limit,
@@ -394,13 +387,12 @@ static SEXP delta_sharing_stream_from_snapshot(
 static SEXP delta_sharing_stream_from_cdf(
     SEXP stream_xptr,
     SEXP table_location,
-    SEXP cleanup_root,
     SEXP columns,
     SEXP start_version,
     SEXP end_version,
     SEXP batch_size) {
   const DeltaSharingReadArguments arguments = read_arguments(
-      stream_xptr, table_location, cleanup_root, columns, batch_size);
+      stream_xptr, table_location, columns, batch_size);
   const uint64_t start_version_value =
       required_version(start_version, "start_version");
   const uint64_t end_version_value =
@@ -410,7 +402,6 @@ static SEXP delta_sharing_stream_from_cdf(
   const int32_t status = delta_sharing_native_populate_cdf_stream(
       arguments.stream,
       arguments.table_location,
-      arguments.cleanup_root,
       arguments.columns.values,
       arguments.columns.count,
       start_version_value,
@@ -425,27 +416,13 @@ static SEXP delta_sharing_stream_from_cdf(
   return R_NilValue;
 }
 
-static SEXP delta_sharing_reap_pending_cleanups(void) {
-  uint64_t pending = 0;
-  char error[DELTA_SHARING_ERROR_CAPACITY] = {0};
-  const int32_t status =
-      delta_sharing_native_reap_pending(&pending, error, sizeof(error));
-  if (status != 0) {
-    raise_native_error(status, error);
-  }
-  return Rf_ScalarReal((double)pending);
-}
-
 static const R_CallMethodDef call_methods[] = {
     {"delta_sharing_stream_from_snapshot",
      (DL_FUNC)&delta_sharing_stream_from_snapshot,
-     6},
+     5},
     {"delta_sharing_stream_from_cdf",
      (DL_FUNC)&delta_sharing_stream_from_cdf,
-     7},
-    {"delta_sharing_reap_pending_cleanups",
-     (DL_FUNC)&delta_sharing_reap_pending_cleanups,
-     0},
+     6},
     {NULL, NULL, 0}};
 
 void attribute_visible R_init_delta_sharing(DllInfo *dll) {

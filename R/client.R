@@ -25,8 +25,9 @@ sharing_client <- function(profile) {
 #' Delta Sharing client
 #'
 #' A reusable client that owns a parsed profile and its authentication context.
-#' Discovery and table handles are created from the client. Query configuration
-#' lives on snapshot/changes reader objects, not on the client or table.
+#' Discovery and table handles are created from the client. Download
+#' concurrency is configured on each table handle; query options live on its
+#' snapshot and changes readers.
 #'
 #' Most users call [sharing_client()] rather than `SharingClient$new()`.
 #'
@@ -80,10 +81,21 @@ SharingClient <- R6::R6Class(
     #'   and `schema` are omitted.
     #' @param schema Schema name when using explicit components.
     #' @param share Share name when using explicit components.
+    #' @param concurrency Maximum number of data files downloaded concurrently.
     #' @return A [SharingTable].
-    table = function(name, schema = NULL, share = NULL) {
+    table = function(
+      name,
+      schema = NULL,
+      share = NULL,
+      concurrency = DEFAULT_CONCURRENCY
+    ) {
       identifier <- sharing_table_identifier(name, schema, share)
-      SharingTable$new(private$profile, private$auth, identifier)
+      SharingTable$new(
+        private$profile,
+        private$auth,
+        identifier,
+        concurrency
+      )
     },
 
     #' @description Print the client.

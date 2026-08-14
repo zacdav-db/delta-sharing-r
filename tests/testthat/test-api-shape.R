@@ -11,38 +11,40 @@ test_that("sharing_client builds a SharingClient", {
 
 test_that("the staged object graph composes", {
   client <- test_client()
-  tbl <- client$table("sales.default.orders")
+  tbl <- client$table("sales.default.orders", concurrency = 8)
   expect_s3_class(tbl, "SharingTable")
   expect_equal(tbl$identifier()$table, "orders")
+  expect_true(fs::dir_exists(tbl$cache_path))
 
   snap <- tbl$snapshot(
     version = 42,
     columns = c("a", "b"),
-    limit = 100,
-    cache = TRUE
+    limit = 100
   )
   expect_s3_class(snap, "SharingSnapshot")
 
   chg <- tbl$changes(
     starting_version = 120,
-    ending_version = 125,
-    cache = TRUE
+    ending_version = 125
   )
   expect_s3_class(chg, "SharingChanges")
 })
 
-test_that("materializers expose batch and download concurrency controls", {
+test_that("download concurrency belongs to the table", {
   snapshot <- test_client()$table("sales.default.orders")$snapshot()
 
   purrr::walk(
     c("to_arrow", "to_arrow_reader", "to_data_frame", "to_arrow_stream"),
     function(method) {
       arguments <- formals(snapshot[[method]])
-      expect_identical(names(arguments), c("batch_size", "threads"))
-      expect_identical(arguments$threads, quote(DEFAULT_THREADS))
+      expect_identical(names(arguments), "batch_size")
     }
   )
-  expect_identical(DEFAULT_THREADS, 4L)
+  expect_identical(DEFAULT_CONCURRENCY, 4L)
+  expect_error(
+    test_client()$table("sales.default.orders", concurrency = 0),
+    class = "rlang_error"
+  )
 })
 
 test_that("table accepts explicit share, schema, and name components", {
@@ -112,14 +114,6 @@ test_that("readers validate options interpreted by the package", {
   expect_error(tbl$snapshot(response_format = "csv"), class = "rlang_error")
   expect_error(
     tbl$changes(columns = 1),
-    class = "delta_sharing_validation_error"
-  )
-  expect_error(
-    tbl$snapshot(cache = 1),
-    class = "delta_sharing_validation_error"
-  )
-  expect_error(
-    tbl$changes(cache = NULL),
     class = "delta_sharing_validation_error"
   )
 })

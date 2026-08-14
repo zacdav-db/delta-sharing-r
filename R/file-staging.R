@@ -1,96 +1,33 @@
-# Local data-file staging and the opt-in session cache.
+# Session-scoped local staging for shared data files.
 #
-# Every read gets a fresh synthetic Delta log and a private `table/data`
-# directory. By default, selected files are downloaded directly into that
-# read-owned directory. With caching enabled, immutable objects are downloaded
-# once into a table-scoped session cache and hard-linked (or copied when links
-# are unavailable) into each read directory. This keeps active reads isolated
-# from `table$clear_cache()`.
+# A table handle creates a deterministic cache directory under R's temporary
+# directory. File and deletion-vector IDs supplied by the sharing server are
+# used directly as filenames, so new handles for the same table reuse the same
+# immutable objects. Each read creates only a fresh synthetic Delta log.
 
-DEFAULT_THREADS <- 4L
-
-download_cache_state <- new.env(parent = emptyenv())
-download_cache_state$root <- NULL
+DEFAULT_CONCURRENCY <- 4L
 
 hash_cache_value <- function(value) {
-  as.character(openssl::sha256(charToRaw(enc2utf8(value))))
+  unclass(as.character(openssl::sha256(charToRaw(enc2utf8(value)))))
 }
 
-# Signed query parameters rotate, while Delta data objects are immutable. Use
-# the URL without credentials, query, or fragment as the reusable identity.
-stable_url_identity <- function(url) {
-  parsed <- httr2::url_parse(url)
-  parsed$username <- NULL
-  parsed$password <- NULL
-  parsed$query <- NULL
-  parsed$fragment <- NULL
-  httr2::url_build(parsed)
-}
-
-session_cache_root <- function(create = TRUE) {
-  root <- download_cache_state$root
-  if (!is.null(root) && fs::dir_exists(root)) {
-    return(root)
-  }
-  if (!create) {
-    return(NULL)
-  }
-
-  root <- fs::file_temp(pattern = ".delta-sharing-cache-")
+session_cache_root <- function() {
+  root <- fs::path_temp(".delta-sharing-cache")
   fs::dir_create(root, mode = "u=rwx,go=")
-  download_cache_state$root <- fs::path_real(root)
-  download_cache_state$root
+  fs::path_real(root)
 }
 
-table_download_cache <- function(profile, identifier, create = TRUE) {
-  root <- session_cache_root(create)
-  if (is.null(root)) {
-    return(NULL)
-  }
+table_download_cache <- function(profile, identifier) {
   key <- hash_cache_value(paste(
-    stable_url_identity(profile$endpoint),
+    profile$endpoint,
     identifier$share,
     identifier$schema,
     identifier$table,
     sep = "\n"
   ))
-  path <- fs::path(root, key)
-  if (create) {
-    fs::dir_create(path, mode = "u=rwx,go=")
-  }
-  path
-}
-
-clear_table_download_cache <- function(profile, identifier) {
-  path <- table_download_cache(profile, identifier, create = FALSE)
-  if (!is.null(path) && fs::dir_exists(path)) {
-    fs::dir_delete(path)
-  }
-  invisible(NULL)
-}
-
-clear_session_download_cache <- function() {
-  root <- session_cache_root(create = FALSE)
-  if (!is.null(root) && fs::dir_exists(root)) {
-    fs::dir_delete(root)
-  }
-  download_cache_state$root <- NULL
-  invisible(NULL)
-}
-
-new_staging_context <- function(profile, identifier, table_dir, cache) {
-  context <- new.env(parent = emptyenv())
-  context$data_dir <- fs::path(table_dir, "data")
-  context$cache_dir <- if (cache) {
-    table_download_cache(profile, identifier)
-  } else {
-    NULL
-  }
-  context$cache <- cache
-  context$paths <- new.env(parent = emptyenv())
-  context$downloaded <- 0L
-  context$cache_hits <- 0L
-  context
+  path <- fs::path(session_cache_root(), key)
+  fs::dir_create(path, mode = "u=rwx,go=")
+  fs::path_real(path)
 }
 
 delta_file_field <- function(action) {
@@ -99,37 +36,55 @@ delta_file_field <- function(action) {
   })
 }
 
-staged_asset <- function(kind, url, size = NULL) {
-  identity <- stable_url_identity(url)
-  key <- hash_cache_value(paste(kind, identity, size %||% "", sep = "\n"))
+staged_asset <- function(kind, id, url, size = NULL) {
+  if (!is_scalar_character(id)) {
+    abort(
+      "A shared file action did not include its ID.",
+      type = "protocol",
+      operation = "read"
+    )
+  }
+  extension <- if (identical(kind, "data")) ".parquet" else ".bin"
   list(
     kind = kind,
+    id = id,
     url = url,
     size = size,
-    key = key,
-    name = paste0(key, if (identical(kind, "data")) ".parquet" else ".bin")
+    name = paste0(id, extension)
   )
 }
 
-action_staged_assets <- function(action) {
+file_wrapper_action <- function(file, response_format, operation) {
+  synthetic_file_action(file, response_format, operation)
+}
+
+file_wrapper_assets <- function(file, response_format, operation) {
+  action <- file_wrapper_action(file, response_format, operation)
   field <- delta_file_field(action)
   if (is.null(field)) {
     return(list())
   }
-  file <- action[[field]]
-  assets <- list(staged_asset("data", file$path, file$size))
+  data <- action[[field]]
+  assets <- list(staged_asset(
+    "data",
+    file$id,
+    data$path,
+    file$size %||% data$size
+  ))
 
-  dv <- file$deletionVector
+  dv <- data$deletionVector
   if (!is.null(dv) && identical(dv$storageType, "p")) {
     assets[[2L]] <- staged_asset(
       "deletion-vector",
-      dv$pathOrInlineDv
+      file$deletionVectorFileId,
+      dv$pathOrInlineDv,
+      dv$sizeInBytes
     )
   } else if (!is.null(dv) && identical(dv$storageType, "u")) {
     abort(
       "A change file used a relative deletion vector that was not signed by the server.",
       type = "unsupported",
-      operation = "read",
+      operation = operation,
       feature = "relative_deletion_vector"
     )
   }
@@ -167,22 +122,12 @@ download_request <- function(url) {
     )
 }
 
-staging_download_error <- function() {
-  cli::cli_abort(
-    "A shared data file could not be downloaded.",
-    class = c("httr2_error", "delta_sharing_error")
-  )
-}
-
 # Download into sibling temporary paths, then publish only complete files.
-download_staged_assets <- function(assets, targets, threads) {
+download_staged_assets <- function(assets, targets, concurrency) {
   if (length(assets) == 0L) {
     return(invisible(NULL))
   }
 
-  purrr::walk(unique(fs::path_dir(targets)), function(path) {
-    fs::dir_create(path, mode = "u=rwx,go=")
-  })
   temporary <- purrr::map_chr(targets, function(target) {
     fs::file_temp(
       pattern = ".download-",
@@ -199,33 +144,28 @@ download_staged_assets <- function(assets, targets, threads) {
   remote_index <- setdiff(seq_along(assets), local_index)
 
   purrr::walk(local_index, function(index) {
-    source <- local[[index]]
-    if (!fs::file_exists(source)) {
-      staging_download_error()
-    }
-    fs::file_copy(source, temporary[[index]])
+    fs::file_copy(local[[index]], temporary[[index]])
   })
 
   if (length(remote_index) > 0L) {
-    responses <- httr2::req_perform_parallel(
+    httr2::req_perform_parallel(
       purrr::map(assets[remote_index], function(asset) {
         download_request(asset$url)
       }),
       paths = temporary[remote_index],
-      on_error = "return",
+      on_error = "stop",
       progress = FALSE,
-      max_active = threads
+      max_active = concurrency
     )
-    failed <- length(responses) != length(remote_index) ||
-      purrr::some(responses, inherits, "error") ||
-      any(!fs::file_exists(temporary[remote_index]))
-    if (failed) {
-      staging_download_error()
-    }
   }
 
-  if (!all(purrr::map2_lgl(temporary, assets, staged_asset_is_complete))) {
-    staging_download_error()
+  complete <- purrr::map2_lgl(temporary, assets, staged_asset_is_complete)
+  if (!all(complete)) {
+    abort(
+      "A shared data file was incomplete.",
+      type = "protocol",
+      operation = "read"
+    )
   }
 
   purrr::walk2(temporary, targets, function(source, target) {
@@ -235,89 +175,79 @@ download_staged_assets <- function(assets, targets, threads) {
   invisible(NULL)
 }
 
-# Link a cached object into the read-owned directory. Hard links keep an active
-# reader valid if its table cache is cleared. Copying is the portable fallback.
-materialize_cached_asset <- function(source, target) {
-  if (fs::file_exists(target)) {
-    return(invisible(target))
-  }
-  fs::dir_create(fs::path_dir(target), mode = "u=rwx,go=")
-  # Hard links are not universally available (for example across filesystems),
-  # so a copy is the required portable fallback.
-  linked <- tryCatch(
-    {
-      fs::link_create(source, target, symbolic = FALSE)
-      TRUE
-    },
-    error = function(condition) FALSE
-  )
-  if (!linked) {
-    fs::file_copy(source, target)
-  }
-  invisible(target)
-}
-
-ensure_staged_assets <- function(assets, context, threads) {
+ensure_staged_assets <- function(assets, cache_path, concurrency) {
+  fs::dir_create(cache_path, mode = "u=rwx,go=")
   if (length(assets) == 0L) {
-    return(invisible(NULL))
+    return(list(paths = list(), downloaded = 0L, cache_hits = 0L))
   }
-  keys <- purrr::map_chr(assets, "key")
-  assets <- assets[!duplicated(keys)]
-  keys <- purrr::map_chr(assets, "key")
 
-  source_targets <- if (context$cache) {
-    fs::path(context$cache_dir, purrr::map_chr(assets, "name"))
-  } else {
-    fs::path(context$data_dir, purrr::map_chr(assets, "name"))
-  }
-  valid_size <- purrr::map2_lgl(
-    source_targets,
-    assets,
-    staged_asset_is_complete
+  names <- purrr::map_chr(assets, "name")
+  assets <- assets[!duplicated(names)]
+  names <- purrr::map_chr(assets, "name")
+  targets <- fs::path(cache_path, names)
+  complete <- purrr::map2_lgl(targets, assets, staged_asset_is_complete)
+  invalid <- fs::file_exists(targets) & !complete
+  purrr::walk(targets[invalid], fs::file_delete)
+  missing <- !complete
+
+  download_staged_assets(assets[missing], targets[missing], concurrency)
+
+  list(
+    paths = stats::setNames(
+      purrr::map(targets, local_file_url),
+      names
+    ),
+    downloaded = sum(missing),
+    cache_hits = sum(!missing)
   )
-  invalid <- fs::file_exists(source_targets) & !valid_size
-  purrr::walk(source_targets[invalid], fs::file_delete)
-  missing <- !valid_size
-  if (context$cache) {
-    context$cache_hits <- context$cache_hits + sum(!missing)
-  }
-
-  if (any(missing)) {
-    download_staged_assets(assets[missing], source_targets[missing], threads)
-    context$downloaded <- context$downloaded + sum(missing)
-  }
-
-  read_targets <- fs::path(context$data_dir, purrr::map_chr(assets, "name"))
-  if (context$cache) {
-    purrr::walk2(source_targets, read_targets, materialize_cached_asset)
-  }
-  purrr::walk2(keys, read_targets, function(key, path) {
-    context$paths[[key]] <- local_file_url(path)
-  })
-  invisible(NULL)
 }
 
-rewrite_staged_action <- function(action, context) {
+rewrite_staged_file <- function(file, response_format, operation, paths) {
+  action <- file_wrapper_action(file, response_format, operation)
   field <- delta_file_field(action)
   if (is.null(field)) {
     return(action)
   }
-  file <- action[[field]]
-  data <- staged_asset("data", file$path, file$size)
-  file$path <- context$paths[[data$key]]
 
-  dv <- file$deletionVector
+  data_asset <- staged_asset("data", file$id, action[[field]]$path)
+  action[[field]]$path <- paths[[data_asset$name]]
+
+  dv <- action[[field]]$deletionVector
   if (!is.null(dv) && identical(dv$storageType, "p")) {
-    asset <- staged_asset("deletion-vector", dv$pathOrInlineDv)
-    dv$pathOrInlineDv <- context$paths[[asset$key]]
-    file$deletionVector <- dv
+    dv_asset <- staged_asset(
+      "deletion-vector",
+      file$deletionVectorFileId,
+      dv$pathOrInlineDv
+    )
+    dv$pathOrInlineDv <- paths[[dv_asset$name]]
+    action[[field]]$deletionVector <- dv
   }
-  action[[field]] <- file
   action
 }
 
-stage_delta_actions <- function(actions, context, threads) {
-  assets <- purrr::list_flatten(purrr::map(actions, action_staged_assets))
-  ensure_staged_assets(assets, context, threads)
-  purrr::map(actions, rewrite_staged_action, context = context)
+stage_file_wrappers <- function(
+  files,
+  response_format,
+  cache_path,
+  concurrency,
+  operation
+) {
+  assets <- purrr::list_flatten(purrr::map(
+    files,
+    file_wrapper_assets,
+    response_format = response_format,
+    operation = operation
+  ))
+  staged <- ensure_staged_assets(assets, cache_path, concurrency)
+  list(
+    actions = purrr::map(
+      files,
+      rewrite_staged_file,
+      response_format = response_format,
+      operation = operation,
+      paths = staged$paths
+    ),
+    downloaded = staged$downloaded,
+    cache_hits = staged$cache_hits
+  )
 }

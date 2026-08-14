@@ -29,18 +29,13 @@ its Arrow and data-frame materializers.
 \subsection{Method \code{to_arrow()}}{
 Materialize as an Arrow table (requires \code{{arrow}}).
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_arrow(
-  batch_size = DEFAULT_BATCH_SIZE,
-  threads = DEFAULT_THREADS
-)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_arrow(batch_size = DEFAULT_BATCH_SIZE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{batch_size}}{Rows per batch.}
-
-\item{\code{threads}}{Maximum number of files downloaded concurrently.}
 }
 \if{html}{\out{</div>}}
 }
@@ -57,18 +52,13 @@ Expose a lazy Arrow record batch reader (requires
 its \code{Close()} method. Downstream consumers must serialize pulls from
 this single-consumer stream.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_arrow_reader(
-  batch_size = DEFAULT_BATCH_SIZE,
-  threads = DEFAULT_THREADS
-)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_arrow_reader(batch_size = DEFAULT_BATCH_SIZE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{batch_size}}{Rows per batch.}
-
-\item{\code{threads}}{Maximum number of files downloaded concurrently.}
 }
 \if{html}{\out{</div>}}
 }
@@ -82,18 +72,13 @@ An \code{arrow::RecordBatchReader}.
 \subsection{Method \code{to_data_frame()}}{
 Materialize as a base data frame.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_data_frame(
-  batch_size = DEFAULT_BATCH_SIZE,
-  threads = DEFAULT_THREADS
-)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_data_frame(batch_size = DEFAULT_BATCH_SIZE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{batch_size}}{Rows per batch.}
-
-\item{\code{threads}}{Maximum number of files downloaded concurrently.}
 }
 \if{html}{\out{</div>}}
 }
@@ -107,19 +92,13 @@ A data frame.
 \subsection{Method \code{to_arrow_stream()}}{
 Materialize as a lazy Arrow C stream.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_arrow_stream(
-  batch_size = DEFAULT_BATCH_SIZE,
-  threads = DEFAULT_THREADS
-)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_arrow_stream(batch_size = DEFAULT_BATCH_SIZE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{batch_size}}{Rows per batch (1..1,000,000; default 65,536).}
-
-\item{\code{threads}}{Maximum number of files downloaded concurrently (default
-4).}
 }
 \if{html}{\out{</div>}}
 }
