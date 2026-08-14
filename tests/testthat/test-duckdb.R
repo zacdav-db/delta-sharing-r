@@ -63,6 +63,9 @@ test_that("DuckDB early completion releases the Arrow stream", {
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
 
+  # Early completion does not exhaust the one-pass reader, so serialize pulls.
+  withr::local_options(arrow.use_threads = FALSE)
+
   httr2::local_mocked_responses(function(req) {
     httr2::response(
       200,
