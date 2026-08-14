@@ -119,12 +119,7 @@ A printable list of table records.
 \subsection{Method \code{table()}}{
 Create a reusable table handle.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingClient$table(
-  name,
-  schema = NULL,
-  share = NULL,
-  concurrency = DEFAULT_CONCURRENCY
-)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingClient$table(name, schema = NULL, share = NULL, concurrency = 4L)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{

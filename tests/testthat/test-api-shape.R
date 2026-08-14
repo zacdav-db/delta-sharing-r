@@ -40,7 +40,7 @@ test_that("download concurrency belongs to the table", {
       expect_identical(names(arguments), "batch_size")
     }
   )
-  expect_identical(DEFAULT_CONCURRENCY, 4L)
+  expect_identical(formals(test_client()$table)$concurrency, 4L)
   expect_error(
     test_client()$table("sales.default.orders", concurrency = 0),
     class = "rlang_error"

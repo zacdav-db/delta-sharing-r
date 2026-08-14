@@ -87,7 +87,7 @@ SharingClient <- R6::R6Class(
       name,
       schema = NULL,
       share = NULL,
-      concurrency = DEFAULT_CONCURRENCY
+      concurrency = 4L
     ) {
       identifier <- sharing_table_identifier(name, schema, share)
       SharingTable$new(

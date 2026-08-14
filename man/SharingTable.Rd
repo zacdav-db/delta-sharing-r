@@ -44,7 +44,7 @@ it manually invalidates active lazy readers; the next read recreates it.}
 \subsection{Method \code{new()}}{
 Create a table handle. Prefer \code{SharingClient$table()}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingTable$new(profile, auth, identifier, concurrency = DEFAULT_CONCURRENCY)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingTable$new(profile, auth, identifier, concurrency = 4L)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{

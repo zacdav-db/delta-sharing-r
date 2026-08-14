@@ -5,8 +5,6 @@
 # used directly as filenames, so new handles for the same table reuse the same
 # immutable objects. Each read creates only a fresh synthetic Delta log.
 
-DEFAULT_CONCURRENCY <- 4L
-
 hash_cache_value <- function(value) {
   unclass(as.character(openssl::sha256(charToRaw(enc2utf8(value)))))
 }

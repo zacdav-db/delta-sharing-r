@@ -21,7 +21,7 @@ SharingTable <- R6::R6Class(
       profile,
       auth,
       identifier,
-      concurrency = DEFAULT_CONCURRENCY
+      concurrency = 4L
     ) {
       rlang::check_number_whole(concurrency, min = 1)
       private$profile <- profile

@@ -86,7 +86,7 @@ prepare_snapshot_query_log <- function(
   spec,
   format,
   cache_path = table_download_cache(profile, identifier),
-  concurrency = DEFAULT_CONCURRENCY
+  concurrency = 4L
 ) {
   query_result <- sharing_query_snapshot(
     profile,
@@ -375,7 +375,7 @@ sharing_snapshot_stream <- function(
   spec,
   cache_path,
   batch_size = DEFAULT_BATCH_SIZE,
-  concurrency = DEFAULT_CONCURRENCY
+  concurrency = 4L
 ) {
   fmt <- resolve_query_format(
     profile,
@@ -408,7 +408,7 @@ sharing_changes_stream <- function(
   spec,
   cache_path,
   batch_size = DEFAULT_BATCH_SIZE,
-  concurrency = DEFAULT_CONCURRENCY
+  concurrency = 4L
 ) {
   # Change data feed is read through the kernel, which requires delta format;
   # the parquet CDF path is not supported. An explicit parquet request is a
