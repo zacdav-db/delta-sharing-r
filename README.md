@@ -102,7 +102,7 @@ staged in the session cache:
 Both avoid an intermediate R data frame. This requires the optional `arrow`,
 `DBI`, and `duckdb` packages.
 
-For a one-pass query, register an Arrow reader:
+Register a lazy Arrow reader directly:
 
 ```r
 snapshot <- housing$snapshot(
@@ -129,31 +129,15 @@ reader$Close()
 DBI::dbDisconnect(con)
 ```
 
-For a reusable in-memory result, register an Arrow table:
+For repeated queries, materialize and register an in-memory Arrow table
+instead:
 
 ```r
-snapshot <- housing$snapshot(
-  columns = c("chas", "medv")
-)
 arrow_table <- snapshot$to_arrow()
-
-con <- DBI::dbConnect(duckdb::duckdb())
 duckdb::duckdb_register_arrow(con, "housing", arrow_table)
-
-summary <- DBI::dbGetQuery(con, "
-  SELECT chas, count(*) AS homes, avg(medv) AS mean_value
-  FROM housing
-  GROUP BY chas
-  ORDER BY chas
-")
-
-duckdb::duckdb_unregister_arrow(con, "housing")
-DBI::dbDisconnect(con)
 ```
 
-An Arrow reader is single-consumer. Use an Arrow table, or create a temporary
-DuckDB table during the first query, when the result needs to be scanned
-several times.
+Arrow tables keep the result in memory and do not need `Close()`.
 
 ## Performance
 
