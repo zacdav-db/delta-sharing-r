@@ -72,13 +72,14 @@ sharing_paginate <- function(
   profile,
   auth,
   path,
-  operation
+  operation,
+  max_results = 500L
 ) {
   first <- sharing_request(
     profile,
     auth,
     path,
-    query = list(maxResults = 500L)
+    query = list(maxResults = max_results)
   )
   next_token <- function(resp) {
     token <- discovery_body(resp, operation)$nextPageToken
