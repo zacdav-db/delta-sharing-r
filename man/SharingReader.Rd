@@ -50,8 +50,7 @@ An \code{arrow::Table}.
 \subsection{Method \code{to_arrow_reader()}}{
 Expose a lazy Arrow record batch reader (requires
 \code{{arrow}}). The reader owns the underlying stream; consume it or call
-its \code{Close()} method. Downstream consumers must serialize pulls from
-this single-consumer stream.
+its \code{Close()} method.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_arrow_reader(batch_size = 65536L)}\if{html}{\out{</div>}}
 }

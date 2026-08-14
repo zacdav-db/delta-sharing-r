@@ -2,6 +2,9 @@
 
 S3method("$",delta_sharing_interruptible_stream)
 S3method(print,delta_sharing_listing)
+S3method(print,delta_sharing_metadata)
+S3method(print,delta_sharing_protocol)
+S3method(print,delta_sharing_schema)
 export(SharingChanges)
 export(SharingClient)
 export(SharingSnapshot)

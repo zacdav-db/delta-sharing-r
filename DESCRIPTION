@@ -46,4 +46,4 @@ Config/testthat/edition: 3
 Config/testthat/parallel: false
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
-SystemRequirements: Cargo (Rust's package manager), rustc (>= 1.88), CMake
+SystemRequirements: Cargo (Rust's package manager), rustc (>= 1.88)

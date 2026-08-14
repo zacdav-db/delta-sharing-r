@@ -1,11 +1,9 @@
-test_that("DuckDB queries lazy snapshot readers", {
+test_that("DuckDB queries lazy snapshot readers with default Arrow threads", {
   skip_if_not_installed("arrow")
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
 
-  # DuckDB wraps lazy readers in an Arrow scanner. Arrow C streams are not
-  # assumed to support concurrent pulls, so keep this scanner serialized.
-  withr::local_options(arrow.use_threads = FALSE)
+  withr::local_options(arrow.use_threads = TRUE)
 
   stream <- native_snapshot_stream(
     fixture_table("local-table"),
@@ -13,8 +11,8 @@ test_that("DuckDB queries lazy snapshot readers", {
   )
   reader <- sharing_stream_to_arrow_reader(stream)
   withr::defer(reader$Close())
-  connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
-  withr::defer(DBI::dbDisconnect(connection, shutdown = TRUE))
+  connection <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(connection))
   duckdb::duckdb_register_arrow(connection, "shared_orders", reader)
   withr::defer(
     duckdb::duckdb_unregister_arrow(connection, "shared_orders")
@@ -43,8 +41,8 @@ test_that("DuckDB queries eager Arrow tables", {
   table <- sharing_stream_to_arrow(
     native_snapshot_stream(fixture_table("local-table"))
   )
-  connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
-  withr::defer(DBI::dbDisconnect(connection, shutdown = TRUE))
+  connection <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(connection))
   duckdb::duckdb_register_arrow(connection, "shared_orders", table)
   withr::defer(
     duckdb::duckdb_unregister_arrow(connection, "shared_orders")
@@ -64,8 +62,6 @@ test_that("DuckDB early completion releases the Arrow stream", {
   skip_if_not_installed("arrow")
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
-
-  withr::local_options(arrow.use_threads = FALSE)
 
   httr2::local_mocked_responses(function(req) {
     httr2::response(
@@ -94,10 +90,10 @@ test_that("DuckDB early completion releases the Arrow stream", {
     )
     reader <- sharing_stream_to_arrow_reader(stream)
     withr::defer(reader$Close())
-    connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
+    connection <- DBI::dbConnect(duckdb::duckdb())
     withr::defer(
       if (DBI::dbIsValid(connection)) {
-        DBI::dbDisconnect(connection, shutdown = TRUE)
+        DBI::dbDisconnect(connection)
       }
     )
     duckdb::duckdb_register_arrow(connection, "shared_orders", reader)
@@ -112,7 +108,7 @@ test_that("DuckDB early completion releases the Arrow stream", {
       "SELECT * FROM shared_orders LIMIT 1"
     )
     duckdb::duckdb_unregister_arrow(connection, "shared_orders")
-    DBI::dbDisconnect(connection, shutdown = TRUE)
+    DBI::dbDisconnect(connection)
     result
   })
 
@@ -126,8 +122,6 @@ test_that("DuckDB queries CDF metadata columns", {
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
 
-  withr::local_options(arrow.use_threads = FALSE)
-
   stream <- native_cdf_stream(
     fixture_table("cdf"),
     start_version = 1,
@@ -135,8 +129,8 @@ test_that("DuckDB queries CDF metadata columns", {
   )
   reader <- sharing_stream_to_arrow_reader(stream)
   withr::defer(reader$Close())
-  connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
-  withr::defer(DBI::dbDisconnect(connection, shutdown = TRUE))
+  connection <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(connection))
   duckdb::duckdb_register_arrow(connection, "shared_changes", reader)
   withr::defer(
     duckdb::duckdb_unregister_arrow(connection, "shared_changes")

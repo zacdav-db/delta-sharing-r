@@ -53,13 +53,9 @@ staged_asset <- function(kind, id, url, size = NULL) {
   )
 }
 
-file_wrapper_action <- function(file, response_format, operation) {
-  synthetic_file_action(file, response_format, operation)
-}
-
 # Expand one shared file into the data and deletion-vector assets it needs.
 file_wrapper_assets <- function(file, response_format, operation) {
-  action <- file_wrapper_action(file, response_format, operation)
+  action <- synthetic_file_action(file, response_format, operation)
   field <- delta_file_field(action)
   if (is.null(field)) {
     return(list())
@@ -234,7 +230,7 @@ ensure_staged_assets <- function(assets, cache_path, concurrency) {
 
 # Point a Delta action at its cached data and deletion-vector files.
 rewrite_staged_file <- function(file, response_format, operation, paths) {
-  action <- file_wrapper_action(file, response_format, operation)
+  action <- synthetic_file_action(file, response_format, operation)
   field <- delta_file_field(action)
   if (is.null(field)) {
     return(action)

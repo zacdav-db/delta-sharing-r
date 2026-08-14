@@ -30,6 +30,17 @@ test_that("the staged object graph composes", {
   expect_s3_class(chg, "SharingChanges")
 })
 
+test_that("change data feeds always use Delta format", {
+  expect_false(
+    "response_format" %in%
+      names(formals(
+        test_client()$table(
+          "sales.default.orders"
+        )$changes
+      ))
+  )
+})
+
 test_that("download concurrency belongs to the table", {
   snapshot <- test_client()$table("sales.default.orders")$snapshot()
 
@@ -128,8 +139,43 @@ test_that("readers validate options interpreted by the package", {
 test_that("print methods are stable", {
   client <- test_client()
   expect_output(print(client), "SharingClient")
-  expect_output(print(client$table("s.sc.t")), "SharingTable")
-  expect_output(print(client$table("s.sc.t")$snapshot()), "SharingSnapshot")
+  expect_output(
+    print(client$table("s.sc.t", concurrency = 8)),
+    "concurrent downloads: 8",
+    fixed = TRUE
+  )
+  expect_output(
+    print(client$table("s.sc.t")$snapshot(limit = 10, columns = "id")),
+    "latest snapshot | 1 column | limit 10",
+    fixed = TRUE
+  )
+  expect_output(
+    print(client$table("s.sc.t")$changes(
+      starting_version = 2,
+      ending_version = 4
+    )),
+    "changes 2 to 4",
+    fixed = TRUE
+  )
+})
+
+test_that("to_arrow checks for Arrow before opening the lazy query", {
+  reader <- test_client()$table("sales.default.orders")$snapshot()
+  state <- rlang::env(opened = FALSE)
+  testthat::with_mocked_bindings(
+    {
+      expect_error(reader$to_arrow(), "mocked missing Arrow", fixed = TRUE)
+      expect_false(state$opened)
+    },
+    require_arrow = function(operation) {
+      stop("mocked missing Arrow", call. = FALSE)
+    },
+    sharing_snapshot_stream = function(...) {
+      state$opened <- TRUE
+      stop("query opened", call. = FALSE)
+    },
+    .package = "delta.sharing"
+  )
 })
 
 test_that("client printing redacts endpoint user information", {

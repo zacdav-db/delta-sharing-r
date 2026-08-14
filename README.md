@@ -25,31 +25,20 @@ library(delta.sharing)
 
 client <- sharing_client(demo_profile())
 
-# Discover the public example data
-client$list_shares()
-client$list_schemas("delta_sharing")
+# Discover the public example tables
 client$list_tables("delta_sharing")
 
-# Create a reusable table handle
 housing <- client$table("delta_sharing.default.boston-housing")
-
-# Inspect metadata without scanning rows
-housing$version()
-housing$metadata()
-housing$schema()
-
-# Read a snapshot
-snapshot <- housing$snapshot(limit = 1000)
-housing_tbl <- snapshot$to_tibble()
-housing_df <- snapshot$to_data_frame()
-housing_arrow <- snapshot$to_arrow()
+housing_tbl <- housing$snapshot(limit = 1000)$to_tibble()
 ```
 
-`to_tibble()` is the usual eager R materializer. `to_data_frame()` returns the
-same result as a base data frame, while `to_arrow()` keeps it in Arrow memory.
-All three consume the same direct Arrow stream without an intermediate replay.
+`to_tibble()` is the usual eager R materializer. The same reader can instead
+return a base data frame with `to_data_frame()`, an Arrow table with
+`to_arrow()`, or a lazy Arrow reader with `to_arrow_reader()`. The Arrow
+materializers require the optional `arrow` package.
 
-The default `response_format = "auto"` negotiation is reused for subsequent
+Each materializer call performs its own read through the same Arrow C stream
+path. For snapshots, the default response format negotiation is reused by later
 reads of the same table through one client. Metadata and schema inspection
 remain fresh requests.
 
@@ -57,7 +46,7 @@ For your own share, pass a profile file and select its table:
 
 ```r
 client <- sharing_client("~/config.share")
-orders <- client$table("sales.default.orders", concurrency = 4)
+orders <- client$table("sales.default.orders")
 ```
 
 ## Snapshots and changes
@@ -92,62 +81,75 @@ refreshed_tbl <- orders$snapshot()$to_tibble()
 orders$cache_path
 ```
 
-Set `concurrency` when creating the table handle to tune downloads. R removes
-the cache with its session temporary directory. Advanced users can delete
-`orders$cache_path` manually; do not do that while a lazy reader is active.
-Interactive downloads report completed files and total bytes when sizes are
-available from the sharing server.
+Set `concurrency` when creating the table handle to tune downloads. The cache is
+stored in R's session temporary directory and is normally removed when R exits.
+Advanced users can delete `orders$cache_path` manually; do not do that while a
+lazy reader is active. Interactive missing-file downloads report completed
+files and total bytes when sizes are available from the sharing server.
 
 See `vignette("delta-sharing")` for a full walkthrough.
 
 ## Query with DuckDB
 
-DuckDB accepts both Arrow materializers:
+DuckDB accepts both Arrow materializers after the selected files have been
+staged in the session cache:
 
-- `to_arrow_reader()` is lazy and suited to one pass over a large result.
+- `to_arrow_reader()` streams rows lazily and is suited to one pass over a large
+  result.
 - `to_arrow()` materializes an Arrow table in memory and is useful when DuckDB
   should scan the same result more than once.
 
 Both avoid an intermediate R data frame. This requires the optional `arrow`,
-`DBI`, `duckdb`, and `withr` packages.
+`DBI`, and `duckdb` packages.
+
+For a one-pass query, register an Arrow reader:
 
 ```r
-snapshot <- orders$snapshot(
-  columns = c("status", "amount")
+snapshot <- housing$snapshot(
+  columns = c("chas", "medv")
 )
-
 reader <- snapshot$to_arrow_reader()
 
-con <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
-duckdb::duckdb_register_arrow(con, "shared_orders", reader)
+con <- DBI::dbConnect(duckdb::duckdb())
+duckdb::duckdb_register_arrow(con, "housing", reader)
 
-revenue <- withr::with_options(
-  list(arrow.use_threads = FALSE),
-  DBI::dbGetQuery(con, "
-    SELECT status, count(*) AS orders, sum(amount) AS revenue
-    FROM shared_orders
-    GROUP BY status
-    ORDER BY revenue DESC
-  ")
-)
+summary <- DBI::dbGetQuery(con, "
+  SELECT chas, count(*) AS homes, avg(medv) AS mean_value
+  FROM housing
+  GROUP BY chas
+  ORDER BY chas
+")
+summary
+#>   chas homes mean_value
+#> 1    0   471   22.29553
+#> 2    1    35   30.17500
 
-duckdb::duckdb_unregister_arrow(con, "shared_orders")
-DBI::dbDisconnect(con, shutdown = TRUE)
+duckdb::duckdb_unregister_arrow(con, "housing")
 reader$Close()
+DBI::dbDisconnect(con)
 ```
 
-The scoped Arrow option keeps pulls from the one-pass reader serial. It does
-not limit DuckDB's query threads.
-
-For the eager path, replace the reader construction and registration lines
-above with:
+For a reusable in-memory result, register an Arrow table:
 
 ```r
+snapshot <- housing$snapshot(
+  columns = c("chas", "medv")
+)
 arrow_table <- snapshot$to_arrow()
-duckdb::duckdb_register_arrow(con, "shared_orders", arrow_table)
-```
 
-An eager Arrow table does not need the scoped Arrow option.
+con <- DBI::dbConnect(duckdb::duckdb())
+duckdb::duckdb_register_arrow(con, "housing", arrow_table)
+
+summary <- DBI::dbGetQuery(con, "
+  SELECT chas, count(*) AS homes, avg(medv) AS mean_value
+  FROM housing
+  GROUP BY chas
+  ORDER BY chas
+")
+
+duckdb::duckdb_unregister_arrow(con, "housing")
+DBI::dbDisconnect(con)
+```
 
 An Arrow reader is single-consumer. Use an Arrow table, or create a temporary
 DuckDB table during the first query, when the result needs to be scanned
@@ -155,9 +157,11 @@ several times.
 
 ## Performance
 
-Median end-to-end snapshot times from three `to_tibble()` reads at the default
-concurrency of four. A cached read repeats the query after its selected files
-have been downloaded into the session cache.
+Directional results from one consumer setup. Each value is the median of three
+end-to-end `to_tibble()` reads at the default concurrency of four. A cached read
+repeats the query after its selected files have been downloaded into the session
+cache. The benchmark can be rerun with
+[`bench/snapshot.R`](bench/snapshot.R).
 
 *Apple M2 Pro (12 cores), 32 GB RAM, R 4.5.1; VPN connection: 92 Mbps down,
 111 ms base round-trip latency.*

@@ -106,9 +106,7 @@ metadata_request <- function(
 }
 
 parse_version_header <- function(resp, operation) {
-  value <- suppressWarnings(
-    as.numeric(httr2::resp_header(resp, "delta-table-version"))
-  )
+  value <- as.numeric(httr2::resp_header(resp, "delta-table-version"))
   if (!rlang::is_scalar_integerish(value, finite = TRUE) || value < 0) {
     abort(
       "The server did not return a valid table version.",
@@ -117,6 +115,53 @@ parse_version_header <- function(resp, operation) {
     )
   }
   value
+}
+
+#' @export
+print.delta_sharing_protocol <- function(x, ...) {
+  cat(sprintf("<Delta Sharing protocol> %s\n", x$response_format))
+  cat(sprintf("  reader version: %s\n", x$min_reader_version))
+  if (length(x$reader_features) > 0L) {
+    cat(
+      "  reader features: ",
+      paste(x$reader_features, collapse = ", "),
+      "\n",
+      sep = ""
+    )
+  }
+  invisible(x)
+}
+
+#' @export
+print.delta_sharing_metadata <- function(x, ...) {
+  cat(sprintf("<Delta Sharing metadata> %s\n", x$name))
+  cat(sprintf(
+    "  table version: %s | response format: %s\n",
+    x$table_version,
+    x$response_format
+  ))
+  cat(sprintf("  files: %s | size: %s bytes\n", x$num_files, x$size))
+  invisible(x)
+}
+
+#' @export
+print.delta_sharing_schema <- function(x, ...) {
+  fields <- x$fields %||% list()
+  field_names <- purrr::map_chr(fields, "name")
+  cat(sprintf(
+    "<Delta Sharing schema> %d field%s\n",
+    length(fields),
+    if (length(fields) == 1L) "" else "s"
+  ))
+  shown <- utils::head(field_names, 10L)
+  if (length(shown) > 0L) {
+    cat("  ", paste(shown, collapse = ", "), "\n", sep = "")
+  }
+  remaining <- length(field_names) - length(shown)
+  if (remaining > 0L) {
+    cat(sprintf("  ... and %d more\n", remaining))
+  }
+  invisible(x)
 }
 
 # Parse one buffered NDJSON page as a JSON array, ignoring empty lines.

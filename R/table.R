@@ -98,15 +98,13 @@ SharingTable <- R6::R6Class(
     #' @param starting_timestamp,ending_timestamp Optional timestamp strings or
     #'   `POSIXct` bounds.
     #' @param columns Optional character vector of projected columns.
-    #' @param response_format One of `"auto"`, `"delta"`, or `"parquet"`.
     #' @return A [SharingChanges].
     changes = function(
       starting_version = NULL,
       ending_version = NULL,
       starting_timestamp = NULL,
       ending_timestamp = NULL,
-      columns = NULL,
-      response_format = "auto"
+      columns = NULL
     ) {
       SharingChanges$new(
         profile = private$profile,
@@ -117,7 +115,6 @@ SharingTable <- R6::R6Class(
         starting_timestamp = starting_timestamp,
         ending_timestamp = ending_timestamp,
         columns = columns,
-        response_format = response_format,
         cache_path = private$cache_directory,
         concurrency = private$concurrency
       )
@@ -132,6 +129,7 @@ SharingTable <- R6::R6Class(
         private$id$schema,
         private$id$table
       ))
+      cat(sprintf("  concurrent downloads: %s\n", private$concurrency))
       invisible(self)
     }
   ),

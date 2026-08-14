@@ -638,7 +638,6 @@ dependencies = [
  "arrow-schema",
  "delta_kernel",
  "delta_kernel_default_engine",
- "parquet",
  "url",
 ]
 

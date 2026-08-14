@@ -21,7 +21,13 @@ test_that("delta format writes protocol, metadata, and verbatim actions", {
       )
     )
   )
-  lines <- synthetic_log_lines("delta", proto, meta, files, "read")
+  lines <- c(
+    synthetic_log_header("delta", proto, meta, "read"),
+    purrr::map_chr(
+      files,
+      \(file) log_json_line(synthetic_file_action(file, "delta", "read"))
+    )
+  )
 
   expect_length(lines, 4L)
   purrr::walk(lines, \(line) expect_no_error(jsonlite::fromJSON(line)))
@@ -46,7 +52,13 @@ test_that("parquet format synthesizes a flat add with object-valued maps", {
       )
     )
   )
-  lines <- synthetic_log_lines("parquet", proto, meta, files, "read")
+  lines <- c(
+    synthetic_log_header("parquet", proto, meta, "read"),
+    purrr::map_chr(
+      files,
+      \(file) log_json_line(synthetic_file_action(file, "parquet", "read"))
+    )
+  )
 
   add <- jsonlite::fromJSON(lines[[3]])
   expect_equal(add$add$path, "https://s/p1")
@@ -57,12 +69,15 @@ test_that("parquet format synthesizes a flat add with object-valued maps", {
   expect_true(is.list(metaline$metaData$configuration))
 })
 
-test_that("prepare_synthetic_log writes the session-temporary layout", {
+test_that("prepare_log writes the session-temporary layout", {
   lines <- c(
     '{"protocol":{"minReaderVersion":1,"minWriterVersion":2}}',
     '{"metaData":{"id":"t"}}'
   )
-  log <- prepare_synthetic_log(lines)
+  log <- prepare_log(function(log_dir) {
+    writeLines(lines, fs::path(log_dir, log_commit_name), useBytes = TRUE)
+    invisible(NULL)
+  })
   withr::defer(fs::dir_delete(log$root))
 
   # root is a .delta-sharing-snapshot-* dir; table location is <root>/table

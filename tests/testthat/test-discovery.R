@@ -12,7 +12,7 @@ mock_discovery <- function(req) {
   }
   if (grepl("/shares/sales/schemas$", path)) {
     return(httr2::response_json(
-      body = list(items = list(list(name = "default")))
+      body = list(items = list(list(name = "default", share = "sales")))
     ))
   }
   if (grepl("/tables$", path)) {
@@ -77,7 +77,34 @@ test_that("list_schemas scopes to a share", {
   httr2::local_mocked_responses(mock_discovery)
   schemas <- client$list_schemas(share = "sales")
   expect_equal(schemas[[1]], list(share = "sales", name = "default"))
+  expect_identical(names(schemas[[1]]), c("share", "name"))
   expect_output(print(schemas), "sales.default", fixed = TRUE)
+})
+
+test_that("list_schemas fills a missing server share", {
+  client <- test_client()
+  httr2::local_mocked_responses(function(req) {
+    httr2::response_json(body = list(items = list(list(name = "default"))))
+  })
+
+  schemas <- client$list_schemas(share = "sales")
+
+  expect_identical(schemas[[1]], list(share = "sales", name = "default"))
+})
+
+test_that("listing print methods truncate long results", {
+  shares <- structure(
+    purrr::map(seq_len(12L), \(index) list(name = paste0("share-", index))),
+    class = c("delta_sharing_listing", "list"),
+    kind = "shares"
+  )
+
+  output <- capture.output(returned <- print(shares))
+
+  expect_identical(returned, shares)
+  expect_true(any(grepl("share-10", output, fixed = TRUE)))
+  expect_false(any(grepl("share-11", output, fixed = TRUE)))
+  expect_true(any(grepl("... and 2 more", output, fixed = TRUE)))
 })
 
 test_that("list_tables returns qualified table records", {
