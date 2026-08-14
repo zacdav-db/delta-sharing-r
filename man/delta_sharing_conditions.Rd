@@ -5,7 +5,7 @@
 \title{Delta Sharing conditions}
 \description{
 Package-specific errors inherit from \code{delta_sharing_error}. More specific
-subclasses identify validation, authentication, protocol, kernel,
+subclasses identify validation, authentication, protocol,
 unsupported-feature, and cancellation failures. HTTP requests and Arrow
 consumers retain their native condition classes and messages. User
 interrupts are reported as cancellation failures.

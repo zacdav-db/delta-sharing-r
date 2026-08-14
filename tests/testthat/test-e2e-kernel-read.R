@@ -3,6 +3,10 @@
 # exercise the native reader, Arrow C stream, and nanoarrow conversion without a
 # network mock. This is the layer unit tests with httr2 mocks cannot cover.
 
+test_stream_to_data_frame <- function(stream) {
+  as.data.frame(sharing_stream_to_tibble(stream))
+}
+
 corrupt_snapshot_fixture <- function() {
   table <- fs::path(
     withr::local_tempdir(
@@ -33,7 +37,7 @@ test_that("the installed native API contains only production entry points", {
 
 test_that("kernel reads a local table to a data frame", {
   stream <- native_snapshot_stream(fixture_table("local-table"))
-  df <- sharing_stream_to_data_frame(stream)
+  df <- test_stream_to_data_frame(stream)
 
   expect_s3_class(df, "data.frame")
   expect_false(inherits(df, "tbl_df"))
@@ -78,12 +82,11 @@ test_that("data-frame materialization preserves native stream failures", {
   )
 
   condition <- expect_error(
-    sharing_stream_to_data_frame(stream),
+    test_stream_to_data_frame(stream),
     "Delta Kernel data scan failed",
     fixed = TRUE
   )
   expect_s3_class(condition, "simpleError")
-  expect_false(inherits(condition, "delta_sharing_kernel_error"))
   expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
@@ -170,7 +173,6 @@ test_that("Arrow materialization preserves native stream failures", {
     fixed = TRUE
   )
   expect_s3_class(condition, "simpleError")
-  expect_false(inherits(condition, "delta_sharing_kernel_error"))
   expect_match(capture.output(print(stream)), "invalid pointer")
 })
 
@@ -179,7 +181,7 @@ test_that("projection selects and orders columns", {
     fixture_table("local-table"),
     columns = c("active", "id")
   )
-  df <- sharing_stream_to_data_frame(stream)
+  df <- test_stream_to_data_frame(stream)
   expect_equal(names(df), c("active", "id"))
 })
 
@@ -188,7 +190,7 @@ test_that("partition-only projection does not require a visible data column", {
     fixture_table("timestamp-ntz"),
     columns = "region"
   )
-  df <- sharing_stream_to_data_frame(stream)
+  df <- test_stream_to_data_frame(stream)
 
   expect_identical(names(df), "region")
   expect_gt(nrow(df), 0L)
@@ -197,13 +199,13 @@ test_that("partition-only projection does not require a visible data column", {
 
 test_that("limit is enforced exactly by the kernel scan", {
   stream <- native_snapshot_stream(fixture_table("local-table"), limit = 4)
-  df <- sharing_stream_to_data_frame(stream)
+  df <- test_stream_to_data_frame(stream)
   expect_equal(nrow(df), 4L)
 })
 
 test_that("logical types round-trip through the kernel", {
   stream <- native_snapshot_stream(fixture_table("logical-types"))
-  df <- sharing_stream_to_data_frame(stream)
+  df <- test_stream_to_data_frame(stream)
   expect_s3_class(df, "data.frame")
   expect_gt(nrow(df), 0L)
 })
@@ -270,7 +272,7 @@ test_that("native CDF reads the local change fixture", {
     end_version = 2,
     columns = c("id", "_change_type")
   )
-  changes <- sharing_stream_to_data_frame(stream)
+  changes <- test_stream_to_data_frame(stream)
 
   expect_gt(nrow(changes), 0L)
   expect_identical(names(changes), c("id", "_change_type"))
@@ -312,7 +314,7 @@ test_that("snapshot and CDF readers stage selected files before Kernel reads", {
     table_download_cache(profile, identifier),
     concurrency = 4L
   ) |>
-    sharing_stream_to_data_frame()
+    test_stream_to_data_frame()
   expect_equal(nrow(snapshot), 7L)
 
   state$operation <- "cdf"
@@ -325,13 +327,12 @@ test_that("snapshot and CDF readers stage selected files before Kernel reads", {
       ending_version = 2,
       starting_timestamp = NULL,
       ending_timestamp = NULL,
-      columns = c("id", "_change_type"),
-      response_format = "delta"
+      columns = c("id", "_change_type")
     ),
     table_download_cache(profile, identifier),
     concurrency = 4L
   ) |>
-    sharing_stream_to_data_frame()
+    test_stream_to_data_frame()
 
   expect_gt(nrow(changes), 0L)
   expect_identical(names(changes), c("id", "_change_type"))
@@ -370,7 +371,6 @@ test_that("native condition handling releases streams and preserves errors", {
     fixed = TRUE
   )
   expect_s3_class(condition, "simpleError")
-  expect_false(inherits(condition, "delta_sharing_kernel_error"))
   expect_match(capture.output(print(failed_stream)), "invalid pointer")
 
   original <- simpleError("construction failed")
@@ -441,8 +441,7 @@ test_that("public CDF readers paginate and materialize local change files", {
   })
   changes <- test_client()$table("sales.default.changes")$changes(
     starting_version = 1,
-    ending_version = 2,
-    response_format = "delta"
+    ending_version = 2
   )$to_data_frame()
 
   expect_identical(state$page, 2L)
@@ -455,16 +454,4 @@ test_that("public CDF readers paginate and materialize local change files", {
     ) %in%
       names(changes)
   ))
-})
-
-test_that("parquet CDF is rejected before any request", {
-  changes <- test_client()$table("sales.default.changes")$changes(
-    starting_version = 1,
-    response_format = "parquet"
-  )
-
-  expect_error(
-    changes$to_arrow_stream(),
-    class = "delta_sharing_unsupported_error"
-  )
 })

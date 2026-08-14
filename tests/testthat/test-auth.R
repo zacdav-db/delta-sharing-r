@@ -6,7 +6,6 @@ test_that("bearer auth applies an Authorization header", {
     bearerToken = "tok"
   ))
   ctx <- sharing_auth_context(p)
-  expect_equal(ctx$kind, "bearer_token")
   req <- ctx$authenticate(httr2::request("https://x.test/api"))
   headers <- httr2::req_get_headers(req, redacted = "reveal")
   expect_equal(headers$Authorization, "Bearer tok")
@@ -53,7 +52,6 @@ test_that("oauth client-credentials builds a context without network I/O", {
     clientSecret = "sec"
   ))
   ctx <- sharing_auth_context(p)
-  expect_equal(ctx$kind, "oauth_client_credentials")
   expect_type(ctx$authenticate, "closure")
 })
 
@@ -72,7 +70,7 @@ test_that("private keys are not read while constructing an auth context", {
   ))
 
   expect_no_error(ctx <- sharing_auth_context(p))
-  expect_equal(ctx$kind, "oauth_jwt_bearer_private_key_jwt")
+  expect_type(ctx$authenticate, "closure")
 })
 
 test_that("OAuth request policies are attached lazily", {

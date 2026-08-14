@@ -174,8 +174,7 @@ Configure a change data feed read.
   ending_version = NULL,
   starting_timestamp = NULL,
   ending_timestamp = NULL,
-  columns = NULL,
-  response_format = "auto"
+  columns = NULL
 )}\if{html}{\out{</div>}}
 }
 
@@ -188,8 +187,6 @@ Configure a change data feed read.
 \code{POSIXct} bounds.}
 
 \item{\code{columns}}{Optional character vector of projected columns.}
-
-\item{\code{response_format}}{One of \code{"auto"}, \code{"delta"}, or \code{"parquet"}.}
 }
 \if{html}{\out{</div>}}
 }

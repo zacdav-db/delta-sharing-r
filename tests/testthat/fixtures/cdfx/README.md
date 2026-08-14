@@ -19,11 +19,10 @@ portable R source archives. Within each fixture, `l` contains commits in
 version order and `p` contains Parquet payloads in bytewise order of their
 original relative paths.
 
-Tests reconstruct the original path mapping, transform the committed Delta
-actions into Delta Sharing wire actions, then exercise the production R
-decoder, private synthetic-log builder, Delta Kernel CDF reader, and Arrow
-stream. URLs are replaced with local fixture paths only after R has validated
-and written the synthetic log.
+Tests reconstruct the original path mapping and wrap each local fixture URL in
+a mocked Delta Sharing wire action. The production R path then stages those
+payloads, rewrites their actions to the staged locations, builds the private
+synthetic log, and reads it through Delta Kernel and the Arrow stream boundary.
 
 The upstream Apache License 2.0 text is redistributed verbatim as `LICENSE`.
 Its SHA-256 is

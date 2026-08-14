@@ -11,9 +11,14 @@ print.delta_sharing_listing <- function(x, ...) {
     tables = c("share", "schema", "name")
   )
   cat(sprintf("<Delta Sharing %s> %d\n", kind, length(x)))
-  purrr::walk(x, function(record) {
+  shown <- utils::head(x, 10L)
+  purrr::walk(shown, function(record) {
     cat("  ", paste(unlist(record[fields]), collapse = "."), "\n", sep = "")
   })
+  remaining <- length(x) - length(shown)
+  if (remaining > 0L) {
+    cat(sprintf("  ... and %d more\n", remaining))
+  }
   invisible(x)
 }
 
@@ -35,7 +40,10 @@ sharing_list_schemas <- function(profile, auth, share) {
     "list_schemas"
   )
   records <- purrr::map(items, \(item) {
-    c(list(share = share), item)
+    c(
+      list(share = item$share %||% share),
+      item[setdiff(names(item), "share")]
+    )
   })
   structure(
     records,

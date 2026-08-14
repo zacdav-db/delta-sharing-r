@@ -48,7 +48,6 @@ Create a changes reader. Prefer \code{SharingTable$changes()}.
   starting_timestamp = NULL,
   ending_timestamp = NULL,
   columns = NULL,
-  response_format = "auto",
   cache_path,
   concurrency
 )}\if{html}{\out{</div>}}
@@ -59,7 +58,7 @@ Create a changes reader. Prefer \code{SharingTable$changes()}.
 \describe{
 \item{\code{profile, auth, identifier}}{Internal client state.}
 
-\item{\code{starting_version, ending_version, starting_timestamp, ending_timestamp, columns, response_format}}{Query options; see \link{SharingTable}'s \code{changes()} method.}
+\item{\code{starting_version, ending_version, starting_timestamp, ending_timestamp, columns}}{Query options; see \link{SharingTable}'s \code{changes()} method.}
 
 \item{\code{cache_path, concurrency}}{Internal table execution settings.}
 }

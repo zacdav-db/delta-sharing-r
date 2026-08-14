@@ -7,7 +7,6 @@ condition_classes <- list(
   validation = "delta_sharing_validation_error",
   auth = "delta_sharing_auth_error",
   protocol = "delta_sharing_protocol_error",
-  kernel = "delta_sharing_kernel_error",
   unsupported = "delta_sharing_unsupported_error",
   cancelled = "delta_sharing_cancelled"
 )
@@ -15,7 +14,7 @@ condition_classes <- list(
 #' Delta Sharing conditions
 #'
 #' Package-specific errors inherit from `delta_sharing_error`. More specific
-#' subclasses identify validation, authentication, protocol, kernel,
+#' subclasses identify validation, authentication, protocol,
 #' unsupported-feature, and cancellation failures. HTTP requests and Arrow
 #' consumers retain their native condition classes and messages. User
 #' interrupts are reported as cancellation failures.

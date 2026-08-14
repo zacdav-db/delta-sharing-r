@@ -85,6 +85,7 @@ test_that("table protocol projects delta reader features", {
   expect_equal(proto$response_format, "delta")
   expect_equal(proto$min_reader_version, 3L)
   expect_true("columnMapping" %in% proto$reader_features)
+  expect_output(print(proto), "<Delta Sharing protocol> delta", fixed = TRUE)
 })
 
 test_that("table metadata exposes safe fields", {
@@ -97,6 +98,7 @@ test_that("table metadata exposes safe fields", {
   expect_equal(meta$size, 3000000000)
   expect_equal(meta$created_time, 1720000000000)
   expect_null(meta$location)
+  expect_output(print(meta), "table version: 42", fixed = TRUE)
 })
 
 test_that("table schema parses the struct schema", {
@@ -105,6 +107,27 @@ test_that("table schema parses the struct schema", {
   schema <- tbl$schema()
   expect_equal(schema$type, "struct")
   expect_equal(schema$fields[[1]]$name, "id")
+  expect_output(print(schema), "<Delta Sharing schema> 1 field", fixed = TRUE)
+})
+
+test_that("schema printing is compact and preserves the list", {
+  schema <- structure(
+    list(
+      type = "struct",
+      fields = purrr::map(
+        seq_len(12L),
+        \(index) list(name = paste0("column_", index), type = "string")
+      )
+    ),
+    class = c("delta_sharing_schema", "list")
+  )
+
+  output <- capture.output(returned <- print(schema))
+
+  expect_identical(returned, schema)
+  expect_true(any(grepl("column_10", output, fixed = TRUE)))
+  expect_false(any(grepl("column_11", output, fixed = TRUE)))
+  expect_true(any(grepl("... and 2 more", output, fixed = TRUE)))
 })
 
 test_that("automatic response format is cached within one client", {
@@ -251,6 +274,17 @@ test_that("metadata protocol validation rejects invalid wire responses", {
   expect_error(
     parse_version_header(invalid_version, "table_version"),
     class = "delta_sharing_protocol_error"
+  )
+  malformed_version <- httr2::response(
+    200,
+    headers = list(`delta-table-version` = "unknown")
+  )
+  expect_warning(
+    expect_error(
+      parse_version_header(malformed_version, "table_version"),
+      class = "delta_sharing_protocol_error"
+    ),
+    "NAs introduced by coercion"
   )
   expect_error(
     parse_ndjson_lines("{not-json", "metadata"),

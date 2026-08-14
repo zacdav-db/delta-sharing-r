@@ -179,7 +179,14 @@ test_that("prepared CDF logs span the effective response range", {
     )
   )
 
-  log <- prepare_cdf_log(protocol, by_version, 1, 3)
+  log <- prepare_cdf_query_log(list(
+    protocol = protocol,
+    by_version = by_version,
+    start_version = 1,
+    end_version = 3,
+    downloaded = 2L,
+    cache_hits = 1L
+  ))
   withr::defer(fs::dir_delete(log$root))
   log_dir <- fs::path(log$path, "_delta_log")
   entries <- fs::dir_ls(log_dir, type = "file") |>
@@ -188,6 +195,8 @@ test_that("prepared CDF logs span the effective response range", {
 
   expect_equal(log$start_version, 1)
   expect_equal(log$end_version, 3)
+  expect_equal(log$downloaded, 2L)
+  expect_equal(log$cache_hits, 1L)
   expect_setequal(
     entries,
     c(

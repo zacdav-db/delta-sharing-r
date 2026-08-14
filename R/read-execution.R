@@ -410,17 +410,6 @@ sharing_changes_stream <- function(
   batch_size = 65536L,
   concurrency = 4L
 ) {
-  # Change data feed is read through the kernel, which requires delta format;
-  # the parquet CDF path is not supported. An explicit parquet request is a
-  # user error, so reject it rather than silently upgrading.
-  if (identical(spec$response_format, "parquet")) {
-    abort(
-      "Parquet-format change data feed is not supported.",
-      type = "unsupported",
-      operation = "changes",
-      feature = "parquet_cdf"
-    )
-  }
   parsed <- sharing_query_changes(
     profile,
     auth,
@@ -462,8 +451,8 @@ sharing_stream_to_arrow_reader <- function(
 }
 
 sharing_stream_to_arrow <- function(stream) {
-  force(stream)
   require_arrow("to_arrow")
+  force(stream)
   on.exit(release_materializer_stream(stream), add = TRUE)
   reader <- sharing_stream_to_arrow_reader(stream, operation = "to_arrow")
   with_native_stream_conditions(
@@ -481,8 +470,4 @@ sharing_stream_to_tibble <- function(stream) {
     operation = "read_arrow_stream",
     stream = stream
   )
-}
-
-sharing_stream_to_data_frame <- function(stream) {
-  as.data.frame(sharing_stream_to_tibble(stream))
 }

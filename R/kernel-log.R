@@ -51,32 +51,6 @@ synthetic_log_header <- function(
   }
 }
 
-# Turn a parsed Query Table response into the ordered JSON lines of the
-# synthetic commit: protocol, metadata, then one line per file action.
-synthetic_log_lines <- function(
-  response_format,
-  protocol,
-  metadata,
-  files,
-  operation = "read"
-) {
-  file_lines <- purrr::map_chr(
-    files,
-    function(file) {
-      log_json_line(synthetic_file_action(file, response_format, operation))
-    }
-  )
-  c(
-    synthetic_log_header(
-      response_format,
-      protocol,
-      metadata,
-      operation
-    ),
-    file_lines
-  )
-}
-
 # Delta format: the file action already carries a fully-formed single action.
 # Parquet format: synthesize a flat `add` from the sharing file fields.
 synthetic_file_action <- function(file, response_format, operation) {
@@ -105,14 +79,6 @@ prepare_log <- function(write) {
   )
 }
 
-# Snapshot: a single version-0 commit holding protocol, metadata, and adds.
-prepare_synthetic_log <- function(lines) {
-  prepare_log(function(log_dir) {
-    writeLines(lines, fs::path(log_dir, log_commit_name), useBytes = TRUE)
-    invisible(NULL)
-  })
-}
-
 # Change data feed: the kernel's TableChanges reads a real multi-version log,
 # so this writes one commit per version across the observed `[start, end]` range
 # (including interior versions with no changes). The protocol goes in the first
@@ -122,17 +88,6 @@ prepare_synthetic_log <- function(lines) {
 # commits.
 # `by_version` is keyed by as.character(version) ->
 # list(timestamp_ms=, actions=list(...)); `protocol` is pre-unwrapped.
-prepare_cdf_log <- function(protocol, by_version, start_version, end_version) {
-  log <- prepare_log(function(log_dir) {
-    write_cdf_log(log_dir, protocol, by_version, start_version, end_version)
-    invisible(NULL)
-  })
-
-  log$start_version <- start_version
-  log$end_version <- end_version
-  log
-}
-
 write_cdf_log <- function(
   log_dir,
   protocol,

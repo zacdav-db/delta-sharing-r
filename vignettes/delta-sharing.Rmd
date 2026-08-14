@@ -62,8 +62,9 @@ client <- sharing_client("~/config.share")
 - a path to a `.share` file; or
 - a parsed list.
 
-Profile versions 1 and 2 support bearer tokens, basic auth, OAuth client
-credentials, and private-key JWT bearer authentication.
+Profile version 1 supports bearer tokens. Version 2 supports bearer tokens,
+basic auth, OAuth client credentials, and private-key JWT bearer
+authentication.
 
 Creating the client is offline: it parses the profile without making a request
 or exchanging a token. When authentication is first needed, `httr2` handles
@@ -119,18 +120,22 @@ data_tbl <- snapshot$to_tibble()
 # A base data frame wrapper over the tibble materializer.
 df <- snapshot$to_data_frame()
 
-# Lazy Arrow C stream (use when the result may not fit in memory).
-stream <- snapshot$to_arrow_stream(batch_size = 65536L)
+# Lazy Arrow C stream after selected files have been staged locally.
+stream <- snapshot$to_arrow_stream()
 # Pass the stream to a compatible consumer, or release it when unused.
 stream$release()
 
-# Lazy Arrow reader for consumers such as DuckDB.
+# Lazy Arrow reader for consumers such as DuckDB (requires {arrow}).
 reader <- snapshot$to_arrow_reader()
 reader$Close()
 
 # Eager Arrow table (requires the optional {arrow} package).
 arrow_table <- snapshot$to_arrow()
 ```
+
+Each materializer call performs its own read through the same Arrow C stream
+path. `to_arrow_stream()` and `to_arrow_reader()` stream rows lazily; the files
+selected by the sharing server are staged in the session cache first.
 
 Read a specific version or point in time:
 
@@ -143,10 +148,10 @@ orders$snapshot(timestamp = "2024-01-01T00:00:00Z")$to_tibble()
 `limit` is enforced exactly by the Kernel scan. A `predicate` is a best-effort
 server hint, not an exact row filter.
 
-The default `response_format = "auto"` is negotiated once per table within a
-client and reused by later reads. Explicit `"delta"` or `"parquet"` values
-bypass negotiation. Table metadata and schema methods continue to fetch their
-current values.
+For snapshots, the default `response_format = "auto"` is negotiated once per
+table within a client and reused by later reads. Explicit `"delta"` or
+`"parquet"` values bypass negotiation. Table metadata and schema methods
+continue to fetch their current values.
 
 Predicates use ordinary nested R lists. The package serializes the list to the
 JSON-string wire field required by Delta Sharing:
@@ -181,7 +186,7 @@ Downloads are cached for the R session. New handles for the same endpoint and
 table reuse the same files:
 
 ```{r, eval = FALSE}
-orders <- client$table("sales.default.orders", concurrency = 4)
+orders <- client$table("sales.default.orders")
 
 first <- orders$snapshot()$to_tibble()
 second <- orders$snapshot()$to_tibble() # reuses unchanged data files
@@ -190,9 +195,9 @@ orders$cache_path
 ```
 
 `concurrency` controls the maximum number of concurrent downloads and defaults
-to four. R removes the cache with its session temporary directory. Advanced
-users can remove `orders$cache_path` manually, but should not do so while a lazy
-reader is active; the next read recreates it.
+to four. The cache is stored in R's session temporary directory and is normally
+removed when R exits. Advanced users can remove `orders$cache_path` manually,
+but should not do so while a lazy reader is active; the next read recreates it.
 
 In an interactive R session, missing-file downloads show their file count and,
 when the server supplies sizes, the total bytes to download.
@@ -208,7 +213,8 @@ A read follows one path:
    cached local files.
 4. Delta Kernel reads through that log and exposes the rows as an Arrow stream.
 
-Delta and Parquet responses, including change data feeds, use this path. Delta
+Snapshots support Delta and Parquet responses through this path. Change data
+feeds require Delta responses and use the same local staging approach. Delta
 Kernel remains responsible for projection, deletion vectors, column mapping,
 change semantics, and Arrow batches.
 
