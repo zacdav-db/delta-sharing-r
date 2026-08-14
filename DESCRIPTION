@@ -27,7 +27,8 @@ Imports:
   openssl,
   purrr,
   R6,
-  rlang
+  rlang,
+  tibble
 Suggests:
   arrow,
   DBI,

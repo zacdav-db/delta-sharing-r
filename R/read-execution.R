@@ -374,7 +374,7 @@ sharing_snapshot_stream <- function(
   identifier,
   spec,
   cache_path,
-  batch_size = DEFAULT_BATCH_SIZE,
+  batch_size = 65536L,
   concurrency = 4L
 ) {
   fmt <- resolve_query_format(
@@ -407,7 +407,7 @@ sharing_changes_stream <- function(
   identifier,
   spec,
   cache_path,
-  batch_size = DEFAULT_BATCH_SIZE,
+  batch_size = 65536L,
   concurrency = 4L
 ) {
   # Change data feed is read through the kernel, which requires delta format;
@@ -472,11 +472,15 @@ sharing_stream_to_arrow <- function(stream) {
   )
 }
 
-sharing_stream_to_data_frame <- function(stream) {
+sharing_stream_to_tibble <- function(stream) {
   on.exit(release_materializer_stream(stream), add = TRUE)
   with_native_stream_conditions(
-    as.data.frame(nanoarrow::convert_array_stream(stream)),
+    tibble::as_tibble(nanoarrow::convert_array_stream(stream)),
     operation = "read_arrow_stream",
     stream = stream
   )
+}
+
+sharing_stream_to_data_frame <- function(stream) {
+  as.data.frame(sharing_stream_to_tibble(stream))
 }

@@ -34,10 +34,17 @@ test_that("download concurrency belongs to the table", {
   snapshot <- test_client()$table("sales.default.orders")$snapshot()
 
   purrr::walk(
-    c("to_arrow", "to_arrow_reader", "to_data_frame", "to_arrow_stream"),
+    c(
+      "to_arrow",
+      "to_arrow_reader",
+      "to_data_frame",
+      "to_tibble",
+      "to_arrow_stream"
+    ),
     function(method) {
       arguments <- formals(snapshot[[method]])
       expect_identical(names(arguments), "batch_size")
+      expect_identical(arguments$batch_size, 65536L)
     }
   )
   expect_identical(formals(test_client()$table)$concurrency, 4L)

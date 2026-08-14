@@ -10,9 +10,7 @@ release_materializer_stream <- function(stream) {
   invisible(NULL)
 }
 
-# Default and maximum Arrow output batch size (rows), shared by the reader
-# surface and the native scan validation.
-DEFAULT_BATCH_SIZE <- 65536L
+# Maximum Arrow output batch size (rows) accepted by native scan validation.
 MAX_BATCH_SIZE <- 1000000L
 
 # Shared native-scan argument validation. The native functions accept only a
@@ -141,7 +139,7 @@ native_snapshot_stream <- function(
   table_location,
   columns = NULL,
   limit = NULL,
-  batch_size = DEFAULT_BATCH_SIZE
+  batch_size = 65536L
 ) {
   table_location <- validate_native_location(table_location)
   batch_size <- validate_native_batch_size(batch_size)
@@ -163,7 +161,7 @@ native_cdf_stream <- function(
   start_version,
   end_version,
   columns = NULL,
-  batch_size = DEFAULT_BATCH_SIZE
+  batch_size = 65536L
 ) {
   table_location <- validate_native_location(table_location)
   batch_size <- validate_native_batch_size(batch_size)

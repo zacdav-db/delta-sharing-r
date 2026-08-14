@@ -22,13 +22,14 @@ by \code{SharingTable$changes()}. The sharing server validates the supplied boun
 }
 }
 \if{html}{\out{
-<details open><summary>Inherited methods</summary>
+<details><summary>Inherited methods</summary>
 <ul>
 <li><span class="pkg-link" data-pkg="delta.sharing" data-topic="SharingReader" data-id="print"><a href='../../delta.sharing/html/SharingReader.html#method-SharingReader-print'><code>delta.sharing::SharingReader$print()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="delta.sharing" data-topic="SharingReader" data-id="to_arrow"><a href='../../delta.sharing/html/SharingReader.html#method-SharingReader-to_arrow'><code>delta.sharing::SharingReader$to_arrow()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="delta.sharing" data-topic="SharingReader" data-id="to_arrow_reader"><a href='../../delta.sharing/html/SharingReader.html#method-SharingReader-to_arrow_reader'><code>delta.sharing::SharingReader$to_arrow_reader()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="delta.sharing" data-topic="SharingReader" data-id="to_arrow_stream"><a href='../../delta.sharing/html/SharingReader.html#method-SharingReader-to_arrow_stream'><code>delta.sharing::SharingReader$to_arrow_stream()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="delta.sharing" data-topic="SharingReader" data-id="to_data_frame"><a href='../../delta.sharing/html/SharingReader.html#method-SharingReader-to_data_frame'><code>delta.sharing::SharingReader$to_data_frame()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="delta.sharing" data-topic="SharingReader" data-id="to_tibble"><a href='../../delta.sharing/html/SharingReader.html#method-SharingReader-to_tibble'><code>delta.sharing::SharingReader$to_tibble()</code></a></span></li>
 </ul>
 </details>
 }}

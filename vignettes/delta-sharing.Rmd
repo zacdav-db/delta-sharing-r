@@ -124,6 +124,7 @@ reader$Close()
 
 # Eager adapters over the same stream path.
 df <- snapshot$to_data_frame()
+data_tbl <- snapshot$to_tibble()
 tbl <- snapshot$to_arrow() # requires the optional {arrow} package
 ```
 

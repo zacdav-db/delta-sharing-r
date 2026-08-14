@@ -41,6 +41,7 @@ housing$schema()
 # Read a snapshot
 snapshot <- housing$snapshot(limit = 1000)
 housing_df <- snapshot$to_data_frame()
+housing_tbl <- snapshot$to_tibble()
 housing_arrow <- snapshot$to_arrow()
 ```
 

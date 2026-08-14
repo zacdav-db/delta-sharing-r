@@ -1,6 +1,7 @@
 # Reader objects returned by SharingTable$snapshot() / $changes(). Query options
-# are fixed at construction; the eager materializers (to_arrow, to_data_frame)
-# are adapters over the one lazy Arrow stream, so there is a single read path.
+# are fixed at construction; the eager materializers (to_arrow, to_tibble,
+# to_data_frame) are adapters over the one lazy Arrow stream, so there is a
+# single read path.
 # SharingReader holds that shared behaviour; the subclasses differ only in how
 # they validate options and open the native stream.
 
@@ -17,7 +18,7 @@ SharingReader <- R6::R6Class(
     #' @description Materialize as an Arrow table (requires `{arrow}`).
     #' @param batch_size Rows per batch.
     #' @return An `arrow::Table`.
-    to_arrow = function(batch_size = DEFAULT_BATCH_SIZE) {
+    to_arrow = function(batch_size = 65536L) {
       sharing_stream_to_arrow(
         self$to_arrow_stream(batch_size = batch_size)
       )
@@ -29,8 +30,17 @@ SharingReader <- R6::R6Class(
     #'   this single-consumer stream.
     #' @param batch_size Rows per batch.
     #' @return An `arrow::RecordBatchReader`.
-    to_arrow_reader = function(batch_size = DEFAULT_BATCH_SIZE) {
+    to_arrow_reader = function(batch_size = 65536L) {
       sharing_stream_to_arrow_reader(
+        self$to_arrow_stream(batch_size = batch_size)
+      )
+    },
+
+    #' @description Materialize as a tibble.
+    #' @param batch_size Rows per batch.
+    #' @return A `tibble::tbl_df`.
+    to_tibble = function(batch_size = 65536L) {
+      sharing_stream_to_tibble(
         self$to_arrow_stream(batch_size = batch_size)
       )
     },
@@ -38,16 +48,16 @@ SharingReader <- R6::R6Class(
     #' @description Materialize as a base data frame.
     #' @param batch_size Rows per batch.
     #' @return A data frame.
-    to_data_frame = function(batch_size = DEFAULT_BATCH_SIZE) {
-      sharing_stream_to_data_frame(
-        self$to_arrow_stream(batch_size = batch_size)
+    to_data_frame = function(batch_size = 65536L) {
+      as.data.frame(
+        self$to_tibble(batch_size = batch_size)
       )
     },
 
     #' @description Materialize as a lazy Arrow C stream.
     #' @param batch_size Rows per batch (1..1,000,000; default 65,536).
     #' @return A `nanoarrow_array_stream`.
-    to_arrow_stream = function(batch_size = DEFAULT_BATCH_SIZE) {
+    to_arrow_stream = function(batch_size = 65536L) {
       private$open_stream(batch_size)
     },
 
@@ -82,7 +92,8 @@ SharingReader <- R6::R6Class(
 #'
 #' An immutable snapshot read specification with Arrow materializers. Created by
 #' `SharingTable$snapshot()`. Materialize with `to_arrow_stream()` (lazy),
-#' `to_arrow_reader()` (lazy), `to_arrow()`, or `to_data_frame()`.
+#' `to_arrow_reader()` (lazy), `to_arrow()`, `to_tibble()`, or
+#' `to_data_frame()`.
 #'
 #' @export
 SharingSnapshot <- R6::R6Class(

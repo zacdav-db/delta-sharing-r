@@ -36,6 +36,7 @@ test_that("kernel reads a local table to a data frame", {
   df <- sharing_stream_to_data_frame(stream)
 
   expect_s3_class(df, "data.frame")
+  expect_false(inherits(df, "tbl_df"))
   expect_equal(names(df), c("id", "group", "value", "active"))
   # two parquet files (3 + 4 rows) read as one table
   expect_equal(nrow(df), 7L)
@@ -46,6 +47,28 @@ test_that("kernel reads a local table to a data frame", {
   expect_true(1 %in% df$id)
   expect_true("alpha" %in% df$group)
   expect_match(capture.output(print(stream)), "invalid pointer")
+})
+
+test_that("a reader materializes a local table as a tibble", {
+  LocalSharingReader <- R6::R6Class(
+    "LocalTibbleSharingReader",
+    inherit = SharingReader,
+    cloneable = FALSE,
+    private = list(
+      open_stream = function(batch_size) {
+        native_snapshot_stream(
+          fixture_table("local-table"),
+          batch_size = batch_size
+        )
+      }
+    )
+  )
+
+  result <- LocalSharingReader$new()$to_tibble(batch_size = 2L)
+
+  expect_s3_class(result, "tbl_df")
+  expect_equal(nrow(result), 7L)
+  expect_equal(names(result), c("id", "group", "value", "active"))
 })
 
 test_that("data-frame materialization preserves native stream failures", {
