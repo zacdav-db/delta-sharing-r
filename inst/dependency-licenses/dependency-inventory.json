@@ -160,7 +160,7 @@
     }
   ],
   "rust": {
-    "cargo_lock_sha256": "9becd5caaacb8e192434a3a0836a9365fe5285dab7f832e40509c56957ea39e4",
+    "cargo_lock_sha256": "d4d289d9233de4a56b92d7e91785bb5acce5de5bcf11a4e66f5de1489fb488da",
     "license_bundle": {
       "bytes": 43032,
       "path": "rust-license-texts.tar.xz",
