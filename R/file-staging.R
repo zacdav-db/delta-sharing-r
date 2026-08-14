@@ -180,10 +180,11 @@ ensure_staged_assets <- function(assets, cache_path, concurrency) {
     return(list(paths = list(), downloaded = 0L, cache_hits = 0L))
   }
 
-  names <- purrr::map_chr(assets, "name")
-  assets <- assets[!duplicated(names)]
-  names <- purrr::map_chr(assets, "name")
-  targets <- fs::path(cache_path, names)
+  asset_names <- purrr::map_chr(assets, "name")
+  keep <- !duplicated(asset_names)
+  assets <- assets[keep]
+  asset_names <- asset_names[keep]
+  targets <- fs::path(cache_path, asset_names)
   complete <- purrr::map2_lgl(targets, assets, staged_asset_is_complete)
   invalid <- fs::file_exists(targets) & !complete
   purrr::walk(targets[invalid], fs::file_delete)
@@ -194,7 +195,7 @@ ensure_staged_assets <- function(assets, cache_path, concurrency) {
   list(
     paths = stats::setNames(
       purrr::map(targets, local_file_url),
-      names
+      asset_names
     ),
     downloaded = sum(missing),
     cache_hits = sum(!missing)
