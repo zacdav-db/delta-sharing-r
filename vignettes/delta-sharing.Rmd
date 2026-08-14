@@ -15,210 +15,149 @@ knitr::opts_chunk$set(
 )
 ```
 
-`delta.sharing` is an R6 client for [Delta Sharing](https://delta.io/sharing/).
-R manages profiles, authentication, discovery, and query planning. Delta Kernel
-reads snapshot and change data feed rows and exposes them through an Arrow C
-Stream.
+`delta.sharing` connects R to tables exposed through
+[Delta Sharing](https://delta.io/sharing/). A typical workflow is to create a
+client, select a table, describe a read, and choose the form of the result.
 
-Most workflows have four steps:
+## Try the public example data
 
-1. create a client from a standard Delta Sharing profile;
-2. get a reusable table handle;
-3. configure a snapshot or change data feed read; and
-4. materialize it as a tibble, data frame, or Arrow object.
-
-## Connect to a share
-
-### Try the open dataset server
-
-The Delta Sharing project hosts an open server with example tables. Its
-[public profile](https://github.com/delta-io/delta-sharing/blob/main/examples/open-datasets.share)
-can be used without registering or creating a private credential:
+The Delta Sharing project hosts an open server that can be used without
+registering or creating a private credential:
 
 ```{r, eval = FALSE}
 library(delta.sharing)
 
 client <- sharing_client(demo_profile())
-client$list_tables("delta_sharing")
-```
 
-Read a few rows from one of the public tables:
-
-```{r, eval = FALSE}
 housing <- client$table("delta_sharing.default.boston-housing")
-housing$snapshot(limit = 5)$to_tibble()
-```
-
-### Use your own profile
-
-```{r, eval = FALSE}
-library(delta.sharing)
-
-client <- sharing_client("~/config.share")
-```
-
-`sharing_client()` accepts:
-
-- a path to a `.share` file; or
-- a parsed list.
-
-Profile version 1 supports bearer tokens. Version 2 supports bearer tokens,
-basic auth, OAuth client credentials, and private-key JWT bearer
-authentication.
-
-Creating the client is offline: it parses the profile without making a request
-or exchanging a token. When authentication is first needed, `httr2` handles
-token exchange, caching, and refresh.
-
-## Discover data
-
-```{r, eval = FALSE}
-client$list_shares()
-client$list_schemas("delta_sharing")
-client$list_tables("delta_sharing")
-```
-
-Discovery follows every page and returns printable lists of records. Listing
-schemas or tables requires a share; supply a schema to narrow a table listing.
-
-## Inspect a table
-
-A table handle is cheap and reusable. Metadata queries do not scan rows.
-
-```{r, eval = FALSE}
-orders <- client$table("sales.default.orders")
-
-orders$version()
-orders$protocol()
-orders$metadata()
-orders$schema()
-```
-
-Use explicit components when a name contains a dot:
-
-```{r, eval = FALSE}
-events <- client$table(
-  share = "product",
-  schema = "default",
-  name = "events.v2"
-)
-```
-
-## Read a snapshot
-
-Query options live on `snapshot()`; the returned object exposes materializers.
-
-```{r, eval = FALSE}
-snapshot <- orders$snapshot(
-  columns = c("order_id", "amount"),
-  limit = 1000
-)
-
-# The usual eager R result.
-data_tbl <- snapshot$to_tibble()
-
-# A base data frame wrapper over the tibble materializer.
-df <- snapshot$to_data_frame()
-
-# Lazy Arrow C stream after selected files have been staged locally.
-stream <- snapshot$to_arrow_stream()
-# Pass the stream to a compatible consumer, or release it when unused.
-stream$release()
-
-# Lazy Arrow reader for consumers such as DuckDB (requires {arrow}).
-reader <- snapshot$to_arrow_reader()
-reader$Close()
-
-# Eager Arrow table (requires the optional {arrow} package).
-arrow_table <- snapshot$to_arrow()
-```
-
-Each materializer call performs its own read through the same Arrow C stream
-path. `to_arrow_stream()` and `to_arrow_reader()` stream rows lazily; the files
-selected by the sharing server are staged in the session cache first.
-
-Read a specific version or point in time:
-
-```{r, eval = FALSE}
-orders$snapshot(version = 42)$to_tibble()
-orders$snapshot(timestamp = as.POSIXct("2024-01-01", tz = "UTC"))$to_tibble()
-orders$snapshot(timestamp = "2024-01-01T00:00:00Z")$to_tibble()
-```
-
-`limit` is enforced exactly by the Kernel scan. A `predicate` is a best-effort
-server hint, not an exact row filter.
-
-For snapshots, the default `response_format = "auto"` is negotiated once per
-table within a client and reused by later reads. Explicit `"delta"` or
-`"parquet"` values bypass negotiation. Table metadata and schema methods
-continue to fetch their current values.
-
-Predicates use ordinary nested R lists. The package serializes the list to the
-JSON-string wire field required by Delta Sharing:
-
-```{r, eval = FALSE}
-active_orders <- list(
-  op = "equal",
-  children = list(
-    list(op = "column", name = "is_active", valueType = "bool"),
-    list(op = "literal", value = "true", valueType = "bool")
-  )
-)
-orders$snapshot(predicate = active_orders)$to_tibble()
-```
-
-## Read a change data feed
-
-```{r, eval = FALSE}
-orders$changes(starting_version = 120, ending_version = 125)$to_tibble()
-orders$changes(
-  starting_timestamp = "2024-01-01T00:00:00Z",
-  ending_timestamp = "2024-01-02T00:00:00Z"
+housing$snapshot(
+  columns = c("chas", "medv"),
+  limit = 5
 )$to_tibble()
 ```
 
-Change data feeds expose the same materializers as snapshots. Delta Kernel
-applies change semantics and deletion vectors before returning rows.
+`demo_profile()` fetches the public profile maintained by the Delta Sharing
+project. The same client and table methods work with a private share.
 
-## Reuse downloaded files
+## Connect to your share
 
-Downloads are cached for the R session. New handles for the same endpoint and
-table reuse the same files:
+Pass `sharing_client()` either a path to a `.share` profile or a parsed profile
+list:
+
+```{r, eval = FALSE}
+client <- sharing_client("~/config.share")
+```
+
+Creating a client parses the profile without making a request or exchanging a
+token. Authentication is performed when the first authenticated request is
+made.
+
+## Find a table
+
+Use the client to discover the data available through its profile:
+
+```{r, eval = FALSE}
+client$list_shares()
+client$list_schemas("sales")
+client$list_tables("sales", "default")
+```
+
+Discovery follows every result page and returns printable lists of records.
+Create a reusable table handle from a listed table:
 
 ```{r, eval = FALSE}
 orders <- client$table("sales.default.orders")
 
-first <- orders$snapshot()$to_tibble()
-second <- orders$snapshot()$to_tibble() # reuses unchanged data files
-
-orders$cache_path
+orders
+orders$version()
+orders$schema()
 ```
 
-`concurrency` controls the maximum number of concurrent downloads and defaults
-to four. The cache is stored in R's session temporary directory and is normally
-removed when R exits. Advanced users can remove `orders$cache_path` manually,
-but should not do so while a lazy reader is active; the next read recreates it.
+The table handle is cheap to create and does not read table rows. Its
+`protocol()` and `metadata()` methods expose additional table details.
 
-In an interactive R session, missing-file downloads show their file count and,
-when the server supplies sizes, the total bytes to download.
+## Read a snapshot
 
-## How reads work
+Configure the read with `snapshot()`, then materialize it. `to_tibble()` is the
+usual choice for R analysis:
 
-A read follows one path:
+```{r, eval = FALSE}
+snapshot <- orders$snapshot(
+  columns = c("order_id", "status", "amount"),
+  limit = 1000
+)
 
-1. R sends the query to the Delta Sharing server.
-2. R downloads missing Parquet and deletion-vector files into the table's
-   session cache, using bounded parallel requests.
-3. R writes a fresh synthetic Delta log whose file actions point to those
-   cached local files.
-4. Delta Kernel reads through that log and exposes the rows as an Arrow stream.
+orders_tbl <- snapshot$to_tibble()
+```
 
-Snapshots support Delta and Parquet responses through this path. Change data
-feeds require Delta responses and use the same local staging approach. Delta
-Kernel remains responsible for projection, deletion vectors, column mapping,
-change semantics, and Arrow batches.
+Snapshots can also target a table version or point in time:
 
-R checks for user interrupts between Arrow batches. If a batch pull is already
-waiting inside Delta Kernel's local I/O, that pull must return or fail before R
-can handle the interrupt. Releasing a stream between pulls releases the Kernel
-reader; its session-temporary log remains until R removes the session directory.
+```{r, eval = FALSE}
+orders$snapshot(version = 42)$to_tibble()
+orders$snapshot(timestamp = "2024-01-01T00:00:00Z")$to_tibble()
+```
+
+Choose the materializer that matches the next consumer:
+
+| Result | Method |
+|---|---|
+| Tibble for ordinary R analysis | `to_tibble()` |
+| Base data frame | `to_data_frame()` |
+| In-memory Arrow table | `to_arrow()` |
+| Lazy Arrow reader, including for DuckDB | `to_arrow_reader()` |
+| Low-level Arrow C Stream | `to_arrow_stream()` |
+
+The Arrow table and reader methods require the optional `arrow` package. Each
+materializer call starts its own read, so choose one rather than calling several
+on the same snapshot just to convert the result.
+
+Column projection and `limit` are applied by Delta Kernel. Predicate hints are
+expressed as nested R lists and sent to the sharing server as best-effort hints;
+they are not exact row filters. See `?SharingTable` for the snapshot options and
+predicate structure.
+
+## Read changes
+
+For a table with change data feed enabled, `changes()` reads an inclusive
+version or timestamp range:
+
+```{r, eval = FALSE}
+changes_tbl <- orders$changes(
+  starting_version = 120,
+  ending_version = 125,
+  columns = c(
+    "order_id",
+    "status",
+    "_change_type",
+    "_commit_version",
+    "_commit_timestamp"
+  )
+)$to_tibble()
+```
+
+`_change_type` distinguishes inserts, deletes, and the before and after rows of
+updates. The commit columns identify when each change was recorded. Change
+reads expose the same materializers as snapshots.
+
+## Downloads and caching
+
+Before Delta Kernel reads the rows, the package downloads the files selected by
+the sharing server into a session cache. Up to four files are downloaded at a
+time by default, and later handles for the same endpoint and table reuse files
+already present there. The cache lives in R's session temporary directory, so
+it normally requires no user management.
+
+## How a read works
+
+R sends the Delta Sharing request, stages the selected data and
+deletion-vector files, and writes a local Delta log that points to them. Delta
+Kernel then applies projection, deletion vectors, column mapping, and change
+semantics before exposing Arrow batches. The requested materializer turns those
+batches into the selected R or Arrow result.
+
+## Next steps
+
+See `?SharingTable`, `?SharingSnapshot`, and `?SharingChanges` for the complete
+read options. The
+[README](https://github.com/zacdav-db/delta-sharing-r#query-with-duckdb) shows
+how to query a shared table with DuckDB without first creating an R data frame.

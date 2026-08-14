@@ -16,6 +16,24 @@ files are cached for the R session and shared by handles for the same table.
 
 Created via \code{SharingClient$table()}, not directly.
 }
+\section{Predicate hints}{
+
+Snapshot predicates are ordinary nested R lists. For example:
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{active_orders <- list(
+  op = "equal",
+  children = list(
+    list(op = "column", name = "is_active", valueType = "bool"),
+    list(op = "literal", value = "true", valueType = "bool")
+  )
+)
+orders$snapshot(predicate = active_orders)
+}\if{html}{\out{</div>}}
+
+The sharing server treats the predicate as a best-effort hint, not an exact
+row filter.
+}
+
 \section{Active bindings}{
 \if{html}{\out{<div class="r6-active-bindings">}}
 \describe{
@@ -153,7 +171,8 @@ Configure a snapshot read.
 
 \item{\code{limit}}{Optional non-negative whole-number row limit.}
 
-\item{\code{predicate}}{Optional structured server-side predicate hint.}
+\item{\code{predicate}}{Optional nested R list representing a structured
+server-side predicate hint. This is not an exact row filter.}
 
 \item{\code{response_format}}{One of \code{"auto"}, \code{"delta"}, or \code{"parquet"}.}
 }
