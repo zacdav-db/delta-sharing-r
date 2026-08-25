@@ -23,7 +23,8 @@ reference:
       - SharingChanges
 
 articles:
-  - title: Getting started
+  - title: Guides
     navbar: ~
     contents:
       - delta-sharing
+      - performance-caching

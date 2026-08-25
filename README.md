@@ -3,55 +3,71 @@
 [![R CMD check](https://github.com/zacdav-db/delta-sharing-r/actions/workflows/package-check.yaml/badge.svg)](https://github.com/zacdav-db/delta-sharing-r/actions/workflows/package-check.yaml)
 [![R coverage](https://codecov.io/gh/zacdav-db/delta-sharing-r/branch/main/graph/badge.svg)](https://app.codecov.io/gh/zacdav-db/delta-sharing-r)
 
-An R client for [Delta Sharing](https://delta.io/sharing/), backed by
-[Delta Kernel](https://docs.delta.io/kernel/rust/introduction.html) and Arrow.
+`delta.sharing` reads [Delta Sharing](https://delta.io/sharing/) tables from R.
+Discover shares, schemas, and tables, then read snapshots or change data feeds
+as tibbles, data frames, or Arrow objects.
+
+Reads are powered by [Delta Kernel](https://docs.delta.io/kernel/rust/introduction.html),
+including support for deletion vectors and column mapping.
 
 See the [package website](https://zacdav-db.github.io/delta-sharing-r/) for the
-complete reference and introductory guide.
+guides and the complete reference.
 
 ## Installation
+
+Install the development version from GitHub:
 
 ```r
 # install.packages("pak")
 pak::pak("zacdav-db/delta-sharing-r")
 ```
 
-Building from source requires Cargo and `rustc >= 1.88`.
+Installation from source requires Cargo and `rustc >= 1.88`.
 
 ## Quick start
+
+The public example server needs no registration or private credential:
 
 ```r
 library(delta.sharing)
 
 client <- sharing_client(demo_profile())
-
-# Discover the public example tables
-client$list_tables("delta_sharing")
-
 housing <- client$table("delta_sharing.default.boston-housing")
-housing_tbl <- housing$snapshot(limit = 1000)$to_tibble()
+
+housing$snapshot(
+  columns = c("chas", "medv"),
+  limit = 5
+)$to_tibble()
 ```
 
-`to_tibble()` is the usual eager R materializer. The same reader can instead
-return a base data frame with `to_data_frame()`, an Arrow table with
-`to_arrow()`, or a lazy Arrow reader with `to_arrow_reader()`. The Arrow
-materializers require the optional `arrow` package.
+`demo_profile()` retrieves the public profile maintained by the Delta Sharing
+project.
 
-Each materializer call performs its own read through the same Arrow C stream
-path. For snapshots, the default response format negotiation is reused by later
-reads of the same table through one client. Metadata and schema inspection
-remain fresh requests.
-
-For your own share, pass a profile file and select its table:
+For your own share, pass the path to its profile, discover the available
+tables, and create a reusable table handle:
 
 ```r
 client <- sharing_client("~/config.share")
+client$list_tables("sales", "default")
+
 orders <- client$table("sales.default.orders")
 ```
 
-## Snapshots and changes
+The [Getting started guide](https://zacdav-db.github.io/delta-sharing-r/articles/delta-sharing.html)
+walks through profiles, discovery, table metadata, and reads.
 
-Read a table at a specific version or timestamp:
+## Read snapshots and changes
+
+Read the latest snapshot, optionally selecting columns and limiting rows:
+
+```r
+orders_tbl <- orders$snapshot(
+  columns = c("order_id", "status", "amount"),
+  limit = 1000
+)$to_tibble()
+```
+
+Snapshots can also target a specific version or timestamp:
 
 ```r
 orders$snapshot(version = 42)$to_tibble()
@@ -61,48 +77,27 @@ orders$snapshot(timestamp = "2026-01-01T00:00:00Z")$to_tibble()
 Read an inclusive change data feed range:
 
 ```r
-orders$changes(
+changes_tbl <- orders$changes(
   starting_version = 120,
   ending_version = 125
 )$to_tibble()
 ```
 
-Each table downloads up to four selected files concurrently by default. Its
-downloads are cached for the R session and reused by other handles for the same
-endpoint and table:
+`to_tibble()` is the usual choice for R analysis. Use `to_data_frame()` when a
+base data frame is required.
 
-```r
-orders_tbl <- orders$snapshot()$to_tibble()
+For Arrow workflows, `to_arrow()` returns an in-memory table and
+`to_arrow_reader()` returns a lazy reader. Both require the optional `arrow`
+package. `to_arrow_stream()` exposes the lower-level Arrow C Stream directly.
 
-# A later read can reuse unchanged Delta data files.
-refreshed_tbl <- orders$snapshot()$to_tibble()
-
-# The cache is an ordinary directory under R's session temp directory.
-orders$cache_path
-```
-
-Set `concurrency` when creating the table handle to tune downloads. The cache is
-stored in R's session temporary directory and is normally removed when R exits.
-Advanced users can delete `orders$cache_path` manually; do not do that while a
-lazy reader is active. Interactive missing-file downloads report completed
-files and total bytes when sizes are available from the sharing server.
-
-See `vignette("delta-sharing")` for a full walkthrough.
+Selected files are downloaded concurrently and cached for the R session. See
+the [Performance and caching guide](https://zacdav-db.github.io/delta-sharing-r/articles/performance-caching.html)
+for cold and repeated reads, cache lifetime, concurrency, batching, and tuning.
 
 ## Query with DuckDB
 
-DuckDB accepts both Arrow materializers after the selected files have been
-staged in the session cache:
-
-- `to_arrow_reader()` streams rows lazily and is suited to one pass over a large
-  result.
-- `to_arrow()` materializes an Arrow table in memory and is useful when DuckDB
-  should scan the same result more than once.
-
-Both avoid an intermediate R data frame. This requires the optional `arrow`,
-`DBI`, and `duckdb` packages.
-
-Register a lazy Arrow reader directly:
+DuckDB can query a lazy Arrow reader without first creating an R data frame.
+This requires the optional `arrow`, `DBI`, and `duckdb` packages.
 
 ```r
 snapshot <- housing$snapshot(
@@ -129,29 +124,25 @@ reader$Close()
 DBI::dbDisconnect(con)
 ```
 
-For repeated queries, materialize and register an in-memory Arrow table
-instead:
-
-```r
-arrow_table <- snapshot$to_arrow()
-duckdb::duckdb_register_arrow(con, "housing", arrow_table)
-```
-
-Arrow tables keep the result in memory and do not need `Close()`.
+Use `snapshot$to_arrow()` instead when the same result will be queried more
+than once. This materializes the result in Arrow memory and does not require
+`Close()`.
 
 ## Performance
 
-Directional results from one consumer setup. Each value is the median of three
-end-to-end `to_tibble()` reads at the default concurrency of four. A cached read
-repeats the query after its selected files have been downloaded into the session
-cache. The benchmark can be rerun with
-[`bench/snapshot.R`](bench/snapshot.R).
+These results are medians of three end-to-end `to_tibble()` snapshot reads
+using four concurrent downloads. The cached read repeats the same query after
+its selected files have been staged locally.
 
 *Apple M2 Pro (12 cores), 32 GB RAM, R 4.5.1; VPN connection: 92 Mbps down,
 111 ms base round-trip latency.*
 
-| Rows | Materialized R size | Empty file cache | Cached files |
+| Rows | R result size | Empty cache | Cached |
 |---:|---:|---:|---:|
 | 10,000 | 0.38 MiB | 5.15 s | 0.82 s |
 | 1,000,000 | 38.1 MiB | 8.16 s | 1.69 s |
 | 10,000,000 | 381 MiB | 28.3 s | 6.45 s |
+
+Each measurement includes the Sharing request, local log construction, Delta
+Kernel scan, and tibble materialization—not just network transfer. Reproduce
+the benchmark with [`bench/snapshot.R`](bench/snapshot.R).
