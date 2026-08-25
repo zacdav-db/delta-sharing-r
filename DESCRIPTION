@@ -39,7 +39,6 @@ Suggests:
   withr
 VignetteBuilder: knitr
 Config/Needs/check: rcmdcheck
-Config/Needs/coverage: covr
 Config/Needs/documentation: roxygen2
 Config/Needs/website: pkgdown
 Config/testthat/edition: 3
