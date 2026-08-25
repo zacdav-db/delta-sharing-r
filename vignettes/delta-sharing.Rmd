@@ -147,6 +147,9 @@ time by default, and later handles for the same endpoint and table reuse files
 already present there. The cache lives in R's session temporary directory, so
 it normally requires no user management.
 
+See `vignette("performance-caching")` for cache identity and lifetime, cold and
+repeated reads, download concurrency, materializer costs, and Arrow batching.
+
 ## How a read works
 
 R sends the Delta Sharing request, stages the selected data and

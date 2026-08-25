@@ -1,0 +1,250 @@
+---
+title: "Performance and caching"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Performance and caching}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+This guide describes the parts of a read that can be reused or tuned. Start
+with `vignette("delta-sharing")` if you have not yet created a client and read a
+table.
+
+The most important distinction is between **staging files** and **reading
+rows**. The package downloads the files selected by the sharing server before
+it opens an Arrow stream. A lazy Arrow reader avoids eagerly collecting rows,
+but it does not stream remote Parquet files directly from their signed URLs.
+
+## The read lifecycle
+
+Every snapshot or change read follows the same broad path:
+
+1. R requests the relevant file actions from the Delta Sharing server.
+2. Missing Parquet and deletion-vector files are downloaded into the table's
+   session cache.
+3. R writes a new local Delta log that points to the cached files.
+4. Delta Kernel scans the local files and emits Arrow batches.
+5. An eager materializer, when used, collects those batches into its result.
+
+The stages have different reuse behavior:
+
+| Work | Happens on another materializer call? | Reused from the session cache? |
+|---|---:|---:|
+| Sharing query and pagination | Yes | No |
+| Download selected files | Only when missing or invalid | Yes |
+| Build the local Delta log | Yes | No |
+| Delta Kernel scan | Yes | No |
+| Collect an eager result | Yes | No |
+
+For snapshots, when the response format is not already known, a
+`response_format = "auto"` read asks the metadata endpoint which format the
+server selected. That choice is reused for the same table and client. Change
+data feed reads request Delta format directly.
+
+## What the cache contains
+
+Each table has a deterministic cache directory under R's session temporary
+directory. Its identity includes the profile endpoint and the table's share,
+schema, and name. New handles for the same table therefore share cached files,
+even when they use different download concurrency:
+
+```{r, eval = FALSE}
+client <- sharing_client("~/config.share")
+
+orders <- client$table("sales.default.orders", concurrency = 4)
+faster_downloads <- client$table("sales.default.orders", concurrency = 8)
+
+identical(orders$cache_path, faster_downloads$cache_path)
+#> TRUE
+```
+
+Parquet and deletion-vector files are named from immutable IDs supplied by the
+sharing server. A later query can therefore reuse a file even when its signed
+URL has rotated. If the server supplies a file size, the package checks that a
+cached file still has that size before reusing it.
+
+Downloads first go to temporary files beside the cache target. A completed file
+is published with an atomic same-filesystem rename; failed or incomplete
+downloads are not left as cache hits. Cached files are ordinary local copies of
+the shared data, so the package requests user-only permissions for cache
+directories and files.
+
+## Cache lifetime
+
+The cache lasts for the R session, not for the lifetime of one table handle.
+It is normally removed with R's temporary directory when the session exits. It
+is not a persistent, cross-session cache and it does not contain materialized
+tibbles or Arrow tables.
+
+`cache_path` is read-only but available for inspection:
+
+```{r, eval = FALSE}
+orders$cache_path
+fs::dir_info(orders$cache_path)
+```
+
+An advanced user can remove that directory after all lazy readers and streams
+for the table have been closed or released:
+
+```{r, eval = FALSE}
+# Do not do this while a lazy reader or stream is active.
+if (fs::dir_exists(orders$cache_path)) {
+  fs::dir_delete(orders$cache_path)
+}
+```
+
+The next read recreates the directory and downloads any required files. A long
+session that touches many large tables can retain substantial data until the
+session ends, so `cache_path` is also useful when checking local disk usage.
+
+## Cold and repeated reads
+
+The first read of a set of files pays for their download. A later read can
+reuse those files, but it still performs the Sharing request, creates a fresh
+local log, scans the files with Delta Kernel, and materializes the result:
+
+```{r, eval = FALSE}
+snapshot <- orders$snapshot(
+  columns = c("order_id", "status", "amount"),
+  limit = 1000000
+)
+
+first <- system.time({
+  first_result <- snapshot$to_tibble()
+})
+
+# Remove the first result only to benchmark another full materialization.
+rm(first_result)
+gc()
+
+repeated <- system.time({
+  repeated_result <- snapshot$to_tibble()
+})
+```
+
+In application code, keep and reuse `first_result` when the same result is
+needed more than once, rather than removing it as the benchmark does. The file
+cache is most valuable when a later query overlaps the earlier query but needs
+a fresh scan.
+
+A fresh R session is the clearest definition of a cold read. The repository's
+[`bench/snapshot.R`](https://github.com/zacdav-db/delta-sharing-r/blob/main/bench/snapshot.R)
+script instead removes the table's file cache before each cold trial, then
+measures the same query again with those files cached.
+
+## Download concurrency
+
+Set concurrency when creating a table handle:
+
+```{r, eval = FALSE}
+orders <- client$table(
+  "sales.default.orders",
+  concurrency = 8
+)
+```
+
+The default is four. This value is the maximum number of missing remote assets
+downloaded at once after all pages of the Sharing response have been collected.
+It does not change API pagination, Delta Kernel scanning, Arrow batch size, or
+a read that is already fully cached.
+
+Higher concurrency is most likely to help when a query selects many files and
+latency leaves the connection idle. It may do little when there are few files,
+one large file already saturates the connection, or the provider throttles
+requests. Treat four as the starting point and benchmark representative cold
+reads before increasing it.
+
+Interactive reads show progress for missing downloads. When every remote asset
+has a known size, the display also includes the total bytes to download. Cache
+hits do not appear as downloads.
+
+## Shape the read before tuning it
+
+Query options affect different stages:
+
+- `columns` controls Delta Kernel projection and the shape of the materialized
+  result. The current Sharing request does not send column projection, so it
+  does not by itself reduce the size of already selected Parquet files.
+- `limit` is sent to the server as a hint and is enforced exactly by Delta
+  Kernel. A provider may use the hint to return fewer files, but this is not
+  guaranteed.
+- `predicate` is a best-effort server hint. It may improve file pruning, but it
+  is not an exact row filter; apply an exact filter in the downstream consumer.
+- `version` or `timestamp` changes which snapshot the server selects.
+
+The default `response_format = "auto"` is normally the right choice. Setting
+`"delta"` or `"parquet"` avoids the one-time negotiation request, but should be
+done only when the provider supports the chosen format; it is not a general
+performance switch.
+
+## Choose a materializer
+
+All materializers open a new read. They differ in how the Arrow batches are
+consumed:
+
+| Method | Collection behavior | Typical use |
+|---|---|---|
+| `to_tibble()` | Eager, in R memory | Ordinary R analysis |
+| `to_data_frame()` | Eager, via the tibble path | Base data-frame consumers |
+| `to_arrow()` | Eager, in Arrow memory | Repeated Arrow or DuckDB scans |
+| `to_arrow_reader()` | Lazy after file staging | One-pass Arrow or DuckDB scan |
+| `to_arrow_stream()` | Low-level and lazy after staging | Arrow C Stream consumers |
+
+The Arrow table and reader methods require the optional `arrow` package. Close
+an Arrow reader when it is no longer needed, and release a low-level stream if
+its consumer does not take ownership.
+
+For repeated DuckDB queries, registering an Arrow table or creating a temporary
+DuckDB table avoids reopening the Delta Sharing read for every query. For one
+pass over a large result, an Arrow reader avoids collecting an additional
+in-memory Arrow table first.
+
+## Arrow batch size
+
+Every materializer accepts `batch_size`; the default is 65,536 rows:
+
+```{r, eval = FALSE}
+orders$snapshot()$to_tibble(batch_size = 65536)
+```
+
+Batch size controls how many rows the native reader emits in each Arrow batch.
+It does not control the number or size of downloaded files. Very small batches
+increase boundary and conversion overhead, while larger batches can increase
+peak memory. The supported range is 1 to 1,000,000 rows, but the default is a
+good starting point and should be changed only after measurement.
+
+## Change data feeds
+
+Snapshot and change readers for the same table use the same file cache.
+Overlapping change ranges can therefore reuse immutable files already staged by
+an earlier snapshot or change read. Every change request still builds a fresh
+versioned local log and runs a new Delta Kernel change scan.
+
+Large or overlapping historical ranges may add many files to the session cache.
+The same concurrency and cache-lifetime guidance applies to those reads.
+
+## A practical tuning order
+
+1. Select only the columns and rows the consumer needs, while respecting the
+   hint semantics above.
+2. Reuse a materialized result when the same result is needed repeatedly.
+3. Benefit from the session file cache for overlapping reads.
+4. Compare a small number of download concurrency values on a representative
+   cold read.
+5. Choose the materializer that matches the consumer and memory budget.
+6. Tune `batch_size` last, and only when measurements show batch overhead or
+   memory pressure.
+
+Measure end-to-end elapsed time and result size. Network throughput, latency,
+provider behavior, file count, compression, schema width, and local hardware
+all affect the result, so there is no universally optimal concurrency or batch
+size.
