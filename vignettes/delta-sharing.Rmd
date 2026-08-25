@@ -41,16 +41,14 @@ project. The same client and table methods work with a private share.
 
 ## Connect to your share
 
-Pass `sharing_client()` either a path to a `.share` profile or a parsed profile
-list:
+Pass the path to a `.share` profile:
 
 ```{r, eval = FALSE}
 client <- sharing_client("~/config.share")
 ```
 
-Creating a client parses the profile without making a request or exchanging a
-token. Authentication is performed when the first authenticated request is
-made.
+`sharing_client()` also accepts a parsed profile list. See `?sharing_client`
+for the supported profile fields and authentication methods.
 
 ## Find a table
 
@@ -62,8 +60,8 @@ client$list_schemas("sales")
 client$list_tables("sales", "default")
 ```
 
-Discovery follows every result page and returns printable lists of records.
-Create a reusable table handle from a listed table:
+These methods follow pagination automatically and return printable lists of
+records. Create a reusable table handle from a listed table:
 
 ```{r, eval = FALSE}
 orders <- client$table("sales.default.orders")
@@ -73,8 +71,8 @@ orders$version()
 orders$schema()
 ```
 
-The table handle is cheap to create and does not read table rows. Its
-`protocol()` and `metadata()` methods expose additional table details.
+Creating a table handle does not read table rows. Its `protocol()` and
+`metadata()` methods expose additional table details.
 
 ## Read a snapshot
 
@@ -108,13 +106,13 @@ Choose the materializer that matches the next consumer:
 | Low-level Arrow C Stream | `to_arrow_stream()` |
 
 The Arrow table and reader methods require the optional `arrow` package. Each
-materializer call starts its own read, so choose one rather than calling several
-on the same snapshot just to convert the result.
+materializer call performs a new read, so reuse the result when the same data is
+needed more than once.
 
-Column projection and `limit` are applied by Delta Kernel. Predicate hints are
-expressed as nested R lists and sent to the sharing server as best-effort hints;
-they are not exact row filters. See `?SharingTable` for the snapshot options and
-predicate structure.
+`columns` selects the returned columns and `limit` caps the number of returned
+rows. `predicate` accepts nested R lists that are sent to the sharing server as
+best-effort hints; predicates are not exact row filters. See `?SharingTable`
+for the complete snapshot options and predicate structure.
 
 ## Read changes
 
@@ -141,22 +139,15 @@ reads expose the same materializers as snapshots.
 
 ## Downloads and caching
 
-Before Delta Kernel reads the rows, the package downloads the files selected by
-the sharing server into a session cache. Up to four files are downloaded at a
-time by default, and later handles for the same endpoint and table reuse files
-already present there. The cache lives in R's session temporary directory, so
-it normally requires no user management.
+Selected files are downloaded concurrently and cached for the R session. New
+handles for the same table reuse files already present in the cache, so
+overlapping reads may avoid downloading them again.
+
+The cache is stored under R's session temporary directory and normally needs no
+user management.
 
 See `vignette("performance-caching")` for cache identity and lifetime, cold and
 repeated reads, download concurrency, materializer costs, and Arrow batching.
-
-## How a read works
-
-R sends the Delta Sharing request, stages the selected data and
-deletion-vector files, and writes a local Delta log that points to them. Delta
-Kernel then applies projection, deletion vectors, column mapping, and change
-semantics before exposing Arrow batches. The requested materializer turns those
-batches into the selected R or Arrow result.
 
 ## Next steps
 
