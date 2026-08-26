@@ -17,8 +17,8 @@ Win-builder confirmation is pending for the final release candidate.
 
 ## Bundled Rust sources
 
-The source package is 24,183,086 bytes (approximately 23.1 MiB) because it
-includes the complete locked Rust dependency graph as
+The source package is approximately 24.2 MB (23.1 MiB) because it includes the
+complete locked Rust dependency graph as
 `src/rust/vendor.tar.xz`. This follows CRAN's Rust guidance and allows Cargo to
 build with `--frozen` and without network access. We request the corresponding
 increase from the preferred 10 MB source package size.
