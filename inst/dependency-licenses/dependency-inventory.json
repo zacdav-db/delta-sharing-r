@@ -169,9 +169,9 @@
   "rust": {
     "cargo_lock_sha256": "ed0447c8e52e2c3cd45bd769a0870b5a3a984723b5e5aeb489ceebd6c12ba7f7",
     "license_bundle": {
-      "bytes": 43032,
+      "bytes": 43020,
       "path": "rust-license-texts.tar.xz",
-      "sha256": "aea20e124c13d7cdb80a4b69b122b8ca472f4b9fc1478ca41aee06518c1e8edd"
+      "sha256": "8f3bf34045f12568d9b76573e9f5de63631818a6ae1b23f2ad8cfdded36f7e83"
     },
     "locked_sibling_override_package_count": 1,
     "package_count_requiring_override": 11,
@@ -1704,9 +1704,9 @@
         "declared_license": "Apache-2.0",
         "legal_files": [
           {
-            "bundle_member": "rust-license-texts/a7f56991ca639d254ffdf4db96640813ba8e5ef3a55012cd12a7ece3a7e2953d",
+            "bundle_member": "rust-license-texts/ed5faa4fe952f6318c55bac0a8be9d500eb65d389ea589c85989b54065d38985",
             "path": "LICENSE",
-            "sha256": "a7f56991ca639d254ffdf4db96640813ba8e5ef3a55012cd12a7ece3a7e2953d",
+            "sha256": "ed5faa4fe952f6318c55bac0a8be9d500eb65d389ea589c85989b54065d38985",
             "source": "R-package-license"
           }
         ],

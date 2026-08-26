@@ -145,4 +145,5 @@ its selected files have been staged locally.
 
 Each measurement includes the Sharing request, local log construction, Delta
 Kernel scan, and tibble materialization—not just network transfer. Reproduce
-the benchmark with [`bench/snapshot.R`](bench/snapshot.R).
+the benchmark with
+[`bench/snapshot.R`](https://github.com/zacdav-db/delta-sharing-r/blob/main/bench/snapshot.R).
