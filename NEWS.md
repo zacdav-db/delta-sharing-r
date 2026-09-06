@@ -1,3 +1,9 @@
+# delta.sharing (development version)
+
+- Remove private synthetic logs when log writing or native stream creation
+  fails, while preserving the original error or interrupt. Successful logs
+  retain their session lifetime for lazy readers.
+
 # delta.sharing 0.2.0
 
 This release is a clean redesign of `delta.sharing`; it does not provide

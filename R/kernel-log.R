@@ -61,22 +61,38 @@ synthetic_file_action <- function(file, response_format, operation) {
   }
 }
 
-# Create a session-temporary Delta log. R removes the containing temporary
-# directory at the end of the session, which also keeps lazy readers valid.
+# Remove a private log if its writer or native stream constructor fails.
+# Cleanup must preserve the original condition, including user interrupts.
+with_failed_log_cleanup <- function(root, code) {
+  complete <- FALSE
+  on.exit(
+    {
+      if (!complete) {
+        try(fs::dir_delete(root), silent = TRUE)
+      }
+    },
+    add = TRUE
+  )
+  result <- force(code)
+  complete <- TRUE
+  result
+}
+
+# Successful logs retain their session lifetime so lazy readers remain valid.
 prepare_log <- function(write) {
   root <- fs::file_temp(pattern = log_root_prefix)
-  log_dir <- fs::path(root, "table", log_dir_name)
-  fs::dir_create(log_dir, mode = "u=rwx,go=")
-
-  details <- write(log_dir)
-
-  c(
-    list(
-      root = fs::path_real(root),
-      path = fs::path_real(fs::path(root, "table"))
-    ),
-    details
-  )
+  with_failed_log_cleanup(root, {
+    log_dir <- fs::path(root, "table", log_dir_name)
+    fs::dir_create(log_dir, mode = "u=rwx,go=")
+    details <- write(log_dir)
+    c(
+      list(
+        root = fs::path_real(root),
+        path = fs::path_real(fs::path(root, "table"))
+      ),
+      details
+    )
+  })
 }
 
 # Change data feed: the kernel's TableChanges reads a real multi-version log,

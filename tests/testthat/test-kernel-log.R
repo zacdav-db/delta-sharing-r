@@ -95,7 +95,7 @@ test_that("prepare_log writes the session-temporary layout", {
   expect_match(content[[1]], "protocol")
 })
 
-test_that("prepare_log leaves failed work under the session temporary root", {
+test_that("prepare_log removes failed work without replacing the error", {
   state <- new.env(parent = emptyenv())
   state$root <- NULL
   withr::defer({
@@ -107,10 +107,11 @@ test_that("prepare_log leaves failed work under the session temporary root", {
   expect_error(
     prepare_log(function(log_dir) {
       state$root <- fs::path_dir(fs::path_dir(log_dir))
+      writeLines("partial log", fs::path(log_dir, log_commit_name))
       stop("synthetic write failure")
     }),
     "synthetic write failure"
   )
 
-  expect_true(fs::dir_exists(state$root))
+  expect_false(fs::dir_exists(state$root))
 })
