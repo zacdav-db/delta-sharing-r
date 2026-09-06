@@ -1,3 +1,9 @@
+# delta.sharing (development version)
+
+- Eager Arrow materialization now closes its imported reader on success or
+  error instead of waiting for garbage collection. Returned table buffers
+  remain valid after reader cleanup.
+
 # delta.sharing 0.2.0
 
 This release is a clean redesign of `delta.sharing`; it does not provide
