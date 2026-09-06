@@ -70,15 +70,27 @@ An \code{arrow::RecordBatchReader}.
 \if{html}{\out{<a id="method-SharingReader-to_tibble"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingReader-to_tibble}{}}}
 \subsection{Method \code{to_tibble()}}{
-Materialize as a tibble.
+Materialize as a tibble. By default, 64-bit integers become
+doubles, which cannot represent all integers outside -2^53..2^53
+exactly. For lossless integer text, supply a character prototype,
+for example \code{to = data.frame(id = character())} for an \code{id}-only
+projection. This preserves the full signed 64-bit range and nulls,
+including integers that \code{bit64} reserves for missing values.
+Nanoarrow's \code{integer64} conversion is not recommended: some versions
+misread sliced arrays with nonzero offsets.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_tibble(batch_size = 65536L)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_tibble(batch_size = 65536L, to = NULL)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{batch_size}}{Rows per batch.}
+
+\item{\code{to}}{A data-frame prototype, or a function of the Arrow schema and
+default prototype returning one, passed to
+\code{\link[nanoarrow:convert_array_stream]{nanoarrow::convert_array_stream()}}. \code{NULL} uses nanoarrow's default
+conversion. The prototype must match the projected result columns.}
 }
 \if{html}{\out{</div>}}
 }
@@ -93,13 +105,15 @@ A \code{tibble::tbl_df}.
 Materialize as a base data frame by dropping the tibble
 class from \code{to_tibble()}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_data_frame(batch_size = 65536L)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_data_frame(batch_size = 65536L, to = NULL)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{batch_size}}{Rows per batch.}
+
+\item{\code{to}}{Conversion prototype; see \code{to_tibble()}.}
 }
 \if{html}{\out{</div>}}
 }

@@ -1,3 +1,9 @@
+# delta.sharing (development version)
+
+- Added a `to` conversion prototype to `to_tibble()` and `to_data_frame()`,
+  allowing lossless character results for the full signed 64-bit integer range
+  without changing the default double conversion.
+
 # delta.sharing 0.2.0
 
 This release is a clean redesign of `delta.sharing`; it does not provide
