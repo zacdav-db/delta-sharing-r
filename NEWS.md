@@ -1,3 +1,8 @@
+# delta.sharing (development version)
+
+- Indexed staged file paths so rewriting large manifests no longer repeatedly
+  scans the full list of downloaded assets.
+
 # delta.sharing 0.2.0
 
 This release is a clean redesign of `delta.sharing`; it does not provide
