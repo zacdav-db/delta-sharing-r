@@ -1,3 +1,9 @@
+# delta.sharing (development version)
+
+- Reject invalid batch sizes and invalid or duplicate projection names before
+  read requests. Zero-row snapshots now resolve their schema without staging
+  data files, even when the server returns files despite the zero limit hint.
+
 # delta.sharing 0.2.0
 
 This release is a clean redesign of `delta.sharing`; it does not provide

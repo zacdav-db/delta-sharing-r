@@ -5,6 +5,32 @@
 # SharingReader holds that shared behaviour; the subclasses differ only in how
 # they validate options and open the native stream.
 
+validate_read_columns <- function(columns, operation) {
+  if (is.null(columns)) {
+    return(invisible(NULL))
+  }
+  if (
+    !is.character(columns) ||
+      length(columns) == 0L ||
+      anyNA(columns) ||
+      any(!nzchar(columns))
+  ) {
+    abort(
+      "{.arg columns} must be NULL or a character vector of non-empty names.",
+      type = "validation",
+      operation = operation
+    )
+  }
+  if (anyDuplicated(tolower(columns))) {
+    abort(
+      "{.arg columns} must not contain duplicate Delta column names (ignoring case).",
+      type = "validation",
+      operation = operation
+    )
+  }
+  invisible(NULL)
+}
+
 #' Shared Delta Sharing reader
 #'
 #' Internal base class for snapshot and change readers. Public readers inherit
@@ -163,13 +189,7 @@ SharingSnapshot <- R6::R6Class(
           operation = "snapshot"
         )
       }
-      if (!is.null(columns) && !is.character(columns)) {
-        abort(
-          "{.arg columns} must be a character vector.",
-          type = "validation",
-          operation = "snapshot"
-        )
-      }
+      validate_read_columns(columns, "snapshot")
       if (!is.null(predicate) && !is.list(predicate)) {
         abort(
           "{.arg predicate} must be a list.",
@@ -239,13 +259,7 @@ SharingChanges <- R6::R6Class(
       cache_path,
       concurrency
     ) {
-      if (!is.null(columns) && !is.character(columns)) {
-        abort(
-          "{.arg columns} must be a character vector.",
-          type = "validation",
-          operation = "changes"
-        )
-      }
+      validate_read_columns(columns, "changes")
       private$profile <- profile
       private$auth <- auth
       private$identifier <- identifier
