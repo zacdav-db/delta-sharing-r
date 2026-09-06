@@ -2,7 +2,7 @@
 #
 # A table handle creates a deterministic cache directory under R's temporary
 # directory. File and deletion-vector IDs supplied by the sharing server are
-# used directly as filenames, so new handles for the same table reuse the same
+# hashed into filenames, so new handles for the same table reuse the same
 # immutable objects. Each read creates only a fresh synthetic Delta log.
 
 hash_cache_value <- function(value) {
@@ -44,12 +44,13 @@ staged_asset <- function(kind, id, url, size = NULL) {
     )
   }
   extension <- if (identical(kind, "data")) ".parquet" else ".bin"
+  # IDs are opaque protocol keys, not paths or necessarily portable filenames.
   list(
     kind = kind,
     id = id,
     url = url,
     size = size,
-    name = paste0(id, extension)
+    name = paste0(hash_cache_value(id), extension)
   )
 }
 

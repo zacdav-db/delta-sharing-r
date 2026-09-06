@@ -107,7 +107,8 @@ test_that("rotated URLs reuse the server file ID", {
   expect_equal(first$cache_hits, 0L)
   expect_equal(second$downloaded, 0L)
   expect_equal(second$cache_hits, 1L)
-  expect_true(fs::file_exists(fs::path(cache, paste0(file_id, ".parquet"))))
+  cached_file <- fs::path(cache, paste0(hash_cache_value(file_id), ".parquet"))
+  expect_true(fs::file_exists(cached_file))
 })
 
 test_that("a manually removed cache is recreated on the next read", {
@@ -149,7 +150,7 @@ test_that("a cached file with the wrong size is downloaded again", {
   source <- withr::local_tempfile(fileext = ".parquet")
   writeBin(bytes, source)
   file_id <- paste(rep("c", 64), collapse = "")
-  cache_path <- fs::path(cache, paste0(file_id, ".parquet"))
+  cache_path <- fs::path(cache, paste0(hash_cache_value(file_id), ".parquet"))
   writeBin(charToRaw("short"), cache_path)
   asset <- staged_asset("data", file_id, local_file_url(source), length(bytes))
 
@@ -159,7 +160,7 @@ test_that("a cached file with the wrong size is downloaded again", {
   expect_equal(as.numeric(fs::file_size(cache_path)), length(bytes))
 })
 
-test_that("staging uses file and deletion-vector IDs directly", {
+test_that("staging derives cache filenames from file and deletion-vector IDs", {
   identifier <- staging_identifier("deletion-vector")
   cache <- local_empty_cache(identifier)
   data <- withr::local_tempfile(fileext = ".parquet")
@@ -196,15 +197,17 @@ test_that("staging uses file and deletion-vector IDs directly", {
   )
   staged <- result$actions[[1L]]$add
 
-  expect_true(fs::file_exists(fs::path(cache, paste0(file_id, ".parquet"))))
-  expect_true(fs::file_exists(fs::path(cache, paste0(dv_id, ".bin"))))
+  cached_data <- fs::path(cache, paste0(hash_cache_value(file_id), ".parquet"))
+  cached_dv <- fs::path(cache, paste0(hash_cache_value(dv_id), ".bin"))
+  expect_true(fs::file_exists(cached_data))
+  expect_true(fs::file_exists(cached_dv))
   expect_identical(
     local_file_path(staged$path),
-    as.character(fs::path_abs(fs::path(cache, paste0(file_id, ".parquet"))))
+    as.character(fs::path_abs(cached_data))
   )
   expect_identical(
     local_file_path(staged$deletionVector$pathOrInlineDv),
-    as.character(fs::path_abs(fs::path(cache, paste0(dv_id, ".bin"))))
+    as.character(fs::path_abs(cached_dv))
   )
 })
 
@@ -251,7 +254,8 @@ test_that("HTTP failures do not publish partial cache files or credentials", {
 
   expect_false(grepl("secret", conditionMessage(condition), fixed = TRUE))
   expect_false(grepl("private", conditionMessage(condition), fixed = TRUE))
-  expect_false(fs::file_exists(fs::path(cache, paste0(file_id, ".parquet"))))
+  cached_file <- fs::path(cache, paste0(hash_cache_value(file_id), ".parquet"))
+  expect_false(fs::file_exists(cached_file))
   expect_length(fs::dir_ls(cache, fail = FALSE), 0L)
 })
 
@@ -267,6 +271,7 @@ test_that("incomplete downloads are not published", {
     ensure_staged_assets(list(asset), cache, concurrency = 4L),
     class = "delta_sharing_protocol_error"
   )
-  expect_false(fs::file_exists(fs::path(cache, paste0(file_id, ".parquet"))))
+  cached_file <- fs::path(cache, paste0(hash_cache_value(file_id), ".parquet"))
+  expect_false(fs::file_exists(cached_file))
   expect_length(fs::dir_ls(cache, fail = FALSE), 0L)
 })

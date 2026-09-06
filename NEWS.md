@@ -1,3 +1,8 @@
+# delta.sharing (development version)
+
+- Hash shared file and deletion-vector IDs into cache filenames so IDs cannot
+  access or overwrite files outside the table cache.
+
 # delta.sharing 0.2.0
 
 This release is a clean redesign of `delta.sharing`; it does not provide
