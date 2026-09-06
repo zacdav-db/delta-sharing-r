@@ -1,8 +1,9 @@
 # delta.sharing (development version)
 
-- Added a `to` conversion prototype to `to_tibble()` and `to_data_frame()`,
-  allowing lossless character results for the full signed 64-bit integer range
-  without changing the default double conversion.
+- BIGINT columns now automatically use `bit64::integer64` in `to_tibble()`
+  and `to_data_frame()`, including empty and nested results. Arrow is now a
+  required dependency. Valid -9223372036854775808 values raise a clear error
+  instead of becoming missing; Arrow materializers retain that value.
 
 # delta.sharing 0.2.0
 

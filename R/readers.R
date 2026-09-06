@@ -15,7 +15,7 @@ SharingReader <- R6::R6Class(
   "SharingReader",
   cloneable = FALSE,
   public = list(
-    #' @description Materialize as an Arrow table (requires `{arrow}`).
+    #' @description Materialize as an Arrow table.
     #' @param batch_size Rows per batch.
     #' @return An `arrow::Table`.
     to_arrow = function(batch_size = 65536L) {
@@ -24,8 +24,8 @@ SharingReader <- R6::R6Class(
       )
     },
 
-    #' @description Expose a lazy Arrow record batch reader (requires
-    #'   `{arrow}`). The reader owns the underlying stream; consume it or call
+    #' @description Expose a lazy Arrow record batch reader.
+    #'   The reader owns the underlying stream; consume it or call
     #'   its `Close()` method.
     #' @param batch_size Rows per batch.
     #' @return An `arrow::RecordBatchReader`.
@@ -35,35 +35,27 @@ SharingReader <- R6::R6Class(
       )
     },
 
-    #' @description Materialize as a tibble. By default, 64-bit integers become
-    #'   doubles, which cannot represent all integers outside -2^53..2^53
-    #'   exactly. For lossless integer text, supply a character prototype,
-    #'   for example `to = data.frame(id = character())` for an `id`-only
-    #'   projection. This preserves the full signed 64-bit range and nulls,
-    #'   including integers that `bit64` reserves for missing values.
-    #'   Nanoarrow's `integer64` conversion is not recommended: some versions
-    #'   misread sliced arrays with nonzero offsets.
+    #' @description Materialize as a tibble using Arrow's R type conversion.
+    #'   BIGINT columns become `bit64::integer64`, including small values,
+    #'   empty results, and nested columns. A valid BIGINT value of
+    #'   -9223372036854775808 raises a conversion error because bit64 reserves
+    #'   that value for `NA`; use `to_arrow()` or `to_arrow_reader()` to
+    #'   retain it. Decimal columns use Arrow's default double conversion.
     #' @param batch_size Rows per batch.
-    #' @param to A data-frame prototype, or a function of the Arrow schema and
-    #'   default prototype returning one, passed to
-    #'   [nanoarrow::convert_array_stream()]. `NULL` uses nanoarrow's default
-    #'   conversion. The prototype must match the projected result columns.
     #' @return A `tibble::tbl_df`.
-    to_tibble = function(batch_size = 65536L, to = NULL) {
+    to_tibble = function(batch_size = 65536L) {
       sharing_stream_to_tibble(
-        self$to_arrow_stream(batch_size = batch_size),
-        to = to
+        self$to_arrow_stream(batch_size = batch_size)
       )
     },
 
     #' @description Materialize as a base data frame by dropping the tibble
     #'   class from `to_tibble()`.
     #' @param batch_size Rows per batch.
-    #' @param to Conversion prototype; see `to_tibble()`.
     #' @return A data frame.
-    to_data_frame = function(batch_size = 65536L, to = NULL) {
+    to_data_frame = function(batch_size = 65536L) {
       as.data.frame(
-        self$to_tibble(batch_size = batch_size, to = to)
+        self$to_tibble(batch_size = batch_size)
       )
     },
 

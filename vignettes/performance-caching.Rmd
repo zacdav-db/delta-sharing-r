@@ -164,9 +164,10 @@ Materializers differ in how they consume Arrow batches:
 | `to_arrow_reader()` | Lazy after file staging | One-pass Arrow or DuckDB scan |
 | `to_arrow_stream()` | Low-level and lazy after staging | Arrow C Stream consumers |
 
-The Arrow table and reader methods require the optional `arrow` package. Close
-an Arrow reader when it is no longer needed, and release a low-level stream if
-its consumer does not take ownership.
+Arrow is a required dependency. Eager R materializers use Arrow's converter and
+return BIGINT columns as `bit64::integer64`. Close an Arrow reader when it is no
+longer needed, and release a low-level stream if its consumer does not take
+ownership.
 
 ### Query larger-than-memory results with DuckDB
 

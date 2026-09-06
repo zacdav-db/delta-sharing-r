@@ -434,7 +434,7 @@ sharing_changes_stream <- function(
 require_arrow <- function(operation) {
   if (!requireNamespace("arrow", quietly = TRUE)) {
     abort(
-      "The optional package {.pkg arrow} is required for {.fn {operation}}.",
+      "The package {.pkg arrow} is required for {.fn {operation}}.",
       type = "unsupported",
       operation = operation,
       feature = "arrow_package"
@@ -462,11 +462,27 @@ sharing_stream_to_arrow <- function(stream) {
   )
 }
 
-sharing_stream_to_tibble <- function(stream, to = NULL) {
+sharing_stream_to_tibble <- function(stream) {
   force(stream)
   on.exit(release_materializer_stream(stream), add = TRUE)
+  previous <- options(arrow.int64_downcast = FALSE)
+  on.exit(options(previous), add = TRUE)
+  reader <- with_native_stream_conditions(
+    sharing_stream_to_arrow_reader(stream, operation = "to_tibble"),
+    operation = "read_arrow_stream",
+    stream = stream
+  )
+  # Import moves ownership to the reader. Close it before restoring options,
+  # including when reading or conversion fails.
+  on.exit(try(reader$Close(), silent = TRUE), add = TRUE, after = FALSE)
   with_native_stream_conditions(
-    tibble::as_tibble(nanoarrow::convert_array_stream(stream, to = to)),
+    {
+      table <- reader$read_table()
+      for (column in table$columns) {
+        check_arrow_integer64(column)
+      }
+      tibble::as_tibble(as.data.frame(table))
+    },
     operation = "read_arrow_stream",
     stream = stream
   )

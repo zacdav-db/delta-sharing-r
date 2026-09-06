@@ -54,12 +54,7 @@ test_that("download concurrency belongs to the table", {
     ),
     function(method) {
       arguments <- formals(snapshot[[method]])
-      expected <- if (method %in% c("to_tibble", "to_data_frame")) {
-        c("batch_size", "to")
-      } else {
-        "batch_size"
-      }
-      expect_identical(names(arguments), expected)
+      expect_identical(names(arguments), "batch_size")
       expect_identical(arguments$batch_size, 65536L)
     }
   )
@@ -194,13 +189,10 @@ test_that("client printing redacts endpoint user information", {
   ))
 
   output <- capture.output(print(client))
-  expect_equal(
-    client$endpoint(),
-    paste0(
-      "https://user:secret@sharing.example.test/api",
-      "?access_token=query-secret#private-fragment"
-    )
-  )
+  expect_equal(client$endpoint(), paste0(
+    "https://user:secret@sharing.example.test/api",
+    "?access_token=query-secret#private-fragment"
+  ))
   expect_match(output, "sharing.example.test", fixed = TRUE)
   expect_false(grepl("user", output, fixed = TRUE))
   expect_false(grepl("secret", output, fixed = TRUE))
@@ -219,9 +211,9 @@ test_that("base readers require a concrete stream implementation", {
 })
 
 test_that("change readers print their staged identity", {
-  changes <- test_client()$table("sales.default.events")$changes(
-    starting_version = 1
-  )
+  changes <- test_client()$
+    table("sales.default.events")$
+    changes(starting_version = 1)
 
   expect_output(print(changes), "SharingChanges")
 })

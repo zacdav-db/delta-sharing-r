@@ -105,9 +105,11 @@ Choose the materializer that matches the next consumer:
 | Lazy Arrow reader, including for DuckDB | `to_arrow_reader()` |
 | Low-level Arrow C Stream | `to_arrow_stream()` |
 
-The Arrow table and reader methods require the optional `arrow` package. Each
-materializer call performs a new read, so reuse the result when the same data is
-needed more than once.
+Arrow is a required dependency. The tibble and data-frame methods automatically
+convert BIGINT columns to `bit64::integer64`, including empty and nested results.
+A valid -9223372036854775808 raises a conversion error because bit64 reserves it
+for `NA`; Arrow materializers retain that value. Each materializer call performs
+a new read, so reuse the result when the same data is needed more than once.
 
 `columns` selects the returned columns and `limit` caps the number of returned
 rows. `predicate` accepts nested R lists that are sent to the sharing server as
