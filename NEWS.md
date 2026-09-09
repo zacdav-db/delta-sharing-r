@@ -1,3 +1,9 @@
+# delta.sharing (development version)
+
+- Retain independently verified completed downloads when another asset fails,
+  so a retry only downloads the remaining files. Failed responses and incomplete
+  files are still discarded.
+
 # delta.sharing 0.2.0
 
 This release is a clean redesign of `delta.sharing`; it does not provide
