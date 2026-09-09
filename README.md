@@ -97,7 +97,7 @@ for cold and repeated reads, cache lifetime, concurrency, batching, and tuning.
 ## Query with DuckDB
 
 DuckDB can query a lazy Arrow reader without first creating an R data frame.
-This requires the optional `arrow`, `DBI`, and `duckdb` packages.
+This requires the optional `arrow`, `DBI`, `duckdb`, and `withr` packages.
 
 ```r
 snapshot <- housing$snapshot(
@@ -108,12 +108,15 @@ reader <- snapshot$to_arrow_reader()
 con <- DBI::dbConnect(duckdb::duckdb())
 duckdb::duckdb_register_arrow(con, "housing", reader)
 
-summary <- DBI::dbGetQuery(con, "
-  SELECT chas, count(*) AS homes, avg(medv) AS mean_value
-  FROM housing
-  GROUP BY chas
-  ORDER BY chas
-")
+summary <- withr::with_options(
+  list(arrow.use_threads = FALSE),
+  DBI::dbGetQuery(con, "
+    SELECT chas, count(*) AS homes, avg(medv) AS mean_value
+    FROM housing
+    GROUP BY chas
+    ORDER BY chas
+  ")
+)
 summary
 #>   chas homes mean_value
 #> 1    0   471   22.29553
