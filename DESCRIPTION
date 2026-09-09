@@ -20,6 +20,7 @@ Depends:
   R (>= 4.3.0)
 Encoding: UTF-8
 Imports:
+  arrow,
   cli,
   fs,
   httr2,
@@ -32,8 +33,9 @@ Imports:
   rlang,
   tibble
 Suggests:
-  arrow,
+  bit64,
   DBI,
+  dplyr,
   duckdb,
   knitr,
   rmarkdown,

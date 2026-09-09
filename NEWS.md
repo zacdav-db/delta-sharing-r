@@ -1,3 +1,10 @@
+# delta.sharing (development version)
+
+- BIGINT columns now automatically use `bit64::integer64` in `to_tibble()`
+  and `to_data_frame()`, including empty and nested results. Arrow is now a
+  required dependency. Valid -9223372036854775808 values raise a clear error
+  instead of becoming missing; Arrow materializers retain that value.
+
 # delta.sharing 0.2.0
 
 This release is a clean redesign of `delta.sharing`; it does not provide

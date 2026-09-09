@@ -28,7 +28,7 @@ its Arrow and data-frame materializers.
 \if{html}{\out{<a id="method-SharingReader-to_arrow"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingReader-to_arrow}{}}}
 \subsection{Method \code{to_arrow()}}{
-Materialize as an Arrow table (requires \code{{arrow}}).
+Materialize as an Arrow table.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_arrow(batch_size = 65536L)}\if{html}{\out{</div>}}
 }
@@ -48,8 +48,8 @@ An \code{arrow::Table}.
 \if{html}{\out{<a id="method-SharingReader-to_arrow_reader"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingReader-to_arrow_reader}{}}}
 \subsection{Method \code{to_arrow_reader()}}{
-Expose a lazy Arrow record batch reader (requires
-\code{{arrow}}). The reader owns the underlying stream; consume it or call
+Expose a lazy Arrow record batch reader.
+The reader owns the underlying stream; consume it or call
 its \code{Close()} method.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_arrow_reader(batch_size = 65536L)}\if{html}{\out{</div>}}
@@ -70,7 +70,12 @@ An \code{arrow::RecordBatchReader}.
 \if{html}{\out{<a id="method-SharingReader-to_tibble"></a>}}
 \if{latex}{\out{\hypertarget{method-SharingReader-to_tibble}{}}}
 \subsection{Method \code{to_tibble()}}{
-Materialize as a tibble.
+Materialize as a tibble using Arrow's R type conversion.
+BIGINT columns become \code{bit64::integer64}, including small values,
+empty results, and nested columns. A valid BIGINT value of
+-9223372036854775808 raises a conversion error because bit64 reserves
+that value for \code{NA}; use \code{to_arrow()} or \code{to_arrow_reader()} to
+retain it. Decimal columns use Arrow's default double conversion.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_tibble(batch_size = 65536L)}\if{html}{\out{</div>}}
 }

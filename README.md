@@ -84,11 +84,14 @@ changes_tbl <- orders$changes(
 ```
 
 `to_tibble()` is the usual choice for R analysis. Use `to_data_frame()` when a
-base data frame is required.
+base data frame is required. Both automatically return BIGINT columns as
+`bit64::integer64`, including small values, empty results, and nested columns.
+The value -9223372036854775808 raises a conversion error because bit64 reserves
+it for missing values; use an Arrow materializer to retain it.
 
 For Arrow workflows, `to_arrow()` returns an in-memory table and
-`to_arrow_reader()` returns a lazy reader. Both require the optional `arrow`
-package. `to_arrow_stream()` exposes the lower-level Arrow C Stream directly.
+`to_arrow_reader()` returns a lazy reader. Arrow is a required dependency.
+`to_arrow_stream()` exposes the lower-level Arrow C Stream directly.
 
 Selected files are downloaded concurrently and cached for the R session. See
 the [Performance and caching guide](https://zacdav-db.github.io/delta-sharing-r/articles/performance-caching.html)
@@ -97,7 +100,7 @@ for cold and repeated reads, cache lifetime, concurrency, batching, and tuning.
 ## Query with DuckDB
 
 DuckDB can query a lazy Arrow reader without first creating an R data frame.
-This requires the optional `arrow`, `DBI`, and `duckdb` packages.
+This requires the optional `DBI` and `duckdb` packages.
 
 ```r
 snapshot <- housing$snapshot(
