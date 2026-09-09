@@ -8,6 +8,7 @@
 ^\.git$
 ^\.gitattributes$
 ^\.gitignore$
+^LICENSE$
 ^codecov\.yml$
 ^cran-comments\.md$
 ^coverage$
