@@ -455,6 +455,9 @@ sharing_stream_to_arrow <- function(stream) {
   force(stream)
   on.exit(release_materializer_stream(stream), add = TRUE)
   reader <- sharing_stream_to_arrow_reader(stream, operation = "to_arrow")
+  # Import moves stream ownership into the Arrow reader. Closing the original
+  # R pointer alone cannot release it after an eager read.
+  on.exit(try(reader$Close(), silent = TRUE), add = TRUE)
   with_native_stream_conditions(
     reader$read_table(),
     operation = "read_arrow_stream",
