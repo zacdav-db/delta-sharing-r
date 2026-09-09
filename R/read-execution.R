@@ -95,8 +95,12 @@ prepare_snapshot_query_log <- function(
     spec,
     format
   )
+  # The query still resolves the requested snapshot and schema. A zero-row
+  # result only needs the log header, even if the server ignores limitHint.
+  files <- if (!is.null(spec$limit) && spec$limit == 0) list() else
+    query_result$files
   staged <- stage_file_wrappers(
-    query_result$files,
+    files,
     format,
     cache_path,
     concurrency,
@@ -377,6 +381,7 @@ sharing_snapshot_stream <- function(
   batch_size = 65536L,
   concurrency = 4L
 ) {
+  batch_size <- validate_native_batch_size(batch_size)
   fmt <- resolve_query_format(
     profile,
     auth,
@@ -410,6 +415,7 @@ sharing_changes_stream <- function(
   batch_size = 65536L,
   concurrency = 4L
 ) {
+  batch_size <- validate_native_batch_size(batch_size)
   parsed <- sharing_query_changes(
     profile,
     auth,
