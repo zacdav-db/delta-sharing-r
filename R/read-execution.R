@@ -393,11 +393,14 @@ sharing_snapshot_stream <- function(
     concurrency = concurrency
   )
 
-  native_snapshot_stream(
-    table_location = log$path,
-    columns = spec$columns,
-    limit = spec$limit,
-    batch_size = batch_size
+  with_failed_log_cleanup(
+    log$root,
+    native_snapshot_stream(
+      table_location = log$path,
+      columns = spec$columns,
+      limit = spec$limit,
+      batch_size = batch_size
+    )
   )
 }
 
@@ -420,12 +423,15 @@ sharing_changes_stream <- function(
   )
   log <- prepare_cdf_query_log(parsed)
 
-  native_cdf_stream(
-    table_location = log$path,
-    start_version = log$start_version,
-    end_version = log$end_version,
-    columns = spec$columns,
-    batch_size = batch_size
+  with_failed_log_cleanup(
+    log$root,
+    native_cdf_stream(
+      table_location = log$path,
+      start_version = log$start_version,
+      end_version = log$end_version,
+      columns = spec$columns,
+      batch_size = batch_size
+    )
   )
 }
 
