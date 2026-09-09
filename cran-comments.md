@@ -19,10 +19,15 @@ only the expected new-submission note.
 
 ## Resubmission
 
-This is the first resubmission. In response to CRAN's review, the standard
+This is the second resubmission. In response to CRAN's review, the standard
 Apache License 2.0 text is omitted from the source package and the redundant
 `+ file LICENSE` reference has been removed from `DESCRIPTION`. The repository
 copy remains outside the R source package for repository license discovery.
+
+The package authorship metadata now lists only the package author/maintainer
+and copyright holder. Authors of bundled Rust dependencies remain credited in
+the installed `NOTICE` and dependency license materials rather than being
+listed as contributors to this R package.
 
 ## Bundled Rust sources
 
