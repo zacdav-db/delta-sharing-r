@@ -267,13 +267,16 @@ stage_file_wrappers <- function(
     operation = operation
   ))
   staged <- ensure_staged_assets(assets, cache_path, concurrency)
+  # Each action needs one or two ID lookups. A named list scans from the
+  # beginning on every lookup, making large manifests quadratic.
+  paths <- list2env(staged$paths, hash = TRUE, parent = emptyenv())
   list(
     actions = purrr::map(
       files,
       rewrite_staged_file,
       response_format = response_format,
       operation = operation,
-      paths = staged$paths
+      paths = paths
     ),
     downloaded = staged$downloaded,
     cache_hits = staged$cache_hits
