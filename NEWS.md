@@ -1,3 +1,8 @@
+# delta.sharing (development version)
+
+- Declared minimum versions for the cli, httr2, purrr, rlang, and testthat APIs
+  already used by the package and its tests.
+
 # delta.sharing 0.2.0
 
 This release is a clean redesign of `delta.sharing`; it does not provide
