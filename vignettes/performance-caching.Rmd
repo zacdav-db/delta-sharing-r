@@ -173,8 +173,8 @@ its consumer does not take ownership.
 When the analysis can be expressed in SQL, DuckDB is usually simpler than
 processing Arrow batches manually. DuckDB can spill larger-than-memory
 operations to disk, while `delta.sharing` keeps the selected source files in
-its disk-backed session cache. This requires the optional `DBI` and `duckdb`
-packages.
+its disk-backed session cache. This requires the optional `arrow`, `DBI`,
+`duckdb`, and `withr` packages.
 
 Register a lazy Arrow reader so the full table is not first collected in R:
 
@@ -186,15 +186,18 @@ reader <- orders$snapshot(
 con <- DBI::dbConnect(duckdb::duckdb())
 duckdb::duckdb_register_arrow(con, "orders", reader)
 
-summary <- DBI::dbGetQuery(con, "
-  SELECT
-    status,
-    count(*) AS orders,
-    sum(amount) AS total_amount
-  FROM orders
-  GROUP BY status
-  ORDER BY status
-")
+summary <- withr::with_options(
+  list(arrow.use_threads = FALSE),
+  DBI::dbGetQuery(con, "
+    SELECT
+      status,
+      count(*) AS orders,
+      sum(amount) AS total_amount
+    FROM orders
+    GROUP BY status
+    ORDER BY status
+  ")
+)
 
 duckdb::duckdb_unregister_arrow(con, "orders")
 reader$Close()
@@ -205,6 +208,9 @@ Arrow registration does not copy the full source into DuckDB. Only the final
 query result returned by `dbGetQuery()` is collected into R memory. Use SQL to
 filter or aggregate the data to a manageable result; collecting a very large
 final result can still exhaust R's memory.
+
+The local Arrow option serializes pulls from the one-pass reader. DuckDB can
+still execute the rest of the query in parallel.
 
 See DuckDB's
 [larger-than-memory documentation](https://duckdb.org/docs/current/guides/performance/how_to_tune_workloads#larger-than-memory-workloads-out-of-core-processing)
