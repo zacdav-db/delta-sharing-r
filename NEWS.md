@@ -1,3 +1,8 @@
+# delta.sharing (development version)
+
+- Fixed partition-only and metadata-only CDF projections for inferred insert
+  and delete changes, including tables whose first column is a partition.
+
 # delta.sharing 0.2.0
 
 This release is a clean redesign of `delta.sharing`; it does not provide
