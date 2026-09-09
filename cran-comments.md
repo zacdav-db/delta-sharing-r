@@ -13,7 +13,16 @@ The exact source archive produced by CI is checked with `--as-cran` on R devel
 4.7.0, R release 4.6.1, and the minimum supported R 4.3.3 across Linux, macOS,
 and Windows. Those checks report 0 errors, 0 warnings, and 0 notes.
 
-Win-builder confirmation is pending for the final release candidate.
+The originally submitted source archive was also checked by Win-builder on R
+release 4.6.1 and R devel 4.7.0. Both checks reported 0 errors, 0 warnings, and
+only the expected new-submission note.
+
+## Resubmission
+
+This is the first resubmission. In response to CRAN's review, the standard
+Apache License 2.0 text is omitted from the source package and the redundant
+`+ file LICENSE` reference has been removed from `DESCRIPTION`. The repository
+copy remains outside the R source package for repository license discovery.
 
 ## Bundled Rust sources
 
