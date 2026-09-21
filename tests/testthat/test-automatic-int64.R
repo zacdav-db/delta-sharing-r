@@ -38,7 +38,7 @@ test_that("public R materializers automatically preserve BIGINT values and opera
     id = automatic_int64_array(values),
     ordinary = seq_along(values)
   )
-  slices <- lapply(seq_along(values), function(i) {
+  slices <- purrr::map(seq_along(values), function(i) {
     nanoarrow::as_nanoarrow_array(batch$Slice(i - 1L, 1L))
   })
   for (method in c("to_tibble", "to_data_frame")) {
@@ -102,7 +102,7 @@ test_that("nested BIGINT structs and lists preserve sliced rows and empty types"
     nested = arrow::StructArray$create(id = automatic_int64_array(values)),
     items = lists
   )
-  slices <- lapply(
+  slices <- purrr::map(
     0:3,
     function(i) nanoarrow::as_nanoarrow_array(batch$Slice(i, 1))
   )
@@ -174,7 +174,7 @@ test_that("INT64_MIN outside a selected nested slice does not reject the result"
     type = arrow::list_of(arrow::utf8())
   )$cast(arrow::list_of(arrow::int64()))
   maps <- arrow::Array$create(
-    lapply(values, function(value) data.frame(key = "a", value = value)),
+    purrr::map(values, function(value) data.frame(key = "a", value = value)),
     type = arrow::map_of(arrow::utf8(), arrow::utf8())
   )$cast(arrow::map_of(arrow::utf8(), arrow::int64()))
   batch <- arrow::RecordBatch$create(
@@ -250,7 +250,10 @@ test_that("automatic BIGINT conversion works through native Parquet reads", {
     metadata$metaData$schemaString,
     simplifyVector = FALSE
   )
-  schema$fields <- Filter(function(field) field$name == "id", schema$fields)
+  schema$fields <- purrr::keep(
+    schema$fields,
+    function(field) field$name == "id"
+  )
   schema$fields[[1]]$nullable <- TRUE
   metadata$metaData$schemaString <- log_json_line(schema)
   fs::dir_create(fs::path(root, "_delta_log"))
@@ -295,7 +298,7 @@ test_that("automatic BIGINT conversion works through native Parquet reads", {
     data_path
   )
   commit <- fs::path(rejected, "_delta_log", "00000000000000000000.json")
-  actions <- lapply(
+  actions <- purrr::map(
     readLines(commit),
     jsonlite::fromJSON,
     simplifyVector = FALSE
@@ -376,8 +379,8 @@ test_that("R conversion restores options and closes its reader exactly once on f
         class = c("interrupt", "condition")
       )
     )
-    proxy <- function(stream, operation) {
-      reader <- imported(stream, operation)
+    proxy <- function(stream) {
+      reader <- imported(stream)
       list(
         read_table = function() {
           if (failure != "conversion") stop(condition)
@@ -416,5 +419,41 @@ test_that("R conversion restores options and closes its reader exactly once on f
       expect_identical(state$closed, 1L)
       expect_identical(state$released, 1L)
     })
+  }
+})
+
+test_that("failed Arrow imports release the stream and restore options", {
+  state <- new.env(parent = emptyenv())
+  state$released <- 0L
+  batch <- arrow::RecordBatch$create(id = automatic_int64_array("42"))
+  reader <- automatic_int64_reader(
+    list(nanoarrow::as_nanoarrow_array(batch)),
+    state = state
+  )
+  withr::local_options(arrow.int64_downcast = TRUE)
+  testthat::local_mocked_bindings(
+    sharing_stream_to_arrow_reader = function(stream) stop("import failed"),
+    .package = "delta.sharing"
+  )
+
+  expect_error(reader$to_tibble(), "import failed", fixed = TRUE)
+  expect_identical(state$released, 1L)
+  expect_identical(getOption("arrow.int64_downcast"), TRUE)
+})
+
+test_that("Arrow materializers retain the full signed BIGINT range", {
+  values <- c("-9223372036854775808", "9223372036854775807", NA_character_)
+  batch <- arrow::RecordBatch$create(id = automatic_int64_array(values))
+  for (method in c("to_arrow", "to_arrow_reader")) {
+    result <- automatic_int64_reader(
+      list(nanoarrow::as_nanoarrow_array(batch))
+    )[[method]]()
+    if (inherits(result, "RecordBatchReader")) {
+      withr::defer(result$Close())
+      table <- result$read_table()
+    } else {
+      table <- result
+    }
+    expect_identical(table$id$cast(arrow::utf8())$as_vector(), values)
   }
 })

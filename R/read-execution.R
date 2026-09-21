@@ -431,30 +431,14 @@ sharing_changes_stream <- function(
 
 # ---- Materializers ---------------------------------------------------------
 
-require_arrow <- function(operation) {
-  if (!requireNamespace("arrow", quietly = TRUE)) {
-    abort(
-      "The package {.pkg arrow} is required for {.fn {operation}}.",
-      type = "unsupported",
-      operation = operation,
-      feature = "arrow_package"
-    )
-  }
-}
-
-sharing_stream_to_arrow_reader <- function(
-  stream,
-  operation = "to_arrow_reader"
-) {
-  require_arrow(operation)
+sharing_stream_to_arrow_reader <- function(stream) {
   arrow::RecordBatchReader$import_from_c(stream)
 }
 
 sharing_stream_to_arrow <- function(stream) {
-  require_arrow("to_arrow")
   force(stream)
   on.exit(release_materializer_stream(stream), add = TRUE)
-  reader <- sharing_stream_to_arrow_reader(stream, operation = "to_arrow")
+  reader <- sharing_stream_to_arrow_reader(stream)
   with_native_stream_conditions(
     reader$read_table(),
     operation = "read_arrow_stream",
@@ -468,7 +452,7 @@ sharing_stream_to_tibble <- function(stream) {
   previous <- options(arrow.int64_downcast = FALSE)
   on.exit(options(previous), add = TRUE)
   reader <- with_native_stream_conditions(
-    sharing_stream_to_arrow_reader(stream, operation = "to_tibble"),
+    sharing_stream_to_arrow_reader(stream),
     operation = "read_arrow_stream",
     stream = stream
   )
