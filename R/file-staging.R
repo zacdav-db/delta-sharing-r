@@ -89,8 +89,9 @@ file_wrapper_assets <- function(file, response_format, operation) {
 
 # A cached asset is reusable only when its optional server size still matches.
 staged_asset_is_complete <- function(path, asset) {
-  fs::file_exists(path) &&
-    (is.null(asset$size) || fs::file_size(path) == asset$size)
+  fs::file_exists(path) && (
+    is.null(asset$size) || fs::file_size(path) == asset$size
+  )
 }
 
 local_file_path <- function(url) {
@@ -176,6 +177,7 @@ download_staged_assets <- function(assets, targets, concurrency) {
       )
     }
 
+    # Stop the queue on error, but retain completed results before rethrowing.
     responses <- httr2::req_perform_parallel(
       purrr::map(assets[remote_index], function(asset) {
         download_request(asset$url)
@@ -206,9 +208,9 @@ download_staged_assets <- function(assets, targets, concurrency) {
 
     # Never infer success from the temporary file alone: an HTTP error body
     # may have exactly the expected size (or the asset may have no size).
-    errors <- which(purrr::map_lgl(responses, inherits, "error"))
-    if (length(errors) > 0L) {
-      stop(responses[[errors[[1L]]]])
+    error <- purrr::detect(responses, inherits, "error")
+    if (!is.null(error)) {
+      stop(error)
     }
     if (any(succeeded & !complete)) {
       incomplete()

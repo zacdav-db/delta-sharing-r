@@ -32,28 +32,70 @@ local_mock_download_bodies <- function(.env = parent.frame()) {
 test_that("completed HTTP assets survive a sibling failure and are reused", {
   transport <- local_mock_download_bodies()
   cache <- withr::local_tempdir()
-  attempts <- c(good = 0L, bad = 0L)
+  state <- new.env(parent = emptyenv())
+  state$attempts <- c(good = 0L, bad = 0L, pending = 0L)
   httr2::local_mocked_responses(function(req) {
-    name <- basename(httr2::url_parse(req$url)$path)
-    attempts[[name]] <<- attempts[[name]] + 1L
-    status <- if (name == "bad" && attempts[[name]] == 1L) 403L else 200L
+    name <- fs::path_file(httr2::url_parse(req$url)$path)
+    state$attempts[[name]] <- state$attempts[[name]] + 1L
+    status <- if (name == "bad" && state$attempts[[name]] == 1L) 403L else 200L
     # The failed response deliberately has the expected byte count.
     httr2::response(status, body = charToRaw("data"))
   })
-  assets <- lapply(c("good", "bad"), function(name) {
+  assets <- purrr::map(names(state$attempts), function(name) {
     staged_asset("data", name, paste0("https://storage.example.test/", name), 4)
   })
   expect_error(ensure_staged_assets(assets, cache, 1L), class = "httr2_error")
+  expect_identical(state$attempts, c(good = 1L, bad = 1L, pending = 0L))
   expect_equal(transport$failed_bodies, 1L)
   expect_true(fs::file_exists(fs::path(cache, assets[[1]]$name)))
   expect_false(fs::file_exists(fs::path(cache, assets[[2]]$name)))
   expect_length(fs::dir_ls(cache, all = TRUE), 1L)
 
   result <- ensure_staged_assets(assets, cache, 1L)
-  expect_identical(attempts, c(good = 1L, bad = 2L))
-  expect_equal(result$downloaded, 1L)
+  expect_identical(state$attempts, c(good = 1L, bad = 2L, pending = 1L))
+  expect_equal(result$downloaded, 2L)
   expect_equal(result$cache_hits, 1L)
-  expect_length(fs::dir_ls(cache, all = TRUE), 2L)
+  expect_length(fs::dir_ls(cache, all = TRUE), 3L)
+})
+
+test_that("partial parallel results retain only confirmed successes", {
+  cache <- withr::local_tempdir()
+  failure <- rlang::error_cnd("httr2_failure", message = "Connection lost")
+  assets <- purrr::map(c("failed", "complete", "pending"), function(name) {
+    staged_asset("data", name, paste0("https://storage.example.test/", name))
+  })
+  testthat::local_mocked_bindings(
+    req_perform_parallel = function(reqs, paths, ...) {
+      # A complete-looking file without a successful response is not reusable.
+      purrr::walk(paths, function(path) writeBin(charToRaw("data"), path))
+      list(failure, httr2::response(200L), NULL)
+    },
+    .package = "httr2"
+  )
+
+  caught <- tryCatch(ensure_staged_assets(assets, cache, 4L), error = identity)
+  expect_identical(caught, failure)
+  expect_identical(fs::path_file(fs::dir_ls(cache, all = TRUE)), "complete.parquet")
+})
+
+test_that("interrupted queues retain successes but still report cancellation", {
+  cache <- withr::local_tempdir()
+  assets <- purrr::map(c("complete", "pending"), function(name) {
+    staged_asset("data", name, paste0("https://storage.example.test/", name), 4)
+  })
+  testthat::local_mocked_bindings(
+    req_perform_parallel = function(reqs, paths, ...) {
+      purrr::walk(paths, function(path) writeBin(charToRaw("data"), path))
+      list(httr2::response(200L), NULL)
+    },
+    .package = "httr2"
+  )
+
+  expect_error(
+    ensure_staged_assets(assets, cache, 4L),
+    class = "delta_sharing_cancelled"
+  )
+  expect_identical(fs::path_file(fs::dir_ls(cache, all = TRUE)), "complete.parquet")
 })
 
 test_that("failed HTTP bodies are discarded even without a declared size", {

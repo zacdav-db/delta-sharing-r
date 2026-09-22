@@ -304,19 +304,6 @@ pub(crate) fn cdf_reader(
                 physical_columns.push(cdf_column.to_string());
             }
         }
-        let metadata_only = columns
-            .iter()
-            .all(|column| CDF_COLUMNS.contains(&column.to_lowercase().as_str()));
-        if metadata_only {
-            let hidden = changes
-                .schema()
-                .fields()
-                .find(|field| !CDF_COLUMNS.contains(&field.name().to_lowercase().as_str()))
-                .ok_or_else(|| {
-                    "Delta Kernel CDF metadata-only projection requires one data column".to_string()
-                })?;
-            physical_columns.push(hidden.name().to_string());
-        }
         physical_logical_schema = changes
             .schema()
             .project(&physical_columns)
@@ -325,12 +312,54 @@ pub(crate) fn cdf_reader(
             .then(|| (0..columns.len()).collect::<Vec<_>>());
     }
 
-    let scan = changes
+    let mut scan = changes
         .clone()
         .scan_builder()
         .with_schema(physical_logical_schema)
         .build()
         .map_err(|_| "Delta Kernel CDF scan planning failed".to_string())?;
+    // Inferred add/remove changes read Parquet without the CDF metadata
+    // columns. Partition-only and metadata-only projections can therefore
+    // have no physical fields. Find a real data column, as for snapshots,
+    // and remove it again after Kernel reconstructs the logical batch.
+    if scan.physical_schema().num_fields() == 0 {
+        let physical_columns: Vec<String> = scan
+            .logical_schema()
+            .fields()
+            .map(|field| field.name().to_string())
+            .collect();
+        let selected: HashSet<String> = physical_columns
+            .iter()
+            .map(|column| column.to_lowercase())
+            .collect();
+        let mut replacement = None;
+        for field in changes.schema().fields() {
+            if selected.contains(&field.name().to_lowercase()) {
+                continue;
+            }
+            let mut candidate_columns = physical_columns.clone();
+            candidate_columns.push(field.name().to_string());
+            let candidate = changes
+                .clone()
+                .scan_builder()
+                .with_schema(
+                    changes
+                        .schema()
+                        .project(&candidate_columns)
+                        .map_err(|_| "Delta Kernel CDF projection validation failed".to_string())?,
+                )
+                .build()
+                .map_err(|_| "Delta Kernel CDF scan planning failed".to_string())?;
+            if candidate.physical_schema().num_fields() > 0 {
+                replacement = Some(candidate);
+                break;
+            }
+        }
+        scan = replacement.ok_or_else(|| {
+            "Delta Kernel CDF projection requires one physical data column".to_string()
+        })?;
+        output_projection = Some((0..output_logical_schema.num_fields()).collect());
+    }
     let physical_arrow_schema: Schema = scan
         .logical_schema()
         .as_ref()

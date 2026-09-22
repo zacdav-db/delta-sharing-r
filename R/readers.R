@@ -5,6 +5,33 @@
 # SharingReader holds that shared behaviour; the subclasses differ only in how
 # they validate options and open the native stream.
 
+# Check projection shape before requests; Kernel still resolves schema names.
+validate_read_columns <- function(columns, operation) {
+  if (is.null(columns)) {
+    return(invisible(NULL))
+  }
+  if (
+    !is.character(columns) ||
+      length(columns) == 0L ||
+      anyNA(columns) ||
+      any(!nzchar(columns))
+  ) {
+    abort(
+      "{.arg columns} must be NULL or a character vector of non-empty names.",
+      type = "validation",
+      operation = operation
+    )
+  }
+  if (anyDuplicated(tolower(columns))) {
+    abort(
+      "{.arg columns} must not contain duplicate Delta column names (ignoring case).",
+      type = "validation",
+      operation = operation
+    )
+  }
+  invisible(NULL)
+}
+
 #' Shared Delta Sharing reader
 #'
 #' Internal base class for snapshot and change readers. Public readers inherit
@@ -15,7 +42,7 @@ SharingReader <- R6::R6Class(
   "SharingReader",
   cloneable = FALSE,
   public = list(
-    #' @description Materialize as an Arrow table (requires `{arrow}`).
+    #' @description Materialize as an Arrow table.
     #' @param batch_size Rows per batch.
     #' @return An `arrow::Table`.
     to_arrow = function(batch_size = 65536L) {
@@ -24,8 +51,8 @@ SharingReader <- R6::R6Class(
       )
     },
 
-    #' @description Expose a lazy Arrow record batch reader (requires
-    #'   `{arrow}`). The reader owns the underlying stream; consume it or call
+    #' @description Expose a lazy Arrow record batch reader.
+    #'   The reader owns the underlying stream; consume it or call
     #'   its `Close()` method.
     #' @param batch_size Rows per batch.
     #' @return An `arrow::RecordBatchReader`.
@@ -35,7 +62,12 @@ SharingReader <- R6::R6Class(
       )
     },
 
-    #' @description Materialize as a tibble.
+    #' @description Materialize as a tibble using Arrow's R type conversion.
+    #'   BIGINT columns become `bit64::integer64`, including small values,
+    #'   empty results, and nested columns. A valid BIGINT value of
+    #'   -9223372036854775808 raises a conversion error because bit64 reserves
+    #'   that value for `NA`; use `to_arrow()` or `to_arrow_reader()` to
+    #'   retain it. Decimal columns use Arrow's default double conversion.
     #' @param batch_size Rows per batch.
     #' @return A `tibble::tbl_df`.
     to_tibble = function(batch_size = 65536L) {
@@ -163,13 +195,7 @@ SharingSnapshot <- R6::R6Class(
           operation = "snapshot"
         )
       }
-      if (!is.null(columns) && !is.character(columns)) {
-        abort(
-          "{.arg columns} must be a character vector.",
-          type = "validation",
-          operation = "snapshot"
-        )
-      }
+      validate_read_columns(columns, "snapshot")
       if (!is.null(predicate) && !is.list(predicate)) {
         abort(
           "{.arg predicate} must be a list.",
@@ -239,13 +265,7 @@ SharingChanges <- R6::R6Class(
       cache_path,
       concurrency
     ) {
-      if (!is.null(columns) && !is.character(columns)) {
-        abort(
-          "{.arg columns} must be a character vector.",
-          type = "validation",
-          operation = "changes"
-        )
-      }
+      validate_read_columns(columns, "changes")
       private$profile <- profile
       private$auth <- auth
       private$identifier <- identifier
