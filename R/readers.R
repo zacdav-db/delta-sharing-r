@@ -15,7 +15,7 @@ SharingReader <- R6::R6Class(
   "SharingReader",
   cloneable = FALSE,
   public = list(
-    #' @description Materialize as an Arrow table (requires `{arrow}`).
+    #' @description Materialize as an Arrow table.
     #' @param batch_size Rows per batch.
     #' @return An `arrow::Table`.
     to_arrow = function(batch_size = 65536L) {
@@ -24,8 +24,8 @@ SharingReader <- R6::R6Class(
       )
     },
 
-    #' @description Expose a lazy Arrow record batch reader (requires
-    #'   `{arrow}`). The reader owns the underlying stream; consume it or call
+    #' @description Expose a lazy Arrow record batch reader.
+    #'   The reader owns the underlying stream; consume it or call
     #'   its `Close()` method.
     #' @param batch_size Rows per batch.
     #' @return An `arrow::RecordBatchReader`.
@@ -35,7 +35,12 @@ SharingReader <- R6::R6Class(
       )
     },
 
-    #' @description Materialize as a tibble.
+    #' @description Materialize as a tibble using Arrow's R type conversion.
+    #'   BIGINT columns become `bit64::integer64`, including small values,
+    #'   empty results, and nested columns. A valid BIGINT value of
+    #'   -9223372036854775808 raises a conversion error because bit64 reserves
+    #'   that value for `NA`; use `to_arrow()` or `to_arrow_reader()` to
+    #'   retain it. Decimal columns use Arrow's default double conversion.
     #' @param batch_size Rows per batch.
     #' @return A `tibble::tbl_df`.
     to_tibble = function(batch_size = 65536L) {
