@@ -9,6 +9,10 @@ compatibility aliases or migration shims for earlier package versions.
   projection, limits, predicate hints, version bounds, and timestamp bounds.
 - Added direct Arrow stream, Arrow reader, Arrow table, tibble, and data-frame
   materializers, including DuckDB interoperability.
+- BIGINT columns automatically use `bit64::integer64` in `to_tibble()` and
+  `to_data_frame()`, including empty and nested results. Arrow is a required
+  dependency. Valid -9223372036854775808 values raise a clear error instead of
+  becoming missing; Arrow materializers retain that value.
 - Added support for bearer, basic, OAuth client-credentials, and private-key
   JWT profiles.
 - Added deletion-vector, column-mapping, partitioned, nested, and logical-type
