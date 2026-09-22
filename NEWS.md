@@ -3,6 +3,9 @@
 This release is a clean redesign of `delta.sharing`; it does not provide
 compatibility aliases or migration shims for earlier package versions.
 
+- Reject invalid batch sizes and invalid or duplicate projection names before
+  read requests. Zero-row snapshots resolve their schema without downloading
+  data files, even when the server returns files despite the zero limit hint.
 - Declared minimum versions for the cli, httr2, purrr, rlang, and testthat APIs
   already used by the package and its tests.
 - Added an R6 client, table, snapshot, and change data feed interface for
