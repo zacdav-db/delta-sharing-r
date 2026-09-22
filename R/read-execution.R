@@ -431,30 +431,14 @@ sharing_changes_stream <- function(
 
 # ---- Materializers ---------------------------------------------------------
 
-require_arrow <- function(operation) {
-  if (!requireNamespace("arrow", quietly = TRUE)) {
-    abort(
-      "The optional package {.pkg arrow} is required for {.fn {operation}}.",
-      type = "unsupported",
-      operation = operation,
-      feature = "arrow_package"
-    )
-  }
-}
-
-sharing_stream_to_arrow_reader <- function(
-  stream,
-  operation = "to_arrow_reader"
-) {
-  require_arrow(operation)
+sharing_stream_to_arrow_reader <- function(stream) {
   arrow::RecordBatchReader$import_from_c(stream)
 }
 
 sharing_stream_to_arrow <- function(stream) {
-  require_arrow("to_arrow")
   force(stream)
   on.exit(release_materializer_stream(stream), add = TRUE)
-  reader <- sharing_stream_to_arrow_reader(stream, operation = "to_arrow")
+  reader <- sharing_stream_to_arrow_reader(stream)
   # Import moves stream ownership into the Arrow reader. Closing the original
   # R pointer alone cannot release it after an eager read.
   on.exit(try(reader$Close(), silent = TRUE), add = TRUE)
@@ -468,8 +452,24 @@ sharing_stream_to_arrow <- function(stream) {
 sharing_stream_to_tibble <- function(stream) {
   force(stream)
   on.exit(release_materializer_stream(stream), add = TRUE)
+  previous <- options(arrow.int64_downcast = FALSE)
+  on.exit(options(previous), add = TRUE)
+  reader <- with_native_stream_conditions(
+    sharing_stream_to_arrow_reader(stream),
+    operation = "read_arrow_stream",
+    stream = stream
+  )
+  # Import moves ownership to the reader. Close it before restoring options,
+  # including when reading or conversion fails.
+  on.exit(try(reader$Close(), silent = TRUE), add = TRUE, after = FALSE)
   with_native_stream_conditions(
-    tibble::as_tibble(nanoarrow::convert_array_stream(stream)),
+    {
+      table <- reader$read_table()
+      for (column in table$columns) {
+        check_arrow_integer64(column)
+      }
+      tibble::as_tibble(as.data.frame(table))
+    },
     operation = "read_arrow_stream",
     stream = stream
   )
