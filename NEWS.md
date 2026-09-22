@@ -3,6 +3,8 @@
 This release is a clean redesign of `delta.sharing`; it does not provide
 compatibility aliases or migration shims for earlier package versions.
 
+- Declared minimum versions for the cli, httr2, purrr, rlang, and testthat APIs
+  already used by the package and its tests.
 - Added an R6 client, table, snapshot, and change data feed interface for
   discovery, metadata inspection, and reads.
 - Added Delta Kernel-backed snapshot and change data feed reads with

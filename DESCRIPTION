@@ -21,16 +21,16 @@ Depends:
 Encoding: UTF-8
 Imports:
   arrow,
-  cli,
+  cli (>= 3.0.0),
   fs,
-  httr2,
+  httr2 (>= 1.2.0),
   jose,
   jsonlite,
   nanoarrow (>= 0.8.0),
   openssl,
-  purrr,
+  purrr (>= 1.0.0),
   R6,
-  rlang,
+  rlang (>= 1.2.0),
   tibble
 Suggests:
   bit64,
@@ -39,7 +39,7 @@ Suggests:
   duckdb,
   knitr,
   rmarkdown,
-  testthat (>= 3.0.0),
+  testthat (>= 3.1.7),
   withr
 VignetteBuilder: knitr
 Config/Needs/check: rcmdcheck

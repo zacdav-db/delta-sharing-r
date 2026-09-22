@@ -30,7 +30,7 @@
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
       "name": "cli",
       "relationship": "Imports",
-      "requirement": null
+      "requirement": ">= 3.0.0"
     },
     {
       "distribution": "external R package; code is not bundled",
@@ -44,7 +44,7 @@
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
       "name": "httr2",
       "relationship": "Imports",
-      "requirement": null
+      "requirement": ">= 1.2.0"
     },
     {
       "distribution": "external R package; code is not bundled",
@@ -79,14 +79,14 @@
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
       "name": "purrr",
       "relationship": "Imports",
-      "requirement": null
+      "requirement": ">= 1.0.0"
     },
     {
       "distribution": "external R package; code is not bundled",
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
       "name": "rlang",
       "relationship": "Imports",
-      "requirement": null
+      "requirement": ">= 1.2.0"
     },
     {
       "distribution": "external R package; code is not bundled",
@@ -142,7 +142,7 @@
       "license_authority": "the installed dependency's DESCRIPTION License field and license files",
       "name": "testthat",
       "relationship": "Suggests",
-      "requirement": ">= 3.0.0"
+      "requirement": ">= 3.1.7"
     },
     {
       "distribution": "external R package; code is not bundled",
