@@ -7,6 +7,8 @@ compatibility aliases or migration shims for earlier package versions.
   discovery, metadata inspection, and reads.
 - Added Delta Kernel-backed snapshot and change data feed reads with
   projection, limits, predicate hints, version bounds, and timestamp bounds.
+- Fixed partition-only and metadata-only CDF projections for inferred insert
+  and delete changes, including tables whose first columns are partitions.
 - Added direct Arrow stream, Arrow reader, Arrow table, tibble, and data-frame
   materializers, including DuckDB interoperability.
 - BIGINT columns automatically use `bit64::integer64` in `to_tibble()` and
