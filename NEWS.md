@@ -11,6 +11,9 @@ compatibility aliases or migration shims for earlier package versions.
   and delete changes, including tables whose first columns are partitions.
 - Added direct Arrow stream, Arrow reader, Arrow table, tibble, and data-frame
   materializers, including DuckDB interoperability.
+- Eager Arrow materialization now closes its imported reader on success or
+  error instead of waiting for garbage collection. Returned table buffers
+  remain valid after reader cleanup.
 - BIGINT columns automatically use `bit64::integer64` in `to_tibble()` and
   `to_data_frame()`, including empty and nested results. Arrow is a required
   dependency. Valid -9223372036854775808 values raise a clear error instead of
