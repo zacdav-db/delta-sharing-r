@@ -270,3 +270,91 @@ test_that("incomplete downloads are not published", {
   expect_false(fs::file_exists(fs::path(cache, paste0(file_id, ".parquet"))))
   expect_length(fs::dir_ls(cache, fail = FALSE), 0L)
 })
+
+test_that("indexed staging handles empty file lists", {
+  cache <- withr::local_tempdir()
+  for (format in c("delta", "parquet")) {
+    expect_identical(
+      stage_file_wrappers(list(), format, cache, 4L, "read"),
+      list(actions = list(), downloaded = 0L, cache_hits = 0L)
+    )
+  }
+})
+
+test_that("indexed Delta paths preserve actions, duplicates and deletion vectors", {
+  cache <- withr::local_tempdir()
+  source <- withr::local_tempfile()
+  writeBin(charToRaw("data"), source)
+  original_action <- list(
+    path = local_file_url(source),
+    size = 4,
+    partitionValues = list(region = "west"),
+    stats = '{"numRecords":1}',
+    deletionVector = list(
+      storageType = "p",
+      pathOrInlineDv = local_file_url(source),
+      offset = 0,
+      sizeInBytes = 4,
+      cardinality = 1
+    )
+  )
+  # Repeated data/DV IDs share files; their distinct extensions stay distinct.
+  files <- purrr::map(c("add", "remove", "cdc"), function(field) {
+    list(
+      id = if (field == "cdc") "other" else "shared",
+      deletionVectorFileId = "shared",
+      size = 4,
+      deltaSingleAction = stats::setNames(list(original_action), field)
+    )
+  })
+  files <- c(files, files[1], list(list(
+    deltaSingleAction = list(commitInfo = list(operation = "WRITE"))
+  )))
+  original_files <- files
+  asset_names <- c("shared.parquet", "shared.bin", "other.parquet")
+  paths <- stats::setNames(
+    purrr::map(fs::path(cache, asset_names), local_file_url),
+    asset_names
+  )
+  # The old named-list lookup is the reference for exact output equality.
+  expected <- purrr::map(
+    files, rewrite_staged_file, "delta", "changes", paths = paths
+  )
+  result <- stage_file_wrappers(files, "delta", cache, 4L, "changes")
+
+  expect_identical(result$actions, expected)
+  expect_identical(files, original_files)
+  expect_equal(result$downloaded, 3L)
+  expect_equal(result$cache_hits, 0L)
+  expect_setequal(fs::path_file(fs::dir_ls(cache)), asset_names)
+  cached <- stage_file_wrappers(files, "delta", cache, 4L, "changes")
+  expect_identical(cached$actions, expected)
+  expect_equal(cached$downloaded, 0L)
+  expect_equal(cached$cache_hits, 3L)
+})
+
+test_that("indexed Parquet paths preserve synthesized actions and order", {
+  cache <- withr::local_tempdir()
+  source <- withr::local_tempfile()
+  writeBin(charToRaw("data"), source)
+  files <- purrr::map(c("second", "first", "second"), function(id) {
+    list(
+      id = id,
+      url = local_file_url(source),
+      size = 4,
+      partitionValues = list(region = "east"),
+      stats = '{"numRecords":1}'
+    )
+  })
+  asset_names <- c("second.parquet", "first.parquet")
+  paths <- stats::setNames(
+    purrr::map(fs::path(cache, asset_names), local_file_url),
+    asset_names
+  )
+  expected <- purrr::map(files, rewrite_staged_file, "parquet", "read", paths)
+  result <- stage_file_wrappers(files, "parquet", cache, 4L, "read")
+
+  expect_identical(result$actions, expected)
+  expect_equal(result$downloaded, 2L)
+  expect_equal(result$cache_hits, 0L)
+})

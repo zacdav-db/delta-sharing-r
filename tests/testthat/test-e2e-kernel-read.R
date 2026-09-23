@@ -44,7 +44,7 @@ test_that("kernel reads a local table to a data frame", {
   expect_equal(names(df), c("id", "group", "value", "active"))
   # two parquet files (3 + 4 rows) read as one table
   expect_equal(nrow(df), 7L)
-  expect_type(df$id, "double")
+  expect_s3_class(df$id, "integer64")
   expect_type(df$group, "character")
   expect_type(df$active, "logical")
   # row content survives the round trip
