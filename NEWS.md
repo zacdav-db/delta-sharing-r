@@ -3,6 +3,8 @@
 This release is a clean redesign of `delta.sharing`; it does not provide
 compatibility aliases or migration shims for earlier package versions.
 
+- Retain verified completed downloads when another asset fails, so retrying a
+  read reuses those files. Failed responses and incomplete files are discarded.
 - Reject invalid batch sizes and invalid or duplicate projection names before
   read requests. Zero-row snapshots resolve their schema without downloading
   data files, even when the server returns files despite the zero limit hint.
