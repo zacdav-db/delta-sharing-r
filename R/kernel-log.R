@@ -64,17 +64,9 @@ synthetic_file_action <- function(file, response_format, operation) {
 # Remove a private log if its writer or native stream constructor fails.
 # Cleanup must preserve the original condition, including user interrupts.
 with_failed_log_cleanup <- function(root, code) {
-  complete <- FALSE
-  on.exit(
-    {
-      if (!complete) {
-        try(fs::dir_delete(root), silent = TRUE)
-      }
-    },
-    add = TRUE
-  )
+  on.exit(try(fs::dir_delete(root), silent = TRUE))
   result <- force(code)
-  complete <- TRUE
+  on.exit(NULL) # Keep the log once preparation succeeds.
   result
 }
 

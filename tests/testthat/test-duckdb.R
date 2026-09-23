@@ -1,9 +1,11 @@
-test_that("DuckDB queries lazy snapshot readers with default Arrow threads", {
+test_that("DuckDB queries lazy snapshot readers", {
   skip_if_not_installed("arrow")
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
 
-  withr::local_options(arrow.use_threads = TRUE)
+  # A one-pass reader must be pulled serially; DuckDB can still execute the
+  # remainder of the query in parallel.
+  withr::local_options(arrow.use_threads = FALSE)
 
   stream <- native_snapshot_stream(
     fixture_table("local-table"),
@@ -11,7 +13,7 @@ test_that("DuckDB queries lazy snapshot readers with default Arrow threads", {
   )
   reader <- sharing_stream_to_arrow_reader(stream)
   withr::defer(reader$Close())
-  connection <- DBI::dbConnect(duckdb::duckdb())
+  connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
   withr::defer(DBI::dbDisconnect(connection))
   duckdb::duckdb_register_arrow(connection, "shared_orders", reader)
   withr::defer(
@@ -41,7 +43,7 @@ test_that("DuckDB queries eager Arrow tables", {
   table <- sharing_stream_to_arrow(
     native_snapshot_stream(fixture_table("local-table"))
   )
-  connection <- DBI::dbConnect(duckdb::duckdb())
+  connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
   withr::defer(DBI::dbDisconnect(connection))
   duckdb::duckdb_register_arrow(connection, "shared_orders", table)
   withr::defer(
@@ -93,7 +95,7 @@ test_that("DuckDB early completion releases the Arrow stream", {
     )
     reader <- sharing_stream_to_arrow_reader(stream)
     withr::defer(reader$Close())
-    connection <- DBI::dbConnect(duckdb::duckdb())
+    connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
     withr::defer(
       if (DBI::dbIsValid(connection)) {
         DBI::dbDisconnect(connection)
@@ -125,6 +127,8 @@ test_that("DuckDB queries CDF metadata columns", {
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
 
+  withr::local_options(arrow.use_threads = FALSE)
+
   stream <- native_cdf_stream(
     fixture_table("cdf"),
     start_version = 1,
@@ -132,7 +136,7 @@ test_that("DuckDB queries CDF metadata columns", {
   )
   reader <- sharing_stream_to_arrow_reader(stream)
   withr::defer(reader$Close())
-  connection <- DBI::dbConnect(duckdb::duckdb())
+  connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
   withr::defer(DBI::dbDisconnect(connection))
   duckdb::duckdb_register_arrow(connection, "shared_changes", reader)
   withr::defer(

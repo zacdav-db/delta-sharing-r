@@ -136,12 +136,29 @@ download_staged_assets <- function(assets, targets, concurrency) {
     add = TRUE
   )
 
+  publish <- function(index) {
+    fs::file_chmod(temporary[[index]], "u=rw,go=")
+    # Verified assets are independently reusable if a sibling later fails.
+    fs::file_move(temporary[[index]], targets[[index]])
+  }
+  incomplete <- function() {
+    abort(
+      "A shared data file was incomplete.",
+      type = "protocol",
+      operation = "read"
+    )
+  }
+
   local <- purrr::map(assets, function(asset) local_file_path(asset$url))
   local_index <- which(!purrr::map_lgl(local, is.null))
   remote_index <- setdiff(seq_along(assets), local_index)
 
   purrr::walk(local_index, function(index) {
     fs::file_copy(local[[index]], temporary[[index]])
+    if (!staged_asset_is_complete(temporary[[index]], assets[[index]])) {
+      incomplete()
+    }
+    publish(index)
   })
 
   if (length(remote_index) > 0L) {
@@ -160,12 +177,13 @@ download_staged_assets <- function(assets, targets, concurrency) {
       )
     }
 
-    httr2::req_perform_parallel(
+    # Stop the queue on error, but retain completed results before rethrowing.
+    responses <- httr2::req_perform_parallel(
       purrr::map(assets[remote_index], function(asset) {
         download_request(asset$url)
       }),
       paths = temporary[remote_index],
-      on_error = "stop",
+      on_error = "return",
       progress = if (interactive()) {
         list(
           format = paste(
@@ -179,22 +197,33 @@ download_staged_assets <- function(assets, targets, concurrency) {
       },
       max_active = concurrency
     )
+    succeeded <- purrr::map_lgl(responses, inherits, "httr2_response")
+    complete <- succeeded &
+      purrr::map2_lgl(
+        temporary[remote_index],
+        assets[remote_index],
+        staged_asset_is_complete
+      )
+    purrr::walk(remote_index[complete], publish)
+
+    # Never infer success from the temporary file alone: an HTTP error body
+    # may have exactly the expected size (or the asset may have no size).
+    error <- purrr::detect(responses, inherits, "error")
+    if (!is.null(error)) {
+      stop(error)
+    }
+    if (any(succeeded & !complete)) {
+      incomplete()
+    }
+    if (!all(succeeded)) {
+      abort(
+        "The shared file download was interrupted.",
+        type = "cancelled",
+        operation = "read"
+      )
+    }
   }
 
-  complete <- purrr::map2_lgl(temporary, assets, staged_asset_is_complete)
-  if (!all(complete)) {
-    abort(
-      "A shared data file was incomplete.",
-      type = "protocol",
-      operation = "read"
-    )
-  }
-
-  purrr::walk2(temporary, targets, function(source, target) {
-    fs::file_chmod(source, "u=rw,go=")
-    # This atomically publishes the file without copying its contents again.
-    fs::file_move(source, target)
-  })
   invisible(NULL)
 }
 
@@ -267,13 +296,16 @@ stage_file_wrappers <- function(
     operation = operation
   ))
   staged <- ensure_staged_assets(assets, cache_path, concurrency)
+  # Each action needs one or two ID lookups. A named list scans from the
+  # beginning on every lookup, making large manifests quadratic.
+  paths <- list2env(staged$paths, hash = TRUE, parent = emptyenv())
   list(
     actions = purrr::map(
       files,
       rewrite_staged_file,
       response_format = response_format,
       operation = operation,
-      paths = staged$paths
+      paths = paths
     ),
     downloaded = staged$downloaded,
     cache_hits = staged$cache_hits

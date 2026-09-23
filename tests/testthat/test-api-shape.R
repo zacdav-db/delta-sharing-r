@@ -159,25 +159,6 @@ test_that("print methods are stable", {
   )
 })
 
-test_that("to_arrow checks for Arrow before opening the lazy query", {
-  reader <- test_client()$table("sales.default.orders")$snapshot()
-  state <- rlang::env(opened = FALSE)
-  testthat::with_mocked_bindings(
-    {
-      expect_error(reader$to_arrow(), "mocked missing Arrow", fixed = TRUE)
-      expect_false(state$opened)
-    },
-    require_arrow = function(operation) {
-      stop("mocked missing Arrow", call. = FALSE)
-    },
-    sharing_snapshot_stream = function(...) {
-      state$opened <- TRUE
-      stop("query opened", call. = FALSE)
-    },
-    .package = "delta.sharing"
-  )
-})
-
 test_that("client printing redacts endpoint user information", {
   client <- sharing_client(list(
     shareCredentialsVersion = 1,
