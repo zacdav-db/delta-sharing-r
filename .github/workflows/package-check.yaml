@@ -147,6 +147,13 @@ jobs:
             exit 1
           fi
 
+          # CRAN approved 15.9 MB for this release's bundled Rust sources.
+          if (( $(stat -c %s "${archives[0]}") > 15900000 )); then
+            echo "Source package exceeds the approved 15.9 MB size." >&2
+            exit 1
+          fi
+          sha256sum "${archives[0]}"
+
           contents="$(tar -tzf "${archives[0]}")"
           for required in \
             src/rust/vendor.tar.xz \
