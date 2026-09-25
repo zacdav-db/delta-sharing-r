@@ -42,9 +42,10 @@ listed target. Native builds are still validated by the package-check matrix;
 dependency resolution alone is not a compilation test. The archive is ordered
 and timestamp-normalized for reproducible generation.
 
-CRAN accepted the reduced 15.9 MB source-package approach on 21 September 2026.
-CI keeps subsequent release candidates within that size. The archive remains
-self-contained; there is no dependency download during installation.
+We requested a CRAN source-size exception after trimming the bundled Rust
+sources as far as practical. CI reports the archive size without enforcing a
+fixed ceiling. The archive remains self-contained; there is no dependency
+download during installation.
 
 `dependency_licenses.py` rebuilds the installed Rust license inventory and
 deduplicated legal-text bundle from the verified archive. Commit those two

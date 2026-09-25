@@ -10,8 +10,8 @@ All 981 test assertions passed, with no warnings or skips.
 
 ## Resubmission
 
-The source package is 15.88 MB, within the 15.9 MB size exception approved by
-Uwe Ligges. Bundled Rust sources allow installation with Cargo `--frozen`
+After trimming the bundled Rust sources as far as practical, we requested a
+source-size exception. Bundled sources allow installation with Cargo `--frozen`
 and without network access; compilation remains limited to two jobs.
 
 The previous reviewer-requested license and authorship corrections remain
