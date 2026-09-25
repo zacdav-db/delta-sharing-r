@@ -234,8 +234,17 @@ ensure_staged_assets <- function(assets, cache_path, concurrency) {
     return(list(paths = list(), downloaded = 0L, cache_hits = 0L))
   }
 
-  # A response can reference the same immutable server asset more than once.
   asset_names <- purrr::map_chr(assets, "name")
+  # Shared file IDs are filenames, not paths.
+  if (any(grepl("[/\\\\:]", asset_names))) {
+    abort(
+      "A shared file ID contains a path separator or colon.",
+      type = "protocol",
+      operation = "read"
+    )
+  }
+
+  # A response can reference the same immutable server asset more than once.
   keep <- !duplicated(asset_names)
   assets <- assets[keep]
   asset_names <- asset_names[keep]

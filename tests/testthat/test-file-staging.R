@@ -220,6 +220,83 @@ test_that("a missing server file ID is a protocol error", {
   )
 })
 
+test_that("file and deletion-vector IDs cannot contain path syntax", {
+  root <- withr::local_tempdir()
+  cache <- fs::path(root, "cache")
+  source <- fs::path(root, "source")
+  writeBin(charToRaw("data"), source)
+  ids <- c(
+    "../outside", "..\\outside", as.character(fs::path(root, "absolute")),
+    "nested/file", "nested\\file", "file:stream"
+  )
+
+  purrr::walk(c("data", "deletion-vector"), function(kind) {
+    purrr::walk(ids, function(id) {
+      asset <- staged_asset(kind, id, local_file_url(source), size = 4)
+      expect_error(
+        ensure_staged_assets(list(asset), cache, 4L),
+        "path separator or colon",
+        class = "delta_sharing_protocol_error"
+      )
+    })
+  })
+  expect_length(fs::dir_ls(cache, all = TRUE), 0L)
+})
+
+test_that("invalid IDs are rejected before cache files are touched", {
+  root <- withr::local_tempdir()
+  cache <- fs::path(root, "cache")
+  fs::dir_create(cache)
+  source <- fs::path(root, "source")
+  writeBin(charToRaw("download"), source)
+  kept <- fs::path(cache, "kept.parquet")
+  outside <- fs::path(root, c("outside.parquet", "outside.bin"))
+  sentinel <- charToRaw("keep")
+  purrr::walk(c(kept, outside), function(path) writeBin(sentinel, path))
+
+  purrr::walk(c("data", "deletion-vector"), function(kind) {
+    # The first asset would replace a short cached file if staging began.
+    assets <- list(
+      staged_asset("data", "kept", local_file_url(source), size = 8),
+      staged_asset(kind, "../outside", local_file_url(source), size = 8)
+    )
+    expect_error(
+      ensure_staged_assets(assets, cache, 4L),
+      class = "delta_sharing_protocol_error"
+    )
+    purrr::walk(c(kept, outside), function(path) {
+      expect_identical(readBin(path, "raw", 100), sentinel)
+    })
+    expect_identical(fs::path_file(fs::dir_ls(cache, all = TRUE)), "kept.parquet")
+  })
+})
+
+test_that("ordinary IDs retain their filenames and cache reuse", {
+  cache <- withr::local_tempdir()
+  source <- withr::local_tempfile()
+  writeBin(charToRaw("data"), source)
+  ids <- c(
+    "591723a8-6a27-4240-a90e-57426f4736d2",
+    paste(rep("d", 64), collapse = ""),
+    "file_123-abc", "part.001"
+  )
+  assets <- purrr::list_flatten(purrr::map(c("data", "deletion-vector"), function(kind) {
+    purrr::map(ids, function(id) staged_asset(kind, id, local_file_url(source), 4))
+  }))
+  first <- ensure_staged_assets(assets, cache, 4L)
+  fs::file_delete(source)
+  second <- ensure_staged_assets(assets, cache, 4L)
+
+  expect_setequal(
+    fs::path_file(fs::dir_ls(cache)),
+    c(paste0(ids, ".parquet"), paste0(ids, ".bin"))
+  )
+  expect_equal(first$downloaded, 8L)
+  expect_equal(second$downloaded, 0L)
+  expect_equal(second$cache_hits, 8L)
+  expect_identical(first$paths, second$paths)
+})
+
 test_that("HTTP failures do not publish partial cache files or credentials", {
   identifier <- staging_identifier("failed-download")
   cache <- local_empty_cache(identifier)
