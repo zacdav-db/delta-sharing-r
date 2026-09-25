@@ -126,13 +126,14 @@ summary
 #> 2    1    35   30.17500
 
 duckdb::duckdb_unregister_arrow(con, "housing")
-reader$Close()
 DBI::dbDisconnect(con)
 ```
 
+Once registered, let Arrow manage the reader's lifetime: do not call
+`reader$Close()` while a scanner may still be reading ahead.
+
 Use `snapshot$to_arrow()` instead when the same result will be queried more
-than once. This materializes the result in Arrow memory and does not require
-`Close()`.
+than once. This materializes the result in Arrow memory.
 
 ## Performance
 

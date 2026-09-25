@@ -201,17 +201,20 @@ summary <- withr::with_options(
 )
 
 duckdb::duckdb_unregister_arrow(con, "orders")
-reader$Close()
 DBI::dbDisconnect(con)
 ```
+
+Let Arrow manage the registered reader's lifetime. Calling `reader$Close()`
+directly can release its stream while the scanner is still reading ahead,
+including after a SQL query returns early (for example, with `LIMIT`).
 
 Arrow registration does not copy the full source into DuckDB. Only the final
 query result returned by `dbGetQuery()` is collected into R memory. Use SQL to
 filter or aggregate the data to a manageable result; collecting a very large
 final result can still exhaust R's memory.
 
-The local Arrow option serializes pulls from the one-pass reader. DuckDB can
-still execute the rest of the query in parallel.
+The local Arrow option disables parallel scan execution; background read-ahead
+can still occur. DuckDB can execute the rest of the query in parallel.
 
 See DuckDB's
 [larger-than-memory documentation](https://duckdb.org/docs/current/guides/performance/how_to_tune_workloads#larger-than-memory-workloads-out-of-core-processing)

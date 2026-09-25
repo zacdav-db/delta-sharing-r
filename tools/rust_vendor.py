@@ -9,6 +9,7 @@ import json
 import lzma
 import os
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import stat
 import subprocess
@@ -29,6 +30,26 @@ replace-with = "vendored-sources"
 [source.vendored-sources]
 directory = "vendor"
 """
+
+# Retain the union, not just the build machine's dependencies.
+RELEASE_TARGETS = (
+    "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl",
+    "x86_64-apple-darwin", "aarch64-apple-darwin",
+    "x86_64-pc-windows-gnu", "aarch64-pc-windows-gnullvm",
+    "x86_64-unknown-freebsd",
+)
+DEVELOPMENT_PATHS = {
+    "tests", "test", "benches", "bench", "benchmarks", "examples",
+    "test-macros", ".github", "doc", "docs",
+}
+LEGAL_BASENAME = re.compile(
+    r"^(?:"
+    r"licen[cs]e|copying|notice|copyright|unlicense|authors?|contributors?|"
+    r"patents?|third[-_.]?party(?:[-_.]?notices?)?"
+    r")(?:[-_.].*)?$",
+    re.IGNORECASE,
+)
 
 
 class VendorError(RuntimeError):
@@ -129,6 +150,146 @@ def locked_registry_packages(lock_path: Path) -> dict[str, str]:
             raise VendorError(f"duplicate versioned vendor directory: {directory}")
         expected[directory] = checksum
     return expected
+
+
+def legal_source_files(
+    package_root: Path,
+    explicit_license_file: str | None,
+) -> list[Path]:
+    """Select the same legal/attribution files for filtering and inventory."""
+    explicit: Path | None = None
+    if explicit_license_file is not None:
+        candidate = (package_root / explicit_license_file).resolve()
+        try:
+            candidate.relative_to(package_root.resolve())
+        except ValueError as error:
+            raise VendorError(
+                f"license-file leaves package root: {explicit_license_file}"
+            ) from error
+        if not candidate.is_file():
+            raise VendorError(
+                f"declared license-file does not exist: {explicit_license_file}"
+            )
+        explicit = candidate
+
+    files: list[Path] = []
+    for candidate in package_root.rglob("*"):
+        if not candidate.is_file():
+            continue
+        try:
+            candidate.resolve().relative_to(package_root.resolve())
+        except ValueError as error:
+            raise VendorError(
+                f"legal-file link leaves package root: "
+                f"{candidate.relative_to(package_root)}"
+            ) from error
+        relative = candidate.relative_to(package_root)
+        in_license_directory = any(
+            part.lower() in ("license", "licenses") for part in relative.parts[:-1]
+        )
+        if (
+            LEGAL_BASENAME.fullmatch(candidate.name)
+            or in_license_directory
+            or (explicit is not None and candidate.resolve() == explicit)
+        ):
+            files.append(candidate)
+    return sorted(
+        set(files),
+        key=lambda item: item.relative_to(package_root).as_posix(),
+    )
+
+
+def selected_packages(vendor_root: Path) -> set[str]:
+    """Ask Cargo which locked crates are built for each release target."""
+    selected: set[str] = set()
+    for target in RELEASE_TARGETS:
+        result = subprocess.run(
+            [
+                "cargo", "tree", "--manifest-path", str(RUST_ROOT / "Cargo.toml"),
+                "--frozen", "--all-features", "--target", target,
+                "--edges", "normal,build", "--prefix", "none", "--format", "{p}",
+                "--config", 'source.crates-io.replace-with="release-vendor"',
+                "--config", f"source.release-vendor.directory={json.dumps(str(vendor_root))}",
+            ],
+            cwd=REPOSITORY_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode:
+            raise VendorError(f"Cargo dependency selection failed for {target}: {result.stderr.strip()}")
+        for line in result.stdout.splitlines():
+            match = re.match(r"([\w-]+) v([^ ]+)", line)
+            if match is None:
+                raise VendorError(f"unexpected Cargo dependency entry: {line}")
+            selected.add("-".join(match.groups()))
+    return selected
+
+
+def stub_manifest(manifest: str) -> str:
+    """Keep Cargo's resolver metadata but replace unused compilation targets."""
+    # Cargo vendor supplies normalized manifests with one table per section.
+    kept = []
+    for block in re.split(r"(?m)(?=^\[)", manifest):
+        if block.startswith(("[lib]", "[[bin]]", "[[example]]", "[[test]]", "[[bench]]")):
+            continue
+        if block.startswith("[package]"):
+            block = re.sub(r"(?m)^(build|links|default-run) = .*\n", "", block)
+            block = block.replace("[package]\n", "[package]\nbuild = false\n", 1)
+        kept.append(block)
+    result = "".join(kept).rstrip() + '\n\n[lib]\npath = "src/lib.rs"\n'
+    tomllib.loads(result)
+    return result
+
+
+def filter_package(package_root: Path, selected: bool) -> None:
+    """Trim a temporary vendored crate without discarding license evidence."""
+    manifest_path = package_root / "Cargo.toml"
+    manifest_text = manifest_path.read_text(encoding="utf-8")
+    package = tomllib.loads(manifest_text)["package"]
+    legal_files = set(legal_source_files(package_root, package.get("license-file")))
+    checksum_path = package_root / ".cargo-checksum.json"
+    checksum = json.loads(checksum_path.read_text(encoding="utf-8"))
+
+    for path in sorted(package_root.rglob("*")):
+        if not path.is_file() or path in legal_files or path == checksum_path:
+            continue
+        relative = path.relative_to(package_root)
+        if selected:
+            # zerocopy includes benchmark files in compiled documentation.
+            keep = package["name"] == "zerocopy" or relative.parts[0] not in DEVELOPMENT_PATHS
+        else:
+            keep = len(relative.parts) == 1 and (
+                path.name in ("Cargo.toml", ".cargo_vcs_info.json")
+                or path.name.upper().startswith("README")
+            )
+        if not keep:
+            path.unlink()
+
+    for path in sorted(package_root.rglob("*"), reverse=True):
+        if path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+
+    if not selected:
+        # Cargo resolves unused platforms too. Keep manifests, but fail loudly
+        # if a future dependency change tries to compile an omitted crate.
+        manifest_path.write_text(stub_manifest(manifest_text), encoding="utf-8")
+        source = package_root / "src" / "lib.rs"
+        source.parent.mkdir(exist_ok=True)
+        source.write_text(
+            'compile_error!("dependency is outside the supported release targets");\n',
+            encoding="utf-8",
+        )
+
+    # Preserve the locked registry checksum; refresh only the changed file set.
+    checksum["files"] = {
+        path.relative_to(package_root).as_posix(): sha256_file(path)
+        for path in sorted(package_root.rglob("*"))
+        if path.is_file() and path != checksum_path
+    }
+    checksum_path.write_text(
+        json.dumps(checksum, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+    )
 
 
 def verify_vendored_checksums(vendor_root: Path, lock_path: Path) -> int:
@@ -235,24 +396,20 @@ def verify_archive(archive_path: Path, config_path: Path) -> int:
                 "CARGO_TARGET_DIR": str(root / "target"),
             }
         )
-        result = subprocess.run(
-            [
-                "cargo",
-                "metadata",
-                "--manifest-path",
-                str(rust_root / "Cargo.toml"),
-                "--format-version",
-                "1",
-                "--frozen",
-                "--all-features",
-            ],
-            cwd=source_root,
-            env=environment,
-            check=False,
-            stdout=subprocess.DEVNULL,
-        )
-        if result.returncode:
-            raise VendorError("Cargo could not resolve the vendor archive offline")
+        for target in RELEASE_TARGETS:
+            result = subprocess.run(
+                [
+                    "cargo", "metadata", "--manifest-path", str(rust_root / "Cargo.toml"),
+                    "--format-version", "1", "--frozen", "--all-features",
+                    "--filter-platform", target,
+                ],
+                cwd=source_root,
+                env=environment,
+                check=False,
+                stdout=subprocess.DEVNULL,
+            )
+            if result.returncode:
+                raise VendorError(f"Cargo could not resolve the vendor archive offline for {target}")
 
         return package_count
 
@@ -284,6 +441,12 @@ def generate() -> None:
                 "cargo vendor failed; run cargo fetch --locked before generating:\n"
                 f"{result.stderr.strip()}"
             )
+
+        # Validate the original registry files before changing the temporary copy.
+        verify_vendored_checksums(vendor_root, RUST_ROOT / "Cargo.lock")
+        selected = selected_packages(vendor_root)
+        for package in sorted(vendor_root.iterdir()):
+            filter_package(package, package.name in selected)
 
         archive = root / ARCHIVE_PATH.name
         config = root / CONFIG_PATH.name

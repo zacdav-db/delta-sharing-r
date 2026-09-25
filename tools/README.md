@@ -22,6 +22,30 @@ R CMD check --as-cran --no-manual delta.sharing_*.tar.gz
 ignored by Git. Package installation extracts them temporarily and invokes
 Cargo with `--frozen`, so no network access is needed.
 
+The source bundle retains the union of runtime/build dependencies for Linux
+x86_64 and arm64 (GNU and musl), macOS x86_64 and arm64, Windows x86_64 GNU and
+arm64 GNU-LLVM, and FreeBSD x86_64. Cargo selects these dependencies from the
+locked graph with all package features enabled, independently of the host.
+Other targets are not included in the release bundle.
+
+Upstream test, example, benchmark, and documentation directories are omitted
+unless required for compilation (`zerocopy` currently needs its complete tree).
+License, notice, authorship, and patent files are always retained using the same
+selection rules as the installed license inventory. Inactive crates keep their
+resolver metadata and a compile-error stub, so using an excluded target fails
+explicitly rather than silently building an incomplete dependency. Our own
+package code, tests, and vignettes are unchanged by this filtering.
+
+Generation checks the original registry checksums before filtering, refreshes
+file checksums after filtering, and verifies frozen offline resolution for every
+listed target. Native builds are still validated by the package-check matrix;
+dependency resolution alone is not a compilation test. The archive is ordered
+and timestamp-normalized for reproducible generation.
+
+CRAN accepted the reduced 15.9 MB source-package approach on 21 September 2026.
+CI keeps subsequent release candidates within that size. The archive remains
+self-contained; there is no dependency download during installation.
+
 `dependency_licenses.py` rebuilds the installed Rust license inventory and
 deduplicated legal-text bundle from the verified archive. Commit those two
 outputs whenever `Cargo.lock` or `DESCRIPTION` changes. CI regenerates the

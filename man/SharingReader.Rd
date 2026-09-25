@@ -49,8 +49,9 @@ An \code{arrow::Table}.
 \if{latex}{\out{\hypertarget{method-SharingReader-to_arrow_reader}{}}}
 \subsection{Method \code{to_arrow_reader()}}{
 Expose a lazy Arrow record batch reader.
-The reader owns the underlying stream; consume it or call
-its \code{Close()} method.
+Consume it or call \code{Close()} when reading it directly. Once passed
+to a scanner such as DuckDB, let Arrow manage its lifetime rather
+than closing the underlying stream while it may still be in use.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SharingReader$to_arrow_reader(batch_size = 65536L)}\if{html}{\out{</div>}}
 }

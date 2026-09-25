@@ -46,13 +46,6 @@ LICENSE_BUNDLE_PATH = OUTPUT_ROOT / "rust-license-texts.tar.xz"
 LICENSE_BUNDLE_ROOT = "rust-license-texts"
 SCHEMA_VERSION = 1
 
-LEGAL_BASENAME = re.compile(
-    r"^(?:"
-    r"licen[cs]e|copying|notice|copyright|unlicense|authors?|contributors?|"
-    r"patents?|third[-_.]?party(?:[-_.]?notices?)?"
-    r")(?:[-_.].*)?$",
-    re.IGNORECASE,
-)
 R_DEPENDENCY_ENTRY = re.compile(
     r"^(?P<name>[A-Za-z][A-Za-z0-9.]*)"
     r"(?:\s*\((?P<requirement>[^)]+)\))?$"
@@ -212,52 +205,6 @@ def normalize_repository(url: str | None) -> str | None:
     return normalized
 
 
-def legal_source_files(
-    package_root: Path,
-    explicit_license_file: str | None,
-) -> list[Path]:
-    explicit: Path | None = None
-    if explicit_license_file is not None:
-        candidate = (package_root / explicit_license_file).resolve()
-        try:
-            candidate.relative_to(package_root.resolve())
-        except ValueError as error:
-            raise LicenseInventoryError(
-                f"license-file leaves package root: {explicit_license_file}"
-            ) from error
-        if not candidate.is_file():
-            raise LicenseInventoryError(
-                f"declared license-file does not exist: {explicit_license_file}"
-            )
-        explicit = candidate
-
-    files: list[Path] = []
-    for candidate in package_root.rglob("*"):
-        if not candidate.is_file():
-            continue
-        try:
-            candidate.resolve().relative_to(package_root.resolve())
-        except ValueError as error:
-            raise LicenseInventoryError(
-                f"legal-file link leaves package root: "
-                f"{candidate.relative_to(package_root)}"
-            ) from error
-        relative = candidate.relative_to(package_root)
-        in_license_directory = any(
-            part.lower() in ("license", "licenses") for part in relative.parts[:-1]
-        )
-        if (
-            LEGAL_BASENAME.fullmatch(candidate.name)
-            or in_license_directory
-            or (explicit is not None and candidate.resolve() == explicit)
-        ):
-            files.append(candidate)
-    return sorted(
-        set(files),
-        key=lambda item: item.relative_to(package_root).as_posix(),
-    )
-
-
 def vcs_revision(package_root: Path) -> str | None:
     path = package_root / ".cargo_vcs_info.json"
     if not path.is_file():
@@ -327,7 +274,7 @@ def override_file_records(
         source_root = package_roots[source_package]
         allowed = {
             path.relative_to(source_root).as_posix(): path
-            for path in legal_source_files(
+            for path in rust_vendor.legal_source_files(
                 source_root,
                 metadata_by_id[source_package].get("license_file"),
             )
@@ -476,7 +423,7 @@ def build_inventory(
                 f"Cargo package has no declared license: {identifier}"
             )
         root = package_roots[identifier]
-        legal_files = legal_source_files(root, package.get("license_file"))
+        legal_files = rust_vendor.legal_source_files(root, package.get("license_file"))
         records = [
             direct_file_record(root, path, corpus)
             for path in legal_files
@@ -771,6 +718,7 @@ def main() -> int:
             check()
     except (
         LicenseInventoryError,
+        rust_vendor.VendorError,
         OSError,
         subprocess.CalledProcessError,
         json.JSONDecodeError,
