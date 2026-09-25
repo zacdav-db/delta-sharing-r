@@ -3,8 +3,8 @@ test_that("DuckDB queries lazy snapshot readers", {
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
 
-  # A one-pass reader must be pulled serially; DuckDB can still execute the
-  # remainder of the query in parallel.
+  # Arrow may still read ahead on its I/O pool with scan threading disabled.
+  # Do not Close() a reader borrowed by that scanner; shared ownership releases it.
   withr::local_options(arrow.use_threads = FALSE)
 
   stream <- native_snapshot_stream(
@@ -12,7 +12,6 @@ test_that("DuckDB queries lazy snapshot readers", {
     batch_size = 2L
   )
   reader <- sharing_stream_to_arrow_reader(stream)
-  withr::defer(reader$Close())
   connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
   withr::defer(DBI::dbDisconnect(connection))
   duckdb::duckdb_register_arrow(connection, "shared_orders", reader)
@@ -60,12 +59,12 @@ test_that("DuckDB queries eager Arrow tables", {
   expect_gt(nrow(result), 0L)
 })
 
-test_that("DuckDB early completion releases the Arrow stream", {
+test_that("DuckDB early completion preserves outstanding Arrow reads", {
   skip_if_not_installed("arrow")
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
 
-  # Early completion does not exhaust the one-pass reader, so serialize pulls.
+  # An early SQL result does not mean Arrow has stopped its background reads.
   withr::local_options(arrow.use_threads = FALSE)
 
   httr2::local_mocked_responses(function(req) {
@@ -88,13 +87,12 @@ test_that("DuckDB early completion releases the Arrow stream", {
     ),
     "delta"
   )
-  result <- local({
+  results <- purrr::map(seq_len(20L), function(i) {
     stream <- native_snapshot_stream(
       table_location = log$path,
       batch_size = 2L
     )
     reader <- sharing_stream_to_arrow_reader(stream)
-    withr::defer(reader$Close())
     connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
     withr::defer(
       if (DBI::dbIsValid(connection)) {
@@ -117,7 +115,10 @@ test_that("DuckDB early completion releases the Arrow stream", {
     result
   })
 
-  expect_identical(nrow(result), 1L)
+  # Collect scanner wrappers after their connections close. No direct reader
+  # Close(): it can free Kernel state while Arrow is still pulling a batch.
+  gc()
+  expect_true(all(purrr::map_int(results, nrow) == 1L))
   expect_true(fs::dir_exists(log$root))
   fs::dir_delete(log$root)
 })
@@ -135,7 +136,6 @@ test_that("DuckDB queries CDF metadata columns", {
     end_version = 2
   )
   reader <- sharing_stream_to_arrow_reader(stream)
-  withr::defer(reader$Close())
   connection <- DBI::dbConnect(duckdb::duckdb(shared_home = FALSE))
   withr::defer(DBI::dbDisconnect(connection))
   duckdb::duckdb_register_arrow(connection, "shared_changes", reader)

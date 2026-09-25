@@ -52,8 +52,9 @@ SharingReader <- R6::R6Class(
     },
 
     #' @description Expose a lazy Arrow record batch reader.
-    #'   The reader owns the underlying stream; consume it or call
-    #'   its `Close()` method.
+    #'   Consume it or call `Close()` when reading it directly. Once passed
+    #'   to a scanner such as DuckDB, let Arrow manage its lifetime rather
+    #'   than closing the underlying stream while it may still be in use.
     #' @param batch_size Rows per batch.
     #' @return An `arrow::RecordBatchReader`.
     to_arrow_reader = function(batch_size = 65536L) {

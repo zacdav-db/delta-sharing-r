@@ -1,5 +1,7 @@
 # delta.sharing 0.2.1
 
+- Corrected DuckDB reader cleanup in examples and tests: partial SQL queries
+  must not close a reader while Arrow may still be reading ahead.
 - Remove private synthetic logs when log writing or native stream creation
   fails, without removing cached data files or replacing the original error.
   Successful logs retain their session lifetime for lazy readers.
