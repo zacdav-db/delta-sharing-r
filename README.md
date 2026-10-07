@@ -1,11 +1,12 @@
 # delta.sharing <img src="https://user-images.githubusercontent.com/1446829/144671151-b095e1b9-2d24-4d3b-b3c6-a7041e491077.png" align="right" width="140" alt="Delta Sharing logo" />
 
+[![CRAN version](https://img.shields.io/cran/v/delta.sharing?label=CRAN)](https://cran.r-project.org/package=delta.sharing)
 [![R CMD check](https://github.com/zacdav-db/delta-sharing-r/actions/workflows/package-check.yaml/badge.svg)](https://github.com/zacdav-db/delta-sharing-r/actions/workflows/package-check.yaml)
 [![R coverage](https://codecov.io/gh/zacdav-db/delta-sharing-r/branch/main/graph/badge.svg)](https://app.codecov.io/gh/zacdav-db/delta-sharing-r)
 
 `delta.sharing` reads [Delta Sharing](https://delta.io/sharing/) tables from R.
 Discover shares, schemas, and tables, then read snapshots or change data feeds
-as tibbles, data frames, or Arrow objects.
+as `tibble`, `data.frame`, or Arrow objects.
 
 Reads are powered by [Delta Kernel](https://docs.delta.io/kernel/rust/introduction.html),
 including support for deletion vectors and column mapping.
@@ -15,7 +16,13 @@ guides and the complete reference.
 
 ## Installation
 
-Install the development version from GitHub:
+Install the released version from [CRAN](https://cran.r-project.org/package=delta.sharing):
+
+```r
+install.packages("delta.sharing")
+```
+
+Or install the development version from GitHub:
 
 ```r
 # install.packages("pak")
@@ -84,14 +91,15 @@ changes_tbl <- orders$changes(
 ```
 
 `to_tibble()` is the usual choice for R analysis. Use `to_data_frame()` when a
-base data frame is required. Both automatically return BIGINT columns as
+base R `data.frame` is required. Both automatically return `BIGINT` columns as
 `bit64::integer64`, including small values, empty results, and nested columns.
-The value -9223372036854775808 raises a conversion error because bit64 reserves
-it for missing values; use an Arrow materializer to retain it.
+The value `-9223372036854775808` raises a conversion error because `bit64`
+reserves it for missing values; use an Arrow materializer to retain it.
 
-For Arrow workflows, `to_arrow()` returns an in-memory table and
-`to_arrow_reader()` returns a lazy reader. Arrow is a required dependency.
-`to_arrow_stream()` exposes the lower-level Arrow C Stream directly.
+For Arrow workflows, `to_arrow()` returns an in-memory `arrow::Table` and
+`to_arrow_reader()` returns a lazy `arrow::RecordBatchReader`. The `arrow`
+package is a required dependency.
+`to_arrow_stream()` exposes the lower-level Arrow C stream interface.
 
 Selected files are downloaded concurrently and cached for the R session. See
 the [Performance and caching guide](https://zacdav-db.github.io/delta-sharing-r/articles/performance-caching.html)
@@ -99,7 +107,7 @@ for cold and repeated reads, cache lifetime, concurrency, batching, and tuning.
 
 ## Query with DuckDB
 
-DuckDB can query a lazy Arrow reader without first creating an R data frame.
+DuckDB can query a lazy Arrow reader without first creating an R `data.frame`.
 This requires the optional `DBI`, `duckdb`, and `withr` packages.
 
 ```r
@@ -137,20 +145,20 @@ than once. This materializes the result in Arrow memory.
 
 ## Performance
 
-These results are medians of three end-to-end `to_tibble()` snapshot reads
-using four concurrent downloads. The cached read repeats the same query after
+These results are medians of `3` end-to-end `to_tibble()` snapshot reads
+using `4` concurrent downloads. The cached read repeats the same query after
 its selected files have been staged locally.
 
-*Apple M2 Pro (12 cores), 32 GB RAM, R 4.5.1; VPN connection: 92 Mbps down,
-111 ms base round-trip latency.*
+*Apple M2 Pro (`12` cores), `32 GB` RAM, R `4.5.1`; VPN connection: `92 Mbps` down,
+`111 ms` base round-trip latency.*
 
 | Rows | R result size | Empty cache | Cached |
 |---:|---:|---:|---:|
-| 10,000 | 0.38 MiB | 5.15 s | 0.82 s |
-| 1,000,000 | 38.1 MiB | 8.16 s | 1.69 s |
-| 10,000,000 | 381 MiB | 28.3 s | 6.45 s |
+| `10,000` | `0.38 MiB` | `5.15 s` | `0.82 s` |
+| `1,000,000` | `38.1 MiB` | `8.16 s` | `1.69 s` |
+| `10,000,000` | `381 MiB` | `28.3 s` | `6.45 s` |
 
-Each measurement includes the Sharing request, local log construction, Delta
-Kernel scan, and tibble materialization—not just network transfer. Reproduce
-the benchmark with
+Each end-to-end measurement includes the Delta Sharing request, local log
+construction, Delta Kernel scan, and `tibble` materialization. Reproduce the
+benchmark with
 [`bench/snapshot.R`](https://github.com/zacdav-db/delta-sharing-r/blob/main/bench/snapshot.R).
