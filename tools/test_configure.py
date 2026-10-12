@@ -48,12 +48,16 @@ class ConfigureTests(unittest.TestCase):
         windows = REPOSITORY_ROOT / "configure.win"
         self.assertEqual(CONFIGURE.read_bytes(), windows.read_bytes())
 
-    def test_makefiles_keep_cache_override_portable(self):
+    def test_makefiles_keep_cache_override(self):
         for name in ("Makevars", "Makevars.win"):
             contents = (REPOSITORY_ROOT / "src" / name).read_text()
             self.assertIn("CARGO_TARGET_DIR:-$(LOCAL_TARGET_DIR)", contents)
-            for extension in (":=", "?=", "+=", "$(shell", "$(wildcard"):
-                self.assertNotIn(extension, contents)
+
+    def test_unix_makefile_is_portable(self):
+        # Writing R Extensions permits GNU make extensions in Makevars.win.
+        contents = (REPOSITORY_ROOT / "src" / "Makevars").read_text()
+        for extension in (":=", "?=", "+=", "$(shell", "$(wildcard"):
+            self.assertNotIn(extension, contents)
 
 
 if __name__ == "__main__":

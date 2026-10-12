@@ -1,4 +1,4 @@
-TARGET = $(subst 64,x86_64,$(WIN))-pc-windows-gnu
+TARGET = $(shell "$(R_HOME)/bin$(R_ARCH_BIN)/Rscript.exe" -e 'cat(if (grepl("aarch", R.version$$platform)) "aarch64-pc-windows-gnullvm" else "x86_64-pc-windows-gnu")')
 BUILD_ROOT = ./rust/target
 LOCAL_TARGET_DIR = $(BUILD_ROOT)/cargo
 LIBDIR = $(BUILD_ROOT)/r-package/$(TARGET)/release

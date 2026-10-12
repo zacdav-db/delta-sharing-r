@@ -207,6 +207,13 @@ jobs:
             r: release
             label: Windows x86_64 (R release)
             rust-target: x86_64-pc-windows-gnu
+          - os: windows-11-arm
+            r: release
+            label: Windows arm64 (R release)
+            rust-target: aarch64-pc-windows-gnullvm
+            cran: https://cran.r-universe.dev
+            # Stable pak predates support for R's custom ARM64 binary package type.
+            pak-version: devel
 
     steps:
       - name: Check out source
@@ -233,6 +240,12 @@ jobs:
           r-version: ${{ matrix.config.r }}
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
+          cran: ${{ matrix.config.cran }}
+
+      - name: Verify native Windows ARM64 R
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        shell: Rscript {0}
+        run: stopifnot(grepl("aarch", R.version$platform))
 
       - name: Install Pandoc
         uses: r-lib/actions/setup-pandoc@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
@@ -241,6 +254,7 @@ jobs:
         uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
           extra-packages: any::rcmdcheck
+          pak-version: ${{ matrix.config.pak-version || 'stable' }}
           needs: check
           cache-version: 1
 
